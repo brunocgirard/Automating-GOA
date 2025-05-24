@@ -5,15 +5,13 @@ import pandas as pd # For st.dataframe
 from typing import Dict, List
 import traceback # For detailed error logging
 import shutil # For copying files
-import uuid
-from datetime import datetime
 
 # Import your existing utility functions
-from pdf_utils import extract_line_item_details, extract_full_pdf_text, extract_text_from_pdf
-from template_utils import extract_placeholders, extract_placeholder_context_hierarchical, identify_machine_groups
-from llm_handler import configure_gemini_client, get_all_fields_via_llm, get_llm_chat_update, answer_pdf_question # Added answer_pdf_question
+from pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
+from template_utils import extract_placeholders, extract_placeholder_context_hierarchical
+from llm_handler import configure_gemini_client, get_all_fields_via_llm, get_machine_specific_fields_via_llm, get_llm_chat_update, answer_pdf_question
 from doc_filler import fill_word_document_from_llm_data
-from crm_utils import init_db, save_client_info, load_all_clients, get_client_by_id, update_client_record, save_priced_items, load_priced_items_for_quote, update_single_priced_item, delete_client_record
+from crm_utils import init_db, save_client_info, load_all_clients, get_client_by_id, update_client_record, save_priced_items, load_priced_items_for_quote, update_single_priced_item, delete_client_record, save_machines_data, load_machines_for_quote, save_machine_template_data, load_machine_template_data, save_document_content, load_document_content
 
 # --- App State Initialization (using st.session_state) ---
 def initialize_session_state(is_new_processing_run=False):
@@ -38,6 +36,25 @@ def initialize_session_state(is_new_processing_run=False):
     for key in keys_to_reset:
         if key not in st.session_state or is_new_processing_run:
             st.session_state[key] = default_values[key]
+
+    # Add new session state variables for machine processing
+    machine_keys_to_reset = [
+        'identified_machines_data', 'selected_machine_index', 'machine_specific_filled_data', 
+        'machine_docx_path', 'selected_machine_id', 'machine_confirmation_done',
+        'common_options_confirmation_done', 'items_for_confirmation', 'selected_main_machines',
+        'selected_common_options', 'manual_machine_grouping'
+    ]
+    machine_default_values = {
+        'identified_machines_data': {}, 'selected_machine_index': 0, 'machine_specific_filled_data': {},
+        'machine_docx_path': f"output_machine_specific_run{st.session_state.run_key}.docx",
+        'selected_machine_id': None, 'machine_confirmation_done': False,
+        'common_options_confirmation_done': False, 'items_for_confirmation': [],
+        'selected_main_machines': [], 'selected_common_options': [],
+        'manual_machine_grouping': {}
+    }
+    for key in machine_keys_to_reset:
+        if key not in st.session_state or is_new_processing_run:
+            st.session_state[key] = machine_default_values[key]
 
     if 'crm_data_loaded' not in st.session_state: # This one loads once unless refreshed
         st.session_state.crm_data_loaded = False
@@ -66,83 +83,168 @@ init_db() # Initialize CRM database at app startup
 
 # --- Helper Functions for App --- 
 
+def group_items_by_confirmed_machines(all_items, main_machine_indices, common_option_indices):
+    """
+    Group items based on user-confirmed main machines and common options.
+    
+    Args:
+        all_items: List of all line items from the PDF
+        main_machine_indices: Indices of items confirmed as main machines
+        common_option_indices: Indices of items confirmed as common options
+        
+    Returns:
+        Dict with "machines" list and "common_items" list
+    """
+    machines = []
+    common_items = []
+    remaining_items = list(range(len(all_items)))
+    
+    # Remove common options from remaining items and add to common_items list
+    for idx in common_option_indices:
+        if idx in remaining_items:
+            remaining_items.remove(idx)
+            common_items.append(all_items[idx])
+    
+    # Process each main machine
+    for machine_idx in main_machine_indices:
+        if machine_idx in remaining_items:
+            remaining_items.remove(machine_idx)
+            
+            # Find the next main machine index to determine add-ons range
+            next_machine_idx = float('inf')
+            for next_idx in main_machine_indices:
+                if next_idx > machine_idx and next_idx < next_machine_idx:
+                    next_machine_idx = next_idx
+            
+            # Collect add-ons between this machine and the next
+            add_ons = []
+            for idx in list(remaining_items):  # Use a copy to avoid modification during iteration
+                if idx > machine_idx and (idx < next_machine_idx or next_machine_idx == float('inf')):
+                    add_ons.append(all_items[idx])
+                    remaining_items.remove(idx)
+            
+            # Create machine object
+            machine_name = all_items[machine_idx].get('description', '').split('\n')[0]
+            machines.append({
+                "machine_name": machine_name,
+                "main_item": all_items[machine_idx],
+                "add_ons": add_ons
+            })
+    
+    # Any remaining items go to common items
+    for idx in remaining_items:
+        common_items.append(all_items[idx])
+    
+    return {
+        "machines": machines,
+        "common_items": common_items
+    }
+
 def perform_initial_processing(uploaded_pdf_file, template_file_path):
     initialize_session_state(is_new_processing_run=True) # Reset state for a new run
-
+    temp_pdf_path = None 
     try:
-        with st.spinner("Processing PDF..."):
-            # Save uploaded file temporarily
-            temp_pdf_path = save_uploaded_file(uploaded_pdf_file)
-            if not temp_pdf_path:
-                st.error("Failed to save uploaded file.")
-                return
+        if not configure_gemini_client():
+            st.session_state.error_message = "Failed to configure LLM client. Check API key."
+            return
 
-            # Extract text and tables
-            st.session_state.full_pdf_text = extract_text_from_pdf(temp_pdf_path)
+        temp_pdf_path = os.path.join(".", uploaded_pdf_file.name)
+        with open(temp_pdf_path, "wb") as f: f.write(uploaded_pdf_file.getbuffer())
+        
+        with st.status("Processing PDF and Template...", expanded=True) as status_bar:
+            st.write("Extracting data from PDF...")
             st.session_state.selected_pdf_items_structured = extract_line_item_details(temp_pdf_path)
+            st.session_state.full_pdf_text = extract_full_pdf_text(temp_pdf_path)
             
-            # Get template contexts
+            # Store items for confirmation (we'll let the user confirm machines rather than auto-detecting)
+            st.session_state.items_for_confirmation = st.session_state.selected_pdf_items_structured
+            
+            # Make initial guesses for main machines and common options
+            initial_machine_data = identify_machines_from_items(st.session_state.selected_pdf_items_structured)
+            
+            # Pre-select indices based on algorithm's best guesses
+            preselected_machines = []
+            preselected_common = []
+            
+            for i, item in enumerate(st.session_state.selected_pdf_items_structured):
+                # Check if this item is a main item in any machine from the auto-detection
+                is_main_machine = False
+                for machine in initial_machine_data.get("machines", []):
+                    if machine.get("main_item") == item:
+                        is_main_machine = True
+                        preselected_machines.append(i)
+                        break
+                
+                # Check if this item is in common items from auto-detection
+                if not is_main_machine:
+                    for common_item in initial_machine_data.get("common_items", []):
+                        if common_item == item:
+                            preselected_common.append(i)
+                            break
+            
+            st.session_state.selected_main_machines = preselected_machines
+            st.session_state.selected_common_options = preselected_common
+            
+            # Extract selected descriptions for LLM backup
+            st.session_state.selected_pdf_descs = [item.get("description","") for item in st.session_state.selected_pdf_items_structured if item.get("description")]
+
+            if not st.session_state.selected_pdf_descs:
+                st.warning("No selected item descriptions were extracted from PDF tables for LLM.")
+            if not st.session_state.full_pdf_text: st.warning("Could not extract full text from PDF.")
+
+            st.write("Analyzing template...")
+            all_placeholders = extract_placeholders(template_file_path)
             st.session_state.template_contexts = extract_placeholder_context_hierarchical(template_file_path)
-            
-            # Extract selected items descriptions for LLM
-            st.session_state.selected_pdf_descs = [item["description"] for item in st.session_state.selected_pdf_items_structured]
-            
-            # Identify machine groups
-            machine_groups = identify_machine_groups(st.session_state.selected_pdf_descs, st.session_state.full_pdf_text)
-            st.session_state.machine_groups = machine_groups
-            
-            # Store machine names for selection
-            st.session_state.available_machines = [name for name in machine_groups.keys() if name != "COMMON"]
-            
-            # Initialize data dictionary with defaults
-            initial_data_dict = {key: ("NO" if key.endswith("_check") else "") for key in st.session_state.template_contexts.keys()}
-            
-            # Get initial LLM data for all machines
-            llm_data_from_api = get_all_fields_via_llm(st.session_state.selected_pdf_descs, st.session_state.template_contexts, st.session_state.full_pdf_text)
-            initial_data_dict.update(llm_data_from_api)
+            if not st.session_state.template_contexts: raise ValueError("Could not extract placeholder contexts.")
+
+            # Create default data dict
+            initial_data_dict = {ph: ("NO" if ph.endswith("_check") else "") for ph in all_placeholders}
+
+            # Skip initial LLM processing for all items - we'll process machine-specific later
             st.session_state.llm_initial_filled_data = initial_data_dict.copy()
             st.session_state.llm_corrected_filled_data = initial_data_dict.copy()
 
-            # Save to CRM with machine grouping
+            # Create initial empty document for reference
+            st.write(f"Creating initial blank document template: {st.session_state.initial_docx_path}...")
+            fill_word_document_from_llm_data(template_file_path, initial_data_dict, st.session_state.initial_docx_path)
+            if os.path.exists(st.session_state.initial_docx_path):
+                 shutil.copy(st.session_state.initial_docx_path, st.session_state.corrected_docx_path)
+            else:
+                st.warning(f"Initial document {st.session_state.initial_docx_path} was not created. Cannot copy to corrected path.")
+            
             status_bar.update(label="Saving to CRM...")
+            # Prepare main client data 
             client_info_payload = {
-                "quote_ref": initial_data_dict.get("quote", uploaded_pdf_file.name),
-                "customer_name": initial_data_dict.get("customer", ""),
-                "machine_model": initial_data_dict.get("machine", ""),
-                "country_destination": initial_data_dict.get("country", ""),
-                "sold_to_address": initial_data_dict.get("sold_to_address", ""),
-                "ship_to_address": initial_data_dict.get("ship_to_address", ""),
-                "telephone": initial_data_dict.get("telephone", ""),
-                "customer_contact_person": initial_data_dict.get("customer_contact_person", ""),
-                "customer_po": initial_data_dict.get("customer_po", "")
+                "quote_ref": uploaded_pdf_file.name.split('.')[0],  # Use filename as default quote_ref
+                "customer_name": "",
+                "machine_model": "",
+                "country_destination": "",
+                "sold_to_address": "",
+                "ship_to_address": "",
+                "telephone": "",
+                "customer_contact_person": "",
+                "customer_po": ""
             }
-
-            if not client_info_payload["quote_ref"]:
-                st.warning("Quote Reference is missing. CRM entry may be incomplete or fail if quote_ref is mandatory.")
             
             # Save main client info
             if save_client_info(client_info_payload):
                 st.write(f"Main client info for '{client_info_payload['quote_ref']}' saved/updated.")
                 
-                # Save priced items with machine grouping
+                # Save priced items
                 if st.session_state.selected_pdf_items_structured:
-                    # Add machine group and item type to each item
-                    for item in st.session_state.selected_pdf_items_structured:
-                        for machine_name, items in machine_groups.items():
-                            for group_item in items:
-                                if group_item["description"] == item["description"]:
-                                    item["machine_group"] = machine_name
-                                    item["item_type"] = group_item["type"]
-                                    break
-                    
                     if save_priced_items(client_info_payload['quote_ref'], st.session_state.selected_pdf_items_structured):
                         st.write(f"Priced items for '{client_info_payload['quote_ref']}' saved.")
                     else:
                         st.warning(f"Failed to save priced items for '{client_info_payload['quote_ref']}'.")
-                else:
-                    st.write(f"No structured selected items found to save as priced items for '{client_info_payload['quote_ref']}'.")
                 
-                load_crm_data()
+                # Save document content for later chat functionality
+                if st.session_state.full_pdf_text:
+                    if save_document_content(client_info_payload['quote_ref'], st.session_state.full_pdf_text, uploaded_pdf_file.name):
+                        st.write(f"Document content saved for future chat functionality.")
+                    else:
+                        st.warning(f"Failed to save document content.")
+                
+                load_crm_data() # Refresh CRM data in session state after all saves
             else: 
                 st.warning(f"Failed to save main client info for quote '{client_info_payload['quote_ref']}'. Priced items not saved.")
             
@@ -150,19 +252,124 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
         
         st.session_state.processing_done = True
     except Exception as e:
-        st.session_state.error_message = f"Initial processing error: {e}"
-        st.text(traceback.format_exc())
-        if 'status_bar' in locals() and status_bar is not None:
-            status_bar.update(label="Error!", state="error", expanded=True)
+        st.session_state.error_message = f"Initial processing error: {e}"; st.text(traceback.format_exc())
+        if 'status_bar' in locals() and status_bar is not None : status_bar.update(label="Error!", state="error", expanded=True)
     finally:
-        if temp_pdf_path and os.path.exists(temp_pdf_path):
-            os.remove(temp_pdf_path)
+        if temp_pdf_path and os.path.exists(temp_pdf_path): os.remove(temp_pdf_path)
+
+def process_machine_specific_data(machine_data, template_file_path):
+    """Process a specific machine to generate its GOA document"""
+    try:
+        if not configure_gemini_client():
+            st.session_state.error_message = "Failed to configure LLM client. Check API key."
+            return False
+            
+        # Extract common items from the machine data
+        common_items = machine_data.get("common_items", [])
+        
+        # Get machine-specific data from LLM
+        with st.spinner(f"Processing machine: {machine_data.get('machine_name')}..."):
+            machine_filled_data = get_machine_specific_fields_via_llm(
+                machine_data,
+                common_items,
+                st.session_state.template_contexts,
+                st.session_state.full_pdf_text
+            )
+            
+            # Store the machine-specific data
+            st.session_state.machine_specific_filled_data = machine_filled_data
+            
+            # Generate the machine-specific document
+            machine_specific_output_path = f"output_{machine_data.get('machine_name', 'machine').replace(' ', '_')}.docx"
+            fill_word_document_from_llm_data(template_file_path, machine_filled_data, machine_specific_output_path)
+            st.session_state.machine_docx_path = machine_specific_output_path
+            
+            # If machine has an ID (from database), save the template data
+            if "id" in machine_data:
+                save_machine_template_data(
+                    machine_data["id"], 
+                    "GOA", 
+                    machine_filled_data,
+                    machine_specific_output_path
+                )
+            
+            return True
+    except Exception as e:
+        st.session_state.error_message = f"Machine processing error: {e}"
+        st.text(traceback.format_exc())
+        return False
 
 # --- Function to load CRM data --- 
 def load_crm_data():
     """Load CRM data and update session state"""
     st.session_state.all_crm_clients = load_all_clients()
     st.session_state.crm_data_loaded = True
+
+def load_previous_document(client_id):
+    """
+    Load a previously processed document for chat functionality.
+    
+    Args:
+        client_id: ID of the client record to load
+    """
+    try:
+        # Reset to a clean state while preserving run key
+        current_run_key = st.session_state.run_key
+        initialize_session_state(is_new_processing_run=True)
+        st.session_state.run_key = current_run_key
+        
+        # Get client data
+        client_data = get_client_by_id(client_id)
+        if not client_data:
+            st.error(f"Client with ID {client_id} not found.")
+            return False
+        
+        quote_ref = client_data.get("quote_ref")
+        
+        # Load document content
+        document_content = load_document_content(quote_ref)
+        if not document_content:
+            st.error(f"Document content for quote {quote_ref} not found.")
+            return False
+        
+        # Set full PDF text in session state
+        st.session_state.full_pdf_text = document_content.get("full_pdf_text", "")
+        
+        # Load priced items
+        priced_items = load_priced_items_for_quote(quote_ref)
+        st.session_state.selected_pdf_items_structured = priced_items
+        st.session_state.selected_pdf_descs = [item.get("item_description","") for item in priced_items if item.get("item_description")]
+        
+        # Load machines data
+        machines_data = load_machines_for_quote(quote_ref)
+        if machines_data:
+            # Convert from database format to session state format
+            machines_list = []
+            common_items = []
+            
+            for machine in machines_data:
+                machine_data = machine.get("machine_data", {})
+                if machine_data:
+                    machines_list.append(machine_data)
+                    # Get common items from the first machine (they should be the same for all)
+                    if not common_items and "common_items" in machine_data:
+                        common_items = machine_data.get("common_items", [])
+            
+            st.session_state.identified_machines_data = {
+                "machines": machines_list,
+                "common_items": common_items
+            }
+        
+        # Set processing state
+        st.session_state.processing_done = True
+        st.session_state.machine_confirmation_done = True
+        st.session_state.common_options_confirmation_done = True
+        
+        return True
+    except Exception as e:
+        st.error(f"Error loading previous document: {e}")
+        st.text(traceback.format_exc())
+        return False
 
 # --- Streamlit UI --- 
 st.set_page_config(layout="wide", page_title="GOA LLM Assistant")
@@ -191,33 +398,263 @@ tab_processor, tab_crm_management = st.tabs(["📄 Document Processor", "📒 CR
 
 with tab_processor:
     st.header("📝 Document Processing & Chat")
-    if st.session_state.processing_done:
-        st.subheader("📊 Processing Results")
+    
+    # Add option to load previous document
+    if not st.session_state.processing_done:
+        # Original upload option is in the sidebar
+        
+        # Add option to load previous document
+        st.subheader("📂 Load Previous Document")
+        
+        # Get list of quotes from database
+        if st.session_state.all_crm_clients:
+            quotes = [(c['id'], f"{c.get('customer_name', 'Unknown')} - {c.get('quote_ref', 'Unknown')}") 
+                     for c in st.session_state.all_crm_clients]
+            
+            if quotes:
+                selected_quote_id = st.selectbox(
+                    "Select a previous quote:",
+                    options=[q[0] for q in quotes],
+                    format_func=lambda x: next((q[1] for q in quotes if q[0] == x), ""),
+                    key="load_previous_quote"
+                )
+                
+                if st.button("📥 Load Selected Quote", key="load_quote_btn"):
+                    with st.spinner("Loading document..."):
+                        if load_previous_document(selected_quote_id):
+                            st.success("Document loaded successfully!")
+                            st.rerun()
+            else:
+                st.info("No previous quotes found. Upload a new document to begin.")
+                
+        st.markdown("---")
+        st.info("👈 Upload a PDF in the sidebar or select a previous document above to begin.")
+    
+    elif st.session_state.processing_done:
+        # Step 1: Confirm Main Machines (if not done yet)
+        if not st.session_state.machine_confirmation_done:
+            st.subheader("Step 1: Confirm Main Machines")
+            st.markdown("Select all items that are **main machines** in the quote. These are the primary equipment items.")
+            
+            items = st.session_state.items_for_confirmation
+            if items:
+                # Instead of multiselect, use checkboxes for better visibility
+                st.markdown("### Select main machines:")
+                
+                # Create columns for better layout
+                selected_indices = []
+                
+                # Use a container for the checkboxes
+                with st.container():
+                    for i, item in enumerate(items):
+                        desc = item.get('description', 'No description')
+                        # Show first line of description plus price if available
+                        first_line = desc.split('\n')[0] if '\n' in desc else desc
+                        price_str = item.get('item_price_str', '')
+                        display_text = f"{first_line} {price_str}"
+                        
+                        # Check if this item was pre-selected
+                        is_preselected = i in st.session_state.selected_main_machines
+                        
+                        # Create a checkbox for each item
+                        is_selected = st.checkbox(
+                            display_text,
+                            value=is_preselected,
+                            key=f"machine_checkbox_{i}"
+                        )
+                        
+                        if is_selected:
+                            selected_indices.append(i)
+                
+                # Store selected indices
+                st.session_state.selected_main_machines = selected_indices
+                
+                # Button to confirm selections and move to next step
+                if st.button("Confirm Main Machines", key="confirm_machines_btn"):
+                    if not selected_indices:
+                        st.warning("Please select at least one main machine.")
+                    else:
+                        st.session_state.machine_confirmation_done = True
+                        st.rerun()
+            else:
+                st.warning("No items found for confirmation. Please process the document again.")
+        
+        # Step 2: Confirm Common Options (if main machines confirmed but common options not yet)
+        elif not st.session_state.common_options_confirmation_done:
+            st.subheader("Step 2: Select Common Options")
+            st.markdown("Select items that are **common options** applying to all machines (warranty, training, etc.)")
+            
+            items = st.session_state.items_for_confirmation
+            if items:
+                main_machine_indices = st.session_state.selected_main_machines
+                
+                # Create a list of options excluding main machines (which can't be common options)
+                available_indices = []
+                available_options = []
+                for i, item in enumerate(items):
+                    if i not in main_machine_indices:
+                        desc = item.get('description', 'No description')
+                        first_line = desc.split('\n')[0] if '\n' in desc else desc
+                        price_str = item.get('item_price_str', '')
+                        display_text = f"{first_line} {price_str}"
+                        available_indices.append(i)
+                        available_options.append(display_text)
+                
+                # Use checkboxes instead of multiselect
+                st.markdown("### Select common options (applying to all machines):")
+                
+                selected_positions = []
+                with st.container():
+                    for pos, i in enumerate(available_indices):
+                        display_text = available_options[pos]
+                        
+                        # Check if this item was pre-selected
+                        is_preselected = i in st.session_state.selected_common_options
+                        
+                        # Create a checkbox for each item
+                        is_selected = st.checkbox(
+                            display_text,
+                            value=is_preselected,
+                            key=f"common_checkbox_{i}"
+                        )
+                        
+                        if is_selected:
+                            selected_positions.append(pos)
+                
+                # Map selected positions back to original indices
+                selected_indices = [available_indices[pos] for pos in selected_positions]
+                
+                # Store selected indices
+                st.session_state.selected_common_options = selected_indices
+                
+                # Show current assignments
+                with st.expander("Current Machine Assignments", expanded=False):
+                    st.markdown("**Main Machines:**")
+                    for i in main_machine_indices:
+                        desc = items[i].get('description', 'No description')
+                        first_line = desc.split('\n')[0] if '\n' in desc else desc
+                        st.markdown(f"- {first_line}")
+                    
+                    st.markdown("**Common Options:**")
+                    for i in selected_indices:
+                        desc = items[i].get('description', 'No description')
+                        first_line = desc.split('\n')[0] if '\n' in desc else desc
+                        st.markdown(f"- {first_line}")
+                
+                # Button to confirm selections and finalize grouping
+                if st.button("Confirm Common Options", key="confirm_common_btn"):
+                    # Group items based on confirmed machines and common options
+                    grouped_data = group_items_by_confirmed_machines(
+                        items, 
+                        st.session_state.selected_main_machines,
+                        st.session_state.selected_common_options
+                    )
+                    
+                    # Store the grouped data
+                    st.session_state.identified_machines_data = grouped_data
+                    
+                    # Save the machines to the database
+                    if st.session_state.selected_pdf_items_structured:
+                        quote_ref = items[0].get('client_quote_ref') if items and items[0].get('client_quote_ref') else "unknown"
+                        if save_machines_data(quote_ref, grouped_data):
+                            st.success(f"Machine groupings saved to database.")
+                        else:
+                            st.warning(f"Failed to save machine groupings to database.")
+                    
+                    st.session_state.common_options_confirmation_done = True
+                    st.rerun()
+            else:
+                st.warning("No items found for confirmation. Please process the document again.")
+        
+        # Step 3: Select machine to process (if all confirmations are done)
+        else:
+            # Add machine selection UI
+            st.subheader("🔍 Select Machine to Process")
+            
+            if st.session_state.identified_machines_data and "machines" in st.session_state.identified_machines_data:
+                machines = st.session_state.identified_machines_data["machines"]
+                if machines:
+                    # Create list of machine options for selection
+                    machine_options = [f"{m.get('machine_name', 'Unknown Machine')}" for m in machines]
+                    
+                    # Show selection dropdown
+                    selected_machine_idx = st.selectbox(
+                        "Choose a machine to process:",
+                        range(len(machine_options)),
+                        format_func=lambda i: machine_options[i],
+                        key=f"machine_select_{st.session_state.run_key}"
+                    )
+                    
+                    # Store selected machine index
+                    st.session_state.selected_machine_index = selected_machine_idx
+                    
+                    # Show machine details
+                    selected_machine = machines[selected_machine_idx]
+                    with st.expander(f"Machine Details: {selected_machine.get('machine_name')}", expanded=True):
+                        st.markdown("**Main Machine Description:**")
+                        st.markdown(f"```\n{selected_machine.get('main_item', {}).get('description', 'No description')}\n```")
+                        
+                        st.markdown("**Add-on Items:**")
+                        add_ons = selected_machine.get('add_ons', [])
+                        if add_ons:
+                            for i, addon in enumerate(add_ons):
+                                st.markdown(f"{i+1}. {addon.get('description', 'No description')}")
+                        else:
+                            st.markdown("No add-on items for this machine.")
+                    
+                    # Common items apply to all machines
+                    common_items = st.session_state.identified_machines_data.get("common_items", [])
+                    with st.expander("Common Items (apply to all machines)", expanded=False):
+                        if common_items:
+                            for i, item in enumerate(common_items):
+                                st.markdown(f"{i+1}. {item.get('description', 'No description')}")
+                        else:
+                            st.markdown("No common items identified.")
+                    
+                    # Process this machine button
+                    if st.button("🔨 Process Selected Machine", key=f"process_machine_btn_{st.session_state.run_key}"):
+                        success = process_machine_specific_data(selected_machine, TEMPLATE_FILE)
+                        if success:
+                            st.success(f"Machine '{selected_machine.get('machine_name')}' processed successfully!")
+                            # Force rerun to update UI with new document
+                            st.rerun()
+                else:
+                    st.warning("No machines identified in the document.")
+            else:
+                st.warning("Machine data not available. Please process the document first.")
+            
+            # Show download for machine-specific document if available
+            if hasattr(st.session_state, 'machine_docx_path') and os.path.exists(st.session_state.machine_docx_path):
+                st.subheader("📂 Machine-Specific Document")
+                with open(st.session_state.machine_docx_path, "rb") as fp:
+                    st.download_button(
+                        "Download Machine-Specific Document",
+                        fp,
+                        os.path.basename(st.session_state.machine_docx_path),
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key=f"dl_machine_{st.session_state.run_key}",
+                        type="primary"
+                    )
+        
+        # Original processing results section
+        st.subheader("📊 Initial Processing Results")
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**📌 Selected PDF Item Descriptions**")
             with st.expander("View Extracted PDF Descriptions", expanded=False):
                 st.json(st.session_state.selected_pdf_descs if st.session_state.selected_pdf_descs else [])
         with col2:
-            st.markdown("**🤖 LLM Processed Template Fields**")
-            data_to_display = st.session_state.llm_corrected_filled_data if st.session_state.correction_applied else st.session_state.llm_initial_filled_data
-            if data_to_display and st.session_state.template_contexts:
-                show_all = st.checkbox("Show all fields (incl. NOs)", key=f"show_all_proc_{st.session_state.run_key}")
-                display_items = []
-                yes_count = 0
-                for k, v_ctx in sorted(st.session_state.template_contexts.items()):
-                    if k.endswith("_check"):
-                        val = data_to_display.get(k, "NO")
-                        emoji = "✅" if val == "YES" else "❌"
-                        if val == "YES" or show_all:
-                            display_items.append(f"{emoji} **{v_ctx}** (`{k}`): {val}")
-                            if val == "YES": yes_count +=1
-                st.markdown(f"_Displaying {yes_count if not show_all else len(display_items)} fields:_ ")
-                for item in display_items: st.markdown(item)
-                with st.expander("View Raw JSON", expanded=False): st.json(data_to_display)
-            else: st.info("LLM data not ready.")
+            st.markdown("**🤖 Identified Machines**")
+            if st.session_state.identified_machines_data and "machines" in st.session_state.identified_machines_data:
+                machines = st.session_state.identified_machines_data["machines"]
+                st.write(f"Found {len(machines)} machine(s) in the quote:")
+                for i, machine in enumerate(machines):
+                    st.markdown(f"{i+1}. **{machine.get('machine_name')}** with {len(machine.get('add_ons', []))} add-on(s)")
+            else:
+                st.info("No machines identified in the document.")
 
-        st.subheader("📂 Downloads")
+        # Original download section for initial/corrected docs
+        st.subheader("📂 Original Document Downloads")
         dl_c1, dl_c2 = st.columns(2)
         with dl_c1:
             if os.path.exists(st.session_state.initial_docx_path):
@@ -226,7 +663,7 @@ with tab_processor:
         with dl_c2:
             if st.session_state.correction_applied and os.path.exists(st.session_state.corrected_docx_path):
                 with open(st.session_state.corrected_docx_path, "rb") as fp:
-                    st.download_button("Corrected Document", fp, os.path.basename(st.session_state.corrected_docx_path), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary", key=f"dl_corr_{st.session_state.run_key}")
+                    st.download_button("Corrected Document", fp, os.path.basename(st.session_state.corrected_docx_path), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_corr_{st.session_state.run_key}")
             elif st.session_state.processing_done : st.info("Correct via chat for an updated document.")
         st.markdown("---")
         
@@ -503,59 +940,3 @@ with tab_crm_management:
         st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
     else:
         st.info("No client records in CRM yet.")
-
-def main():
-    st.title("GOA Document Generator")
-    
-    # Initialize session state if needed
-    if 'run_key' not in st.session_state:
-        st.session_state.run_key = str(uuid.uuid4())
-    
-    # File upload section
-    uploaded_pdf_file = st.file_uploader("Upload Quote PDF", type=['pdf'])
-    template_file_path = "GOA_template.docx"  # Your template file
-    
-    if uploaded_pdf_file:
-        if 'processing_done' not in st.session_state or not st.session_state.processing_done:
-            with st.spinner("Processing..."):
-                status_bar = st.progress(0, text="Starting...")
-                perform_initial_processing(uploaded_pdf_file, template_file_path)
-        
-        # Machine selection
-        if 'available_machines' in st.session_state and st.session_state.available_machines:
-            st.subheader("Select Machine for GOA")
-            selected_machine = st.selectbox(
-                "Choose a machine to generate GOA for:",
-                options=st.session_state.available_machines,
-                key="machine_selector"
-            )
-            
-            if selected_machine:
-                # Get machine-specific data
-                machine_specific_data = get_all_fields_via_llm(
-                    st.session_state.selected_pdf_descs,
-                    st.session_state.template_contexts,
-                    st.session_state.full_pdf_text,
-                    target_machine=selected_machine
-                )
-                
-                # Update the document with machine-specific data
-                st.session_state.llm_corrected_filled_data = machine_specific_data
-                
-                # Generate document for selected machine
-                output_filename = f"GOA_{selected_machine.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-                fill_word_document_from_llm_data(template_file_path, machine_specific_data, output_filename)
-                
-                # Provide download link
-                with open(output_filename, 'rb') as docx_file:
-                    st.download_button(
-                        label="Download GOA Document",
-                        data=docx_file,
-                        file_name=output_filename,
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-        
-        # Rest of your existing UI code...
-
-if __name__ == "__main__":
-    main()

@@ -1,13 +1,8 @@
 import pdfplumber
 import re
 import os
-from typing import List, Tuple, Dict, Optional, Any
+from typing import List, Tuple, Dict, Optional
 import traceback
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 def find_table_headers(table: List[List[Optional[str]]]) -> Optional[Dict[str, int]]:
     """
@@ -92,13 +87,13 @@ def get_description_from_row(row: List[Optional[str]], headers: Dict[str, int]) 
         return str(row[desc_idx]).strip()
     return None
 
-def extract_line_item_details(pdf_path: str) -> List[Dict[str, Any]]:
+def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
     """
     Extracts description, quantity text, and selection/price text for selected items.
     Returns: List of dicts, e.g., 
     [{'description': 'Item A', 'quantity_text': '1', 'selection_text': '1,250.00'}, ...]
     """
-    extracted_items: List[Dict[str, Any]] = []
+    extracted_items: List[Dict[str, Optional[str]]] = []
     unique_items_set = set() # To avoid duplicate entries
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -131,7 +126,7 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Any]]:
                                     })
                                     unique_items_set.add(item_tuple)
     except Exception as e:
-        logger.error(f"Error in extract_line_item_details for '{pdf_path}': {e}"); traceback.print_exc()
+        print(f"Error in extract_line_item_details for '{pdf_path}': {e}"); traceback.print_exc()
     return extracted_items
 
 def extract_full_pdf_text(pdf_path: str) -> str:
@@ -146,7 +141,7 @@ def extract_full_pdf_text(pdf_path: str) -> str:
                 if page_text:
                     full_text += page_text + "\n" 
     except Exception as e:
-        logger.error(f"Error extracting full text from PDF '{pdf_path}': {e}")
+        print(f"Error extracting full text from PDF '{pdf_path}': {e}")
     return full_text
 
 def extract_contextual_details(pdf_path: str, 
@@ -228,211 +223,130 @@ def extract_contextual_details(pdf_path: str,
                     break 
             
     except Exception as e:
-        logger.error(f"Error extracting contextual details for trigger '{trigger_start_text_lower}': {e}")
+        print(f"Error extracting contextual details for trigger '{trigger_start_text_lower}': {e}")
     
     return "\n".join(contextual_text_lines)
 
-def identify_machines_from_items(items: List[Dict[str, Any]], price_threshold: float = 10000) -> List[Dict[str, Any]]:
+def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]]) -> List[Dict]:
     """
-    Identify potential machines from a list of line items.
-    Returns a list of dictionaries representing identified machines with their items.
+    Groups line items by machine, identifying main machines and their add-ons.
     
     Args:
-        items: List of line item dictionaries from PDF extraction
-        price_threshold: Price threshold for identifying machines (default: 10000)
-                         Higher = more conservative (fewer machines)
-                         Lower = more aggressive (more machines)
-    
+        line_items: List of dictionaries containing line item details
+        
     Returns:
-        List of dictionaries, each containing:
-        - name: The machine name/model
-        - items: List of items that belong to this machine
-        - is_main_machine: Boolean flag (default True)
+        List of dictionaries where each dict represents a machine with its add-ons:
+        [
+            {
+                "machine_name": "Machine Name",
+                "main_item": {...},  # Dict with the main machine's details
+                "add_ons": [...]     # List of dicts with add-on items
+            },
+            ...
+        ]
     """
-    if not items:
-        return []
-    
-    # Keywords that might indicate a main machine
-    machine_indicators = [
-        "machine", "system", "unit", "model", "equipment", "device",
-        # Industrial machinery types
-        "press", "brake", "shear", "laser", "cutter", "welder", "robot",
-        "mill", "lathe", "grinder", "drill", "saw", "bender",
-        # Packaging/processing machinery
-        "filler", "capper", "labeler", "cartoner", "case packer", "palletizer",
-        "unscrambler", "blister", "thermoformer", "wrapper", "sealer",
-        # Terminology commonly used in quotes
-        "monoblock", "monobloc", "rotary", "linear", "inline", "form fill seal", "checkweigher",
-        # Model indicators
-        "series", "type", "line", "platform"
-    ]
-    
-    # Terms that typically indicate add-ons rather than main machines
-    addon_indicators = [
-        "option", "accessory", "kit", "package", "module", "attachment",
-        "upgrade", "spare", "part", "add-on", "addon", "additional",
-        "enhancement", "feature", "optional", "bundle"
-    ]
-    
-    # Terms that typically indicate common items not specific to one machine
-    common_item_indicators = [
-        "warranty", "installation", "documentation", "manual", "training",
-        "service", "maintenance", "validation", "shipping", "delivery",
-        "travel", "commissioning", "startup", "certification", "compliance",
-        "packaging", "iqoqpq", "iq/oq/pq", "fat", "sat", "protocol"
-    ]
-    
-    # Helper function to extract price as numeric value
-    def extract_price(item):
-        price_text = item.get('selection_text', '')
-        if not price_text:
-            return 0
-        
-        # Try to extract numeric price from text
-        numeric_chars = re.sub(r'[^\d.]', '', price_text.replace(',', '.'))
-        try:
-            return float(numeric_chars) if numeric_chars else 0
-        except ValueError:
-            return 0
-    
-    # Add numeric price field to items for easier processing
-    for item in items:
-        item['item_price_numeric'] = extract_price(item)
-    
-    # Helper function to determine if an item might be a main machine
-    def is_potential_machine(item):
-        desc = item.get('description', '').lower()
-        
-        # Check for add-on indicators first (these override machine detection)
-        for indicator in addon_indicators:
-            if indicator in desc and desc.startswith(indicator):
-                return False
-                
-        # Check for common item indicators
-        for indicator in common_item_indicators:
-            if indicator in desc and (desc.startswith(indicator) or f" {indicator} " in f" {desc} "):
-                return False
-        
-        # Check for machine indicators in description
-        for indicator in machine_indicators:
-            if indicator in desc:
-                return True
-                
-        # Check for price - machines are usually expensive
-        price = item.get('item_price_numeric', 0)
-        if price > price_threshold:
-            return True
-            
-        # Check for quantity - machines usually have qty 1
-        qty_text = item.get('quantity_text', '')
-        try:
-            qty = int(re.sub(r'[^\d]', '', qty_text)) if qty_text else 0
-            if qty == 1 and price > price_threshold/2:  # Half the threshold for qty=1 items
-                return True
-        except ValueError:
-            pass
-            
-        # Check for model numbers in description (e.g., "Model ABC-123")
-        if re.search(r'model\s+[a-z0-9]+-?[a-z0-9]+', desc) or re.search(r'series\s+[a-z0-9]+', desc):
-            return True
-            
-        return False
-    
-    # First pass: identify potential machines and common items
     machines = []
-    potential_addons = []
+    current_machine = None
     common_items = []
     
-    for item in items:
-        desc = item.get('description', '').lower()
+    # Keywords that typically indicate a main machine
+    main_machine_indicators = [
+        r"model.*[A-Z0-9]{2,}",     # Model followed by alphanumeric
+        r".*\bmonoblock\b.*",        # Contains "monoblock"
+        r".*\bunscrambler\b.*",      # Contains "unscrambler"
+        r".*\bfiller\b.*",           # Contains "filler" 
+        r".*\bcapper\b.*",           # Contains "capper"
+        r".*\blabeler\b.*",          # Contains "labeler"
+        r".*\bcartoner\b.*",         # Contains "cartoner"
+        r".*\bcase\s*packer\b.*"     # Contains "case packer"
+    ]
+    
+    # Keywords that typically indicate common items (not specific to one machine)
+    common_item_indicators = [
+        r"warranty",
+        r"installation",
+        r"documentation",
+        r"training",
+        r"spare\s*parts\s*kit",
+        r"service",
+        r"maintenance",
+        r"validation",
+        r"shipping",
+        r"delivery"
+    ]
+    
+    # Check if an item matches main machine patterns
+    def is_main_machine(desc):
+        if not desc:
+            return False
+        desc_lower = desc.lower()
         
-        # Check for common items first
-        is_common = False
-        for indicator in common_item_indicators:
-            if indicator in desc and (desc.startswith(indicator) or f" {indicator} " in f" {desc} "):
-                common_items.append(item)
-                is_common = True
-                break
+        # Skip items that are clearly not main machines
+        if desc_lower.startswith(("each", "option", "accessory", "optional")):
+            return False
+            
+        # Check for main machine indicator patterns
+        for pattern in main_machine_indicators:
+            if re.search(pattern, desc_lower):
+                return True
+        return False
+    
+    # Check if an item is common to all machines
+    def is_common_item(desc):
+        if not desc:
+            return False
+        desc_lower = desc.lower()
+        for pattern in common_item_indicators:
+            if re.search(pattern, desc_lower):
+                return True
+        return False
+    
+    # Process all line items
+    for item in line_items:
+        desc = item.get("description", "")
+        
+        if is_main_machine(desc):
+            # If we already have a machine, save it before starting a new one
+            if current_machine:
+                machines.append(current_machine)
                 
-        if is_common:
-            continue
-        
-        # Then check if it's a machine
-        if is_potential_machine(item):
-            # Create a new machine entry
-            machines.append({
-                "name": item.get('description', 'Unknown Machine').split('\n')[0],  # Use only the first line
-                "items": [item],
-                "is_main_machine": True
-            })
+            # Start a new machine
+            machine_name = desc.split('\n')[0] if '\n' in desc else desc
+            current_machine = {
+                "machine_name": machine_name,
+                "main_item": item,
+                "add_ons": []
+            }
+        elif is_common_item(desc):
+            # Item applies to all machines
+            common_items.append(item)
+        elif current_machine:
+            # This is an add-on for the current machine
+            current_machine["add_ons"].append(item)
         else:
-            # If not a machine or common item, it's a potential addon
-            potential_addons.append(item)
+            # If no current machine yet, this might be a standalone accessory
+            # Add it to common items for now
+            common_items.append(item)
     
-    # If no machines found, use price-based heuristic
-    if not machines and items:
-        # Sort by price if available
-        sorted_items = sorted(items, 
-                             key=lambda x: x.get('item_price_numeric', 0),
-                             reverse=True)
-        
-        # Take the highest priced item as a machine if it's above threshold
-        if sorted_items[0].get('item_price_numeric', 0) > 1000:
-            machines.append({
-                "name": sorted_items[0].get('description', 'Unknown Machine').split('\n')[0],
-                "items": [sorted_items[0]],
-                "is_main_machine": True
-            })
-            
-            # Remove the selected item from sorted items
-            potential_addons = sorted_items[1:]
-        else:
-            # No clear machine found, put all items in common
-            common_items.extend(items)
-            potential_addons = []
+    # Add the last machine if there is one
+    if current_machine:
+        machines.append(current_machine)
     
-    # Second pass: Assign potential add-ons to machines
-    if machines and potential_addons:
-        # Sort machines by their position in the original list
-        # This assumes that add-ons usually follow their main machine in the quote
-        machine_indices = []
-        for i, machine in enumerate(machines):
-            main_item = machine["items"][0]
-            machine_indices.append((i, items.index(main_item)))
-        machine_indices.sort(key=lambda x: x[1])
-        
-        # For each potential addon, assign to the nearest preceding machine
-        for addon in potential_addons:
-            addon_index = items.index(addon)
-            assigned = False
-            
-            # Find the last machine that appears before this addon
-            prev_machine_idx = -1
-            for i, (machine_list_idx, machine_item_idx) in enumerate(machine_indices):
-                if machine_item_idx < addon_index:
-                    prev_machine_idx = machine_list_idx
-                else:
-                    # We've passed the addon position, so use the previous machine
-                    break
-            
-            if prev_machine_idx >= 0:
-                # Assign to the previous machine
-                machines[prev_machine_idx]["items"].append(addon)
-                assigned = True
-            
-            if not assigned:
-                # If couldn't assign to a machine, add to common items
-                common_items.append(addon)
-    
-    # Add common items as a separate group if any exist
-    if common_items:
+    # If no machines were found, create a default "Unknown Machine" group
+    if not machines and line_items:
         machines.append({
-            "name": "Common Items",
-            "items": common_items,
-            "is_main_machine": False
+            "machine_name": "Complete System",
+            "main_item": line_items[0] if line_items else None,
+            "add_ons": line_items[1:] if len(line_items) > 1 else []
         })
+        # Clear common items as we've put everything in one machine
+        common_items = []
     
-    return machines
+    # Append common items to the result
+    return {
+        "machines": machines,
+        "common_items": common_items
+    }
 
 # Example Usage (for testing this module directly)
 if __name__ == '__main__':

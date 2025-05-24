@@ -9,7 +9,7 @@ DB_FILE = "crm_data.db"
 
 def init_db(db_path: str = DB_FILE):
     """
-    Initializes the SQLite database. Creates all required tables if they don't exist.
+    Initializes the SQLite database. Creates 'clients' and 'priced_items' tables if they don't exist.
     """
     conn = None
     try:
@@ -20,7 +20,7 @@ def init_db(db_path: str = DB_FILE):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Create clients table
+        # Create clients table (simplified - LLM output and selected items will be linked via quote_ref if stored elsewhere or handled by priced_items)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,55 +34,58 @@ def init_db(db_path: str = DB_FILE):
             customer_contact_person TEXT,
             customer_po TEXT,
             processing_date TEXT NOT NULL
+            -- Removed full_llm_data_json and selected_pdf_items_json
+            -- We will store priced items in a separate table.
+            -- The full LLM output for the template could be stored in another table linked by quote_ref if needed.
         )
         """)
 
-        # Create priced_items table
+        # Create priced_items table with item_quantity
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS priced_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_quote_ref TEXT NOT NULL, 
             item_description TEXT,
-            item_quantity TEXT,
+            item_quantity TEXT,       -- Added: Store as TEXT to handle various formats (e.g., "1", "N/A", "As required")
             item_price_str TEXT,      
             item_price_numeric REAL,  
             FOREIGN KEY (client_quote_ref) REFERENCES clients (quote_ref) ON DELETE CASCADE
         )
         """)
         
-        # Create machines table
+        # Create machines table to store identified machines within a quote
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS machines (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_quote_ref TEXT NOT NULL,
             machine_name TEXT NOT NULL,
-            machine_data_json TEXT NOT NULL,
+            machine_data_json TEXT NOT NULL,   -- JSON string of machine details including main_item and add_ons
             processing_date TEXT NOT NULL,
             FOREIGN KEY (client_quote_ref) REFERENCES clients (quote_ref) ON DELETE CASCADE
         )
         """)
         
-        # Create machine_templates table
+        # Create machine_templates table to store GOA outputs for specific machines
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS machine_templates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             machine_id INTEGER NOT NULL,
-            template_type TEXT NOT NULL,
-            template_data_json TEXT NOT NULL,
-            generated_file_path TEXT,
+            template_type TEXT NOT NULL,       -- E.g., "GOA", "Packing Slip", etc.
+            template_data_json TEXT NOT NULL,  -- JSON string of filled template data
+            generated_file_path TEXT,          -- Path to the generated document
             processing_date TEXT NOT NULL,
             FOREIGN KEY (machine_id) REFERENCES machines (id) ON DELETE CASCADE
         )
         """)
         
-        # Create document_content table for storing PDF text
+        # Create document_content table to store PDF text for later chat functionality
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS document_content (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_quote_ref TEXT UNIQUE NOT NULL,
-            full_pdf_text TEXT,
-            pdf_filename TEXT,
-            upload_date TEXT NOT NULL,
+            full_pdf_text TEXT,           -- Full text extracted from the PDF
+            pdf_filename TEXT,            -- Original filename
+            upload_date TEXT NOT NULL,    -- When the document was uploaded
             FOREIGN KEY (client_quote_ref) REFERENCES clients (quote_ref) ON DELETE CASCADE
         )
         """)
@@ -441,33 +444,29 @@ def update_single_priced_item(item_id: int, new_data: Dict[str, Any], db_path: s
 
 def delete_client_record(client_id: int, db_path: str = DB_FILE) -> bool:
     """
-    Deletes a client record and its associated data from the database by client ID.
+    Deletes a client record and its associated priced items from the database by client ID.
+    Relies on ON DELETE CASCADE for priced_items if the foreign key was set up with it.
+    If not, priced_items for the client's quote_ref would need to be deleted first.
     """
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Get quote_ref for the client_id to delete associated data
+        # If ON DELETE CASCADE is not reliably working or not set, delete priced_items first.
+        # Get quote_ref for the client_id to delete associated priced_items.
         cursor.execute("SELECT quote_ref FROM clients WHERE id = ?", (client_id,))
         result = cursor.fetchone()
         if result:
             client_quote_ref_to_delete = result[0]
-            
-            # The CASCADE should handle these automatically, but for safety:
             cursor.execute("DELETE FROM priced_items WHERE client_quote_ref = ?", (client_quote_ref_to_delete,))
-            cursor.execute("DELETE FROM document_content WHERE client_quote_ref = ?", (client_quote_ref_to_delete,))
+            print(f"Deleted priced items for quote_ref: {client_quote_ref_to_delete}")
             
-            # Get machine IDs to delete machine_templates
-            cursor.execute("SELECT id FROM machines WHERE client_quote_ref = ?", (client_quote_ref_to_delete,))
-            machine_ids = cursor.fetchall()
-            for machine_id in machine_ids:
-                cursor.execute("DELETE FROM machine_templates WHERE machine_id = ?", (machine_id[0],))
-            
-            cursor.execute("DELETE FROM machines WHERE client_quote_ref = ?", (client_quote_ref_to_delete,))
-            print(f"Deleted associated data for quote_ref: {client_quote_ref_to_delete}")
+            # Also explicitly delete document content
+            delete_document_content(client_quote_ref_to_delete)
         else:
-            print(f"Warning: Client ID {client_id} not found, cannot get quote_ref for deleting associated data.")
+            print(f"Warning: Client ID {client_id} not found, cannot get quote_ref for deleting priced items.")
+            # Still proceed to try deleting from clients table in case of orphaned ID somehow.
 
         # Delete from clients table
         cursor.execute("DELETE FROM clients WHERE id = ?", (client_id,))
@@ -478,7 +477,8 @@ def delete_client_record(client_id: int, db_path: str = DB_FILE) -> bool:
             return True
         else:
             print(f"Warning: No client record found with ID: {client_id} to delete.")
-            return False
+            return False # No rows were deleted from clients table
+
     except sqlite3.Error as e:
         print(f"Database error deleting client record ID {client_id}: {e}")
         return False
@@ -723,16 +723,20 @@ def load_machine_template_data(machine_id: int, template_type: str, db_path: str
 
 def save_document_content(quote_ref: str, full_pdf_text: str, filename: str, db_path: str = DB_FILE) -> bool:
     """
-    Saves the full text content of a PDF document to the database.
+    Saves the full text content of a PDF document for later retrieval.
     
     Args:
-        quote_ref: Quote reference ID to link with the client
-        full_pdf_text: The extracted text content from the PDF
+        quote_ref: The quote reference to link the document to
+        full_pdf_text: The full extracted text from the PDF
         filename: Original filename of the PDF
         
     Returns:
         bool: True if successful, False otherwise
     """
+    if not quote_ref or not full_pdf_text:
+        print("Error: Missing quote reference or PDF text.")
+        return False
+        
     conn = None
     try:
         conn = sqlite3.connect(db_path)
@@ -760,10 +764,15 @@ def save_document_content(quote_ref: str, full_pdf_text: str, filename: str, db_
             """, (quote_ref, full_pdf_text, filename, upload_date))
         
         conn.commit()
-        print(f"Document content saved for quote_ref: {quote_ref}")
+        print(f"Saved document content for quote: {quote_ref}")
         return True
     except sqlite3.Error as e:
         print(f"Database error saving document content: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error saving document content: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     finally:
         if conn:
@@ -774,42 +783,45 @@ def load_document_content(quote_ref: str, db_path: str = DB_FILE) -> Optional[Di
     Loads the document content for a given quote reference.
     
     Args:
-        quote_ref: Quote reference ID
+        quote_ref: The quote reference to load document content for
         
     Returns:
-        Dict containing full_pdf_text, pdf_filename, and upload_date if found, None otherwise
+        Dictionary with full_pdf_text, pdf_filename, and upload_date if found, None otherwise
     """
     conn = None
     try:
         conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row  # Access columns by name
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
         cursor.execute("""
-        SELECT id, full_pdf_text, pdf_filename, upload_date
+        SELECT full_pdf_text, pdf_filename, upload_date
         FROM document_content
         WHERE client_quote_ref = ?
         """, (quote_ref,))
         
         row = cursor.fetchone()
-        if row:
-            return dict(row)
-        else:
-            print(f"No document content found for quote_ref: {quote_ref}")
-            return None
+        return dict(row) if row else None
     except sqlite3.Error as e:
-        print(f"Database error loading document content: {e}")
+        print(f"Database error loading document content for quote {quote_ref}: {e}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error loading document content for quote {quote_ref}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
     finally:
         if conn:
             conn.close()
 
+# Function to delete document content when a client is deleted
 def delete_document_content(quote_ref: str, db_path: str = DB_FILE) -> bool:
     """
-    Deletes document content for a given quote reference.
+    Deletes the document content for a given quote reference.
+    Usually called when deleting a client record.
     
     Args:
-        quote_ref: Quote reference ID
+        quote_ref: The quote reference to delete document content for
         
     Returns:
         bool: True if successful, False otherwise
@@ -822,12 +834,8 @@ def delete_document_content(quote_ref: str, db_path: str = DB_FILE) -> bool:
         cursor.execute("DELETE FROM document_content WHERE client_quote_ref = ?", (quote_ref,))
         conn.commit()
         
-        if cursor.rowcount > 0:
-            print(f"Document content deleted for quote_ref: {quote_ref}")
-            return True
-        else:
-            print(f"No document content found to delete for quote_ref: {quote_ref}")
-            return False
+        print(f"Deleted document content for quote: {quote_ref}")
+        return True
     except sqlite3.Error as e:
         print(f"Database error deleting document content: {e}")
         return False

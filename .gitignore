@@ -1,52 +1,11 @@
-# Environment variables
-.env
-
-# Virtual environment
-.venv/
-venv/
-env/
-
-# Python cache
+*.db
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
+*.class
+.env
+.venv
 env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# IDE
-.idea/
-.vscode/
-
-# Streamlit
-.streamlit/
-
-# Output files
+venv/
+ENV/
 output_*.docx
-output_*.pdf
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Local database
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs
-*.log 
+GOA_LLM_backup/

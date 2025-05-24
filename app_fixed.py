@@ -95,15 +95,11 @@ def initialize_session_state(is_new_processing_run=False):
     if 'confirming_delete_client_id' not in st.session_state or is_new_processing_run:
         st.session_state.confirming_delete_client_id = None
 
-# Function to generate export document
-def generate_export_document(document_type, selected_machines, include_common_items, template_file_path, client_data):
+def group_items_by_confirmed_machines(all_items, main_machine_indices, common_option_indices):
     """
-    Generate a packing slip or commercial invoice for selected machines
+    Group items based on user-confirmed main machines and common options.
     
     Args:
-        document_type: "packing_slip", "commercial_invoice", or "certificate_of_origin"
-        selected_machines: List of selected machine data dictionaries
-        include_common_items: Whether to include common items
         all_items: List of all line items from the PDF
         main_machine_indices: Indices of items confirmed as main machines
         common_option_indices: Indices of items confirmed as common options
@@ -156,6 +152,75 @@ def generate_export_document(document_type, selected_machines, include_common_it
         "common_items": common_items
     }
 
+# Function to generate export document
+def generate_export_document(document_type, selected_machines, include_common_items, template_file_path, client_data):
+    """
+    Generate a packing slip or commercial invoice for selected machines
+    
+    Args:
+        document_type: "packing_slip", "commercial_invoice", or "certificate_of_origin"
+        selected_machines: List of selected machine data dictionaries
+        include_common_items: Whether to include common items
+        template_file_path: Path to the document template
+        client_data: Client information from database
+        
+    Returns:
+        Path to generated document
+    """
+    try:
+        # Get common items if requested
+        common_items = []
+        if include_common_items and "identified_machines_data" in st.session_state:
+            common_items = st.session_state.identified_machines_data.get("common_items", [])
+        
+        # Create a list of all items to include in the document
+        all_items = []
+        
+        # Add main machines and their add-ons
+        for machine in selected_machines:
+            # Add main machine
+            main_item = machine.get("main_item", {})
+            if main_item:
+                all_items.append(main_item)
+            
+            # Add this machine's add-ons
+            add_ons = machine.get("add_ons", [])
+            all_items.extend(add_ons)
+        
+        # Add common items if requested
+        if include_common_items:
+            all_items.extend(common_items)
+        
+        # Create a filename for the generated document
+        machine_names = "_".join([m.get("machine_name", "").replace(" ", "") for m in selected_machines])
+        if len(machine_names) > 30:  # Avoid extremely long filenames
+            machine_names = machine_names[:30] + "..."
+        
+        output_filename = f"{document_type}_{machine_names}_{st.session_state.run_key}.docx"
+        
+        # Prepare data for the document based on its type
+        if document_type == "packing_slip":
+            document_data = generate_packing_slip_data(client_data, all_items)
+            
+        elif document_type == "commercial_invoice":
+            document_data = generate_commercial_invoice_data(client_data, all_items)
+            
+        elif document_type == "certificate_of_origin":
+            document_data = generate_certificate_of_origin_data(client_data, all_items)
+            
+        else:
+            raise ValueError(f"Unknown document type: {document_type}")
+        
+        # Fill the document with the prepared data
+        fill_word_document_from_llm_data(template_file_path, document_data, output_filename)
+        
+        return output_filename
+        
+    except Exception as e:
+        st.error(f"Error generating {document_type}: {e}")
+        st.text(traceback.format_exc())
+        return None
+
 def quick_extract_and_catalog(uploaded_pdf_file):
     """
     Quickly extract data from PDF and save to CRM without going through the full GOA process
@@ -165,89 +230,95 @@ def quick_extract_and_catalog(uploaded_pdf_file):
         temp_pdf_path = os.path.join(".", uploaded_pdf_file.name)
         with open(temp_pdf_path, "wb") as f: f.write(uploaded_pdf_file.getbuffer())
         
-        with st.status("Extracting and Cataloging Data...", expanded=True) as status_bar:
-            # Extract data from PDF
-            st.write("Extracting data from PDF...")
-            extracted_items = extract_line_item_details(temp_pdf_path)
-            full_text = extract_full_pdf_text(temp_pdf_path)
+        # Replace st.status with regular progress messaging
+        progress_placeholder = st.empty()
+        progress_placeholder.info("Extracting and Cataloging Data...")
+        
+        # Extract data from PDF
+        progress_placeholder.info("Extracting data from PDF...")
+        extracted_items = extract_line_item_details(temp_pdf_path)
+        full_text = extract_full_pdf_text(temp_pdf_path)
+        
+        if not extracted_items:
+            st.warning("No items were extracted from PDF tables.")
+            return None
+        
+        # Attempt to extract basic client info
+        # For simplicity, use filename as quote_ref
+        quote_ref = uploaded_pdf_file.name.split('.')[0]
+        
+        # Prepare basic client data payload
+        client_info_payload = {
+            "quote_ref": quote_ref,
+            "customer_name": "",  # Will be filled later in the UI
+            "machine_model": "",
+            "country_destination": "",
+            "sold_to_address": "",
+            "ship_to_address": "",
+            "telephone": "",
+            "customer_contact_person": "",
+            "customer_po": ""
+        }
+        
+        # Save to database
+        if save_client_info(client_info_payload):
+            progress_placeholder.info(f"Basic client record created for quote: {quote_ref}")
             
-            if not extracted_items:
-                st.warning("No items were extracted from PDF tables.")
-                return None
-            
-            # Attempt to extract basic client info
-            # For simplicity, use filename as quote_ref
-            quote_ref = uploaded_pdf_file.name.split('.')[0]
-            
-            # Prepare basic client data payload
-            client_info_payload = {
-                "quote_ref": quote_ref,
-                "customer_name": "",  # Will be filled later in the UI
-                "machine_model": "",
-                "country_destination": "",
-                "sold_to_address": "",
-                "ship_to_address": "",
-                "telephone": "",
-                "customer_contact_person": "",
-                "customer_po": ""
-            }
-            
-            # Save to database
-            if save_client_info(client_info_payload):
-                st.write(f"Basic client record created for quote: {quote_ref}")
-                
-                # Save the items to the database
-                if save_priced_items(quote_ref, extracted_items):
-                    st.write(f"Saved {len(extracted_items)} items to database.")
-                else:
-                    st.warning(f"Failed to save priced items for quote: {quote_ref}")
-                
-                # Save full text for future use
-                if save_document_content(quote_ref, full_text, uploaded_pdf_file.name):
-                    st.write(f"Document content saved for future reference.")
-                else:
-                    st.warning(f"Failed to save document content.")
-                
-                # Auto-identify machines (optional, for reference)
-                machine_list = identify_machines_from_items(extracted_items)
-                
-                # Convert the machine list to the expected format with "machines" and "common_items" keys
-                machine_data = {"machines": [], "common_items": []}
-                
-                for machine in machine_list:
-                    if machine.get("is_main_machine", True):
-                        # For main machines, create the expected structure
-                        main_item = machine.get("items", [])[0] if machine.get("items") else {}
-                        add_ons = machine.get("items", [])[1:] if len(machine.get("items", [])) > 1 else []
-                        
-                        machine_data["machines"].append({
-                            "machine_name": machine.get("name", "Unknown Machine"),
-                            "main_item": main_item,
-                            "add_ons": add_ons
-                        })
-                    else:
-                        # For common items (non-machines), add all items to common_items list
-                        machine_data["common_items"].extend(machine.get("items", []))
-                
-                # Save the properly formatted machine data
-                if save_machines_data(quote_ref, machine_data):
-                    st.write(f"Preliminary machine grouping saved.")
-                    # Log the saved machine data for debugging
-                    if machine_data["machines"]:
-                        st.write(f"Identified {len(machine_data['machines'])} machine(s):")
-                        for i, m in enumerate(machine_data["machines"]):
-                            st.write(f"  {i+1}. {m.get('machine_name', 'Unknown')}")
-                else:
-                    st.warning(f"Failed to save machine groupings.")
-                
-                status_bar.update(label="Cataloging Complete!", state="complete", expanded=False)
-                
-                # Refresh the CRM data
-                load_crm_data()
-                return {"quote_ref": quote_ref, "items": extracted_items}
+            # Save the items to the database
+            if save_priced_items(quote_ref, extracted_items):
+                progress_placeholder.info(f"Saved {len(extracted_items)} items to database.")
             else:
-                st.error(f"Failed to create client record for quote: {quote_ref}")
-                return None
+                st.warning(f"Failed to save priced items for quote: {quote_ref}")
+            
+            # Save full text for future use
+            if save_document_content(quote_ref, full_text, uploaded_pdf_file.name):
+                progress_placeholder.info(f"Document content saved for future reference.")
+            else:
+                st.warning(f"Failed to save document content.")
+            
+            # Auto-identify machines (optional, for reference)
+            machine_list = identify_machines_from_items(extracted_items)
+            
+            # Convert the machine list to the expected format with "machines" and "common_items" keys
+            machine_data = {"machines": [], "common_items": []}
+            
+            for machine in machine_list:
+                if machine.get("is_main_machine", True):
+                    # For main machines, create the expected structure
+                    main_item = machine.get("items", [])[0] if machine.get("items") else {}
+                    add_ons = machine.get("items", [])[1:] if len(machine.get("items", [])) > 1 else []
+                    
+                    machine_data["machines"].append({
+                        "machine_name": machine.get("name", "Unknown Machine"),
+                        "main_item": main_item,
+                        "add_ons": add_ons
+                    })
+                else:
+                    # For common items (non-machines), add all items to common_items list
+                    machine_data["common_items"].extend(machine.get("items", []))
+            
+            # Save the properly formatted machine data
+            if save_machines_data(quote_ref, machine_data):
+                progress_placeholder.info(f"Preliminary machine grouping saved.")
+                # Log the saved machine data for debugging
+                if machine_data["machines"]:
+                    progress_placeholder.info(f"Identified {len(machine_data['machines'])} machine(s):")
+                    machine_details = []
+                    for i, m in enumerate(machine_data["machines"]):
+                        machine_details.append(f"  {i+1}. {m.get('machine_name', 'Unknown')}")
+                    progress_placeholder.info("\n".join(machine_details))
+            else:
+                st.warning(f"Failed to save machine groupings.")
+            
+            # Update final status
+            progress_placeholder.success("Cataloging Complete!")
+            
+            # Refresh the CRM data
+            load_crm_data()
+            return {"quote_ref": quote_ref, "items": extracted_items}
+        else:
+            st.error(f"Failed to create client record for quote: {quote_ref}")
+            return None
     except Exception as e:
         st.error(f"Error in quick extraction: {e}")
         st.text(traceback.format_exc())
@@ -318,12 +389,12 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
             # Skip initial LLM processing for all items - we'll process machine-specific later
             st.session_state.llm_initial_filled_data = initial_data_dict.copy()
             st.session_state.llm_corrected_filled_data = initial_data_dict.copy()
-            
+
             # Create initial empty document for reference
             st.write(f"Creating initial blank document template: {st.session_state.initial_docx_path}...")
             fill_word_document_from_llm_data(template_file_path, initial_data_dict, st.session_state.initial_docx_path)
             if os.path.exists(st.session_state.initial_docx_path):
-                shutil.copy(st.session_state.initial_docx_path, st.session_state.corrected_docx_path)
+                 shutil.copy(st.session_state.initial_docx_path, st.session_state.corrected_docx_path)
             else:
                 st.warning(f"Initial document {st.session_state.initial_docx_path} was not created. Cannot copy to corrected path.")
             
@@ -358,7 +429,7 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
                                           st.session_state.full_pdf_text, 
                                           uploaded_pdf_file.name):
                         st.write(f"Document content saved for future chat sessions.")
-                    else:
+                else:
                         st.warning(f"Failed to save document content for future chat.")
                 
                 # We'll save machines after user confirmation
@@ -749,7 +820,7 @@ def show_quote_processing():
         
         # File uploader in main content area instead of sidebar
         uploaded_pdf = st.file_uploader("Choose PDF", type="pdf", key=f"pdf_uploader_main_{st.session_state.run_key}")
-        
+
         if uploaded_pdf:
             st.markdown(f"**Uploaded:** `{uploaded_pdf.name}`")
             
@@ -832,13 +903,13 @@ def show_quote_processing():
                 # Store selected indices
                 st.session_state.selected_main_machines = selected_indices
                 
-                col1, col2 = st.columns(2)
-                with col1:
+        col1, col2 = st.columns(2)
+        with col1:
                     if st.button("⬅️ Back", key="back_to_upload"):
                         st.session_state.processing_step = 0
                         st.rerun()
                 
-                with col2:
+        with col2:
                     if st.button("Next ➡️", key="confirm_machines_btn", type="primary"):
                         if not selected_indices:
                             st.warning("Please select at least one main machine.")
@@ -1299,7 +1370,7 @@ def show_export_documents():
                         st.markdown("### Or Manually Select Machines")
                         if st.button("Manual Machine Selection", key=f"manual_machine_selection_btn_{client_data.get('id')}"):
                             st.session_state[f"show_manual_export_selection_{client_data.get('id')}"] = True
-                            st.rerun()
+                        st.rerun()
                         
                         # Show manual selection UI if requested
                         if st.session_state.get(f"show_manual_export_selection_{client_data.get('id')}", False):
@@ -1389,10 +1460,10 @@ def show_export_documents():
                                             st.rerun()
                                         else:
                                             st.error("Failed to save manual machine groupings.")
-                                    except Exception as e:
+                    except Exception as e:
                                         st.error(f"Error saving manual machine groupings: {e}")
                                         st.text(traceback.format_exc())
-            else:
+    else:
                 st.error(f"Could not load client data for ID: {selected_id}")
         except Exception as e:
             st.error(f"Error loading client data: {e}")
@@ -1439,7 +1510,7 @@ def show_crm_management():
     client_detail_editor_placeholder = st.empty()
     save_button_placeholder = st.empty()
     delete_section_placeholder = st.empty() # Placeholder for the entire delete UI section
-    
+
     # Create tabs for different client views
     if selected_client_option_str_for_view != "Select a Client Record...":
         try:
@@ -1487,58 +1558,58 @@ def show_crm_management():
                         )
                         st.session_state.edited_client_details_df = edited_df_output # Always store the output
 
-                    with save_button_placeholder.container():
-                        if st.button("💾 Save Client Detail Changes", key=f"save_details_btn_{client_to_display_and_edit.get('id', 'new')}"):
-                            if not st.session_state.edited_client_details_df.empty:
-                                updated_row = st.session_state.edited_client_details_df.iloc[0].to_dict()
-                                client_id_to_update = client_to_display_and_edit.get('id') # Get ID from originally loaded client
-                                update_payload = { k: v for k, v in updated_row.items() if k != 'id' } # Exclude ID from payload
-                                
-                                if not update_payload.get('quote_ref'):
-                                    st.error("Quote Reference is required!")
-                                elif update_client_record(client_id_to_update, update_payload):
-                                    st.success("Client details updated!")
-                                    load_crm_data() # Refresh full CRM list
-                                    st.session_state.selected_client_for_detail_edit = get_client_by_id(client_id_to_update) # Refresh this client's view
-                                    st.rerun()
-                                else: st.error("Failed to update client details.")
-                            else: st.warning("No client data in editor to save.")
-                    
-                    with delete_section_placeholder.container():
-                        st.markdown("--- Delete Record ---") # Changed header slightly
-                        current_client_id = client_to_display_and_edit.get('id')
-                        current_quote_ref = client_to_display_and_edit.get('quote_ref')
+                with save_button_placeholder.container():
+                    if st.button("💾 Save Client Detail Changes", key=f"save_details_btn_{client_to_display_and_edit.get('id', 'new')}"):
+                        if not st.session_state.edited_client_details_df.empty:
+                            updated_row = st.session_state.edited_client_details_df.iloc[0].to_dict()
+                            client_id_to_update = client_to_display_and_edit.get('id') # Get ID from originally loaded client
+                            update_payload = { k: v for k, v in updated_row.items() if k != 'id' } # Exclude ID from payload
+                            
+                            if not update_payload.get('quote_ref'):
+                                st.error("Quote Reference is required!")
+                            elif update_client_record(client_id_to_update, update_payload):
+                                st.success("Client details updated!")
+                                load_crm_data() # Refresh full CRM list
+                                st.session_state.selected_client_for_detail_edit = get_client_by_id(client_id_to_update) # Refresh this client's view
+                                st.rerun()
+                            else: st.error("Failed to update client details.")
+                        else: st.warning("No client data in editor to save.")
+                
+                with delete_section_placeholder.container():
+                    st.markdown("--- Delete Record ---") # Changed header slightly
+                    current_client_id = client_to_display_and_edit.get('id')
+                    current_quote_ref = client_to_display_and_edit.get('quote_ref')
 
-                        # If we are not currently confirming a delete for this specific client, show the initial delete button.
-                        if st.session_state.confirming_delete_client_id != current_client_id:
-                            if st.button("🗑️ Initiate Delete Sequence", key=f"init_del_btn_{current_client_id}"):
-                                st.session_state.confirming_delete_client_id = current_client_id
-                                st.rerun() # Rerun to show the confirmation state
-                        
-                        # If we ARE confirming a delete for THIS client, show warning and final delete button.
-                        if st.session_state.confirming_delete_client_id == current_client_id:
-                            st.warning(f"**CONFIRM DELETION**: Are you sure you want to permanently delete all data for client ID {current_client_id} (Quote: {current_quote_ref})? This action cannot be undone.")
-                            col_confirm, col_cancel = st.columns(2)
-                            with col_confirm:
-                                if st.button(f"YES, DELETE ID {current_client_id}", key=f"confirm_del_btn_{current_client_id}", type="primary"):
-                                    st.write(f"DEBUG: Attempting to delete client ID: {current_client_id}") # Debug
-                                    if delete_client_record(current_client_id):
-                                        st.success(f"Client record ID {current_client_id} and associated data deleted.")
-                                        load_crm_data()
-                                        st.session_state.selected_client_for_detail_edit = None
-                                        st.session_state.editing_client_id = None
-                                        st.session_state.edited_client_details_df = pd.DataFrame()
-                                        st.session_state.confirming_delete_client_id = None # Reset confirmation state
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Failed to delete client record ID {current_client_id}.")
-                                        st.session_state.confirming_delete_client_id = None # Reset on failure too
-                                        st.rerun()
-                            with col_cancel:
-                                if st.button("Cancel Deletion", key=f"cancel_del_btn_{current_client_id}"):
-                                    st.session_state.confirming_delete_client_id = None
-                                    st.info("Deletion cancelled.")
+                    # If we are not currently confirming a delete for this specific client, show the initial delete button.
+                    if st.session_state.confirming_delete_client_id != current_client_id:
+                        if st.button("🗑️ Initiate Delete Sequence", key=f"init_del_btn_{current_client_id}"):
+                            st.session_state.confirming_delete_client_id = current_client_id
+                            st.rerun() # Rerun to show the confirmation state
+                    
+                    # If we ARE confirming a delete for THIS client, show warning and final delete button.
+                    if st.session_state.confirming_delete_client_id == current_client_id:
+                        st.warning(f"**CONFIRM DELETION**: Are you sure you want to permanently delete all data for client ID {current_client_id} (Quote: {current_quote_ref})? This action cannot be undone.")
+                        col_confirm, col_cancel = st.columns(2)
+                        with col_confirm:
+                            if st.button(f"YES, DELETE ID {current_client_id}", key=f"confirm_del_btn_{current_client_id}", type="primary"):
+                                st.write(f"DEBUG: Attempting to delete client ID: {current_client_id}") # Debug
+                                if delete_client_record(current_client_id):
+                                    st.success(f"Client record ID {current_client_id} and associated data deleted.")
+                                    load_crm_data()
+                                    st.session_state.selected_client_for_detail_edit = None
+                                    st.session_state.editing_client_id = None
+                                    st.session_state.edited_client_details_df = pd.DataFrame()
+                                    st.session_state.confirming_delete_client_id = None # Reset confirmation state
                                     st.rerun()
+                                else:
+                                    st.error(f"Failed to delete client record ID {current_client_id}.")
+                                    st.session_state.confirming_delete_client_id = None # Reset on failure too
+                                    st.rerun()
+                        with col_cancel:
+                            if st.button("Cancel Deletion", key=f"cancel_del_btn_{current_client_id}"):
+                                st.session_state.confirming_delete_client_id = None
+                                st.info("Deletion cancelled.")
+                                st.rerun()
                 
                 # Tab 2: Priced Items
                 with client_tab2:
@@ -1703,8 +1774,8 @@ def show_crm_management():
                                                 file_name=output_path,
                                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                             )
-                                else:
-                                    st.error(f"Failed to generate {template_type}.")
+                                    else:
+                                        st.error(f"Failed to generate {template_type}.")
                             else:
                                 st.error("Please select a document type.")
                     else:
