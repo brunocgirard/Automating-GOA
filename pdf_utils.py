@@ -227,23 +227,27 @@ def extract_contextual_details(pdf_path: str,
     
     return "\n".join(contextual_text_lines)
 
-def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]]) -> List[Dict]:
+def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]], price_threshold: float = 10000) -> Dict:
     """
     Groups line items by machine, identifying main machines and their add-ons.
     
     Args:
         line_items: List of dictionaries containing line item details
+        price_threshold: Price threshold for determining main machines (default 10000)
         
     Returns:
-        List of dictionaries where each dict represents a machine with its add-ons:
-        [
-            {
-                "machine_name": "Machine Name",
-                "main_item": {...},  # Dict with the main machine's details
-                "add_ons": [...]     # List of dicts with add-on items
-            },
-            ...
-        ]
+        Dictionary with "machines" list and "common_items" list:
+        {
+            "machines": [
+                {
+                    "machine_name": "Machine Name",
+                    "main_item": {...},  # Dict with the main machine's details
+                    "add_ons": [...]     # List of dicts with add-on items
+                },
+                ...
+            ],
+            "common_items": [...]  # List of items common to all machines
+        }
     """
     machines = []
     current_machine = None
@@ -274,25 +278,53 @@ def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]]) -> 
         r"shipping",
         r"delivery"
     ]
+
+    # Extract numeric price from item if available
+    def extract_price(item):
+        # Try to get numeric price if it exists
+        if item.get("item_price_numeric") is not None:
+            return float(item.get("item_price_numeric", 0))
+        
+        # Try to extract from price string
+        price_str = item.get("selection_text", "") or item.get("item_price_str", "")
+        if price_str:
+            # Extract numbers from string
+            import re
+            matches = re.findall(r'[\d,]+\.\d+|\d+', price_str.replace(',', ''))
+            if matches:
+                try:
+                    return float(matches[0])
+                except ValueError:
+                    pass
+        return 0.0
     
     # Check if an item matches main machine patterns
-    def is_main_machine(desc):
+    def is_main_machine(item):
+        desc = item.get("description", "")
         if not desc:
             return False
+            
         desc_lower = desc.lower()
         
         # Skip items that are clearly not main machines
         if desc_lower.startswith(("each", "option", "accessory", "optional")):
             return False
             
+        # Check if price is above threshold (strong indicator of main machine)
+        price = extract_price(item)
+        if price >= price_threshold:
+            return True
+            
         # Check for main machine indicator patterns
         for pattern in main_machine_indicators:
             if re.search(pattern, desc_lower):
                 return True
+                
         return False
     
     # Check if an item is common to all machines
-    def is_common_item(desc):
+    def is_common_item(item):
+        desc = item.get("description", "")
         if not desc:
             return False
         desc_lower = desc.lower()
@@ -303,21 +335,23 @@ def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]]) -> 
     
     # Process all line items
     for item in line_items:
-        desc = item.get("description", "")
+        # Add price calculations
+        item["item_price_numeric"] = extract_price(item)
         
-        if is_main_machine(desc):
+        if is_main_machine(item):
             # If we already have a machine, save it before starting a new one
             if current_machine:
                 machines.append(current_machine)
                 
             # Start a new machine
+            desc = item.get("description", "")
             machine_name = desc.split('\n')[0] if '\n' in desc else desc
             current_machine = {
                 "machine_name": machine_name,
                 "main_item": item,
                 "add_ons": []
             }
-        elif is_common_item(desc):
+        elif is_common_item(item):
             # Item applies to all machines
             common_items.append(item)
         elif current_machine:
@@ -342,7 +376,7 @@ def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]]) -> 
         # Clear common items as we've put everything in one machine
         common_items = []
     
-    # Append common items to the result
+    # Return machines and common items
     return {
         "machines": machines,
         "common_items": common_items

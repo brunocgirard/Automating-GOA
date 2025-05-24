@@ -15,6 +15,18 @@ from crm_utils import init_db, save_client_info, load_all_clients, get_client_by
 
 # --- App State Initialization (using st.session_state) ---
 def initialize_session_state(is_new_processing_run=False):
+    # Initialize navigation and pages
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "Welcome"
+    
+    # Initialize chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Initialize processing step for wizard-style interface
+    if "processing_step" not in st.session_state:
+        st.session_state.processing_step = 0
+        
     if is_new_processing_run or 'run_key' not in st.session_state: # Initialize/reset run_key on new processing
         st.session_state.run_key = st.session_state.get('run_key', 0) + (1 if is_new_processing_run else 0)
 
@@ -502,37 +514,184 @@ def load_previous_document(client_id):
         st.text(traceback.format_exc())
         return False
 
-# --- Streamlit UI --- 
-st.set_page_config(layout="wide", page_title="GOA LLM Assistant")
-st.title("📄 GOA Document Assistant with LLM")
+# --- Context-Aware Chat Functions ---
+def get_current_context():
+    """
+    Determines the current context for the chat based on user's location in the app
+    Returns a tuple of (context_type, context_data)
+    """
+    if st.session_state.current_page == "Welcome":
+        return ("general", None)
+    elif st.session_state.current_page == "Quote Processing":
+        if st.session_state.full_pdf_text:
+            return ("quote", {
+                "full_pdf_text": st.session_state.full_pdf_text,
+                "selected_pdf_descs": st.session_state.selected_pdf_descs,
+                "template_contexts": st.session_state.template_contexts
+            })
+        return ("general", None)
+    elif st.session_state.current_page == "Export Documents":
+        # Context based on selected client/machines
+        if st.session_state.selected_client_for_detail_edit:
+            return ("client", st.session_state.selected_client_for_detail_edit)
+        return ("general", None)
+    elif st.session_state.current_page == "CRM Management":
+        if st.session_state.selected_client_for_detail_edit:
+            return ("client", st.session_state.selected_client_for_detail_edit)
+        return ("crm", None)
+    return ("general", None)
 
-# Load CRM data once on first load if not already loaded
-if not st.session_state.crm_data_loaded:
-    load_crm_data()
-
-# --- Sidebar for Upload ONLY ---
-st.sidebar.header("📤 Upload Files")
-TEMPLATE_FILE = "template.docx"
-if not os.path.exists(TEMPLATE_FILE): st.sidebar.error(f"Template '{TEMPLATE_FILE}' not found."); st.stop()
-uploaded_pdf = st.sidebar.file_uploader("Choose PDF", type="pdf", key=f"pdf_uploader_{st.session_state.run_key}")
-
-if uploaded_pdf:
-    st.sidebar.markdown(f"**Uploaded:** `{uploaded_pdf.name}`")
-    if st.sidebar.button("🚀 Process Document", type="primary", key=f"process_btn_{st.session_state.run_key}"):
-        perform_initial_processing(uploaded_pdf, TEMPLATE_FILE)
-# --- End Sidebar Upload ---
-
-if st.session_state.error_message: st.error(st.session_state.error_message)
-
-# --- Main Page Tabs ---
-tab_processor, tab_export, tab_crm_management = st.tabs(["📄 Document Processor", "📦 Export Documents", "📒 CRM Management"])
-
-with tab_processor:
-    st.header("📝 Document Processing & Chat")
+def process_chat_query(query, context_type, context_data=None):
+    """
+    Process chat query based on the current context
+    """
+    if not query:
+        return "Please enter a question."
     
-    # Add option to load previous document
-    if not st.session_state.processing_done:
-        # Original upload option is in the sidebar
+    if context_type == "quote" and context_data:
+        # Answer questions about the current quote
+        return answer_pdf_question(
+            query, 
+            context_data.get("selected_pdf_descs", []),
+            context_data.get("full_pdf_text", ""),
+            context_data.get("template_contexts", {})
+        )
+    elif context_type == "client" and context_data:
+        # Answer questions about the selected client
+        client_info = f"Client: {context_data.get('customer_name', '')}\n"
+        client_info += f"Quote: {context_data.get('quote_ref', '')}\n"
+        
+        # Get additional info if needed
+        quote_ref = context_data.get('quote_ref')
+        if quote_ref:
+            doc_content = load_document_content(quote_ref)
+            if doc_content and doc_content.get("full_pdf_text"):
+                return answer_pdf_question(
+                    query,
+                    [],  # No specific descriptions needed
+                    doc_content.get("full_pdf_text", ""),
+                    {}  # No template contexts needed
+                )
+        
+        # Fallback if no document content
+        return f"I can help with questions about {context_data.get('customer_name', 'the client')}, but I don't have detailed quote information available."
+    
+    # Default general responses
+    if "what can you do" in query.lower():
+        return "I can help you process quotes, identify machines, generate documents, and answer questions about your data."
+    elif "how do i" in query.lower():
+        return "To get started, upload a quote PDF in the Quote Processing section. I'll guide you through the rest of the process."
+    
+    return "I'm not sure how to answer that question with the current context. Try asking about a specific quote or client if one is selected."
+
+# --- Page Display Functions ---
+def show_welcome_page():
+    st.title("Welcome to the GOA Document Assistant")
+    
+    st.markdown("""
+    ## What This Application Does
+    
+    This tool helps you process machine quotes to generate:
+    - General Order Agreements (GOA)
+    - Packing Slips
+    - Commercial Invoices
+    - Certificates of Origin
+    
+    ## Data Storage
+    
+    The following data will be stored in the database:
+    - Client information (name, address, etc.)
+    - Quote details and line items
+    - Machine specifications and groupings
+    - Generated documents
+    
+    ## Getting Started
+    
+    1. Start by uploading a quote PDF in the Quote Processing section
+    2. Identify machines and their add-ons
+    3. Generate GOA documents for specific machines
+    4. Create export documents as needed
+    """)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Go to Quote Processing", type="primary"):
+            st.session_state.current_page = "Quote Processing"
+            st.rerun()
+    with col2:
+        if st.button("View CRM Data"):
+            st.session_state.current_page = "CRM Management"
+            st.rerun()
+
+def show_quote_processing():
+    st.title("📄 Quote Processing")
+    
+    # Wizard-style interface with progress bar
+    processing_steps = [
+        "Upload Quote", 
+        "Identify Main Machines", 
+        "Select Common Options", 
+        "Process Machine"
+    ]
+    current_step = st.session_state.processing_step
+    
+    # Progress bar
+    progress_percentage = current_step / (len(processing_steps) - 1)
+    st.progress(progress_percentage)
+    st.subheader(f"Step {current_step + 1}: {processing_steps[current_step]}")
+    
+    # Step 1: Upload Quote
+    if current_step == 0:
+        st.markdown("Upload a PDF quote to begin processing.")
+        
+        # File uploader in main content area instead of sidebar
+        uploaded_pdf = st.file_uploader("Choose PDF", type="pdf", key=f"pdf_uploader_main_{st.session_state.run_key}")
+
+        if uploaded_pdf:
+            st.markdown(f"**Uploaded:** `{uploaded_pdf.name}`")
+            
+            # Create two columns for processing options
+            col1, col2 = st.columns(2)
+            
+            # Option 1: Full GOA Processing
+            with col1:
+                if st.button("🚀 Process for GOA", type="primary", key=f"process_btn_main_{st.session_state.run_key}"):
+                    # Reset processing step to ensure we start fresh
+                    st.session_state.processing_step = 0
+                    # Process the document
+                    TEMPLATE_FILE = "template.docx"
+                    if not os.path.exists(TEMPLATE_FILE): 
+                        st.error(f"Template '{TEMPLATE_FILE}' not found.")
+                    else:
+                        perform_initial_processing(uploaded_pdf, TEMPLATE_FILE)
+                        # Move to next step if processing is done
+                        if st.session_state.processing_done:
+                            st.session_state.processing_step = 1
+                            st.rerun()
+            
+            # Option 2: Quick Catalog
+            with col2:
+                if st.button("📊 Just Catalog Data", key="quick_catalog_btn"):
+                    # Quick extraction and cataloging
+                    result = quick_extract_and_catalog(uploaded_pdf)
+                    if result:
+                        st.success(f"Quote {result['quote_ref']} successfully cataloged with {len(result['items'])} items.")
+                        
+                        # Display extracted data
+                        with st.expander("View Extracted Items", expanded=True):
+                            if result['items']:
+                                df = pd.DataFrame(result['items'])
+                                # Clean up columns for display
+                                display_cols = ['description', 'quantity_text', 'selection_text']
+                                display_df = df[[c for c in display_cols if c in df.columns]]
+                                st.dataframe(display_df, use_container_width=True)
+                        
+                        # Add option to go directly to CRM
+                        if st.button("Go to CRM Management"):
+                            st.session_state.current_page = "CRM Management"
+                            st.rerun()
+                    else:
+                        st.error("Failed to catalog data.")
         
         # Add option to load previous document
         st.subheader("📂 Load Previous Document")
@@ -554,28 +713,23 @@ with tab_processor:
                     with st.spinner("Loading document..."):
                         if load_previous_document(selected_quote_id):
                             st.success("Document loaded successfully!")
+                            st.session_state.processing_step = 1  # Go to machine selection step
                             st.rerun()
             else:
                 st.info("No previous quotes found. Upload a new document to begin.")
-                
-        st.markdown("---")
-        st.info("👈 Upload a PDF in the sidebar or select a previous document above to begin.")
     
-    elif st.session_state.processing_done:
-        # Step 1: Confirm Main Machines (if not done yet)
+    # Step 2: Identify Main Machines
+    elif current_step == 1:
         if not st.session_state.machine_confirmation_done:
-            st.subheader("Step 1: Confirm Main Machines")
             st.markdown("Select all items that are **main machines** in the quote. These are the primary equipment items.")
             
             items = st.session_state.items_for_confirmation
             if items:
-                # Instead of multiselect, use checkboxes for better visibility
+                # Use checkboxes for better visibility
                 st.markdown("### Select main machines:")
                 
-                # Create columns for better layout
                 selected_indices = []
                 
-                # Use a container for the checkboxes
                 with st.container():
                     for i, item in enumerate(items):
                         desc = item.get('description', 'No description')
@@ -600,19 +754,33 @@ with tab_processor:
                 # Store selected indices
                 st.session_state.selected_main_machines = selected_indices
                 
-                # Button to confirm selections and move to next step
-                if st.button("Confirm Main Machines", key="confirm_machines_btn"):
-                    if not selected_indices:
-                        st.warning("Please select at least one main machine.")
-                    else:
-                        st.session_state.machine_confirmation_done = True
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("⬅️ Back", key="back_to_upload"):
+                        st.session_state.processing_step = 0
                         st.rerun()
+                
+                with col2:
+                    if st.button("Next ➡️", key="confirm_machines_btn", type="primary"):
+                        if not selected_indices:
+                            st.warning("Please select at least one main machine.")
+                        else:
+                            st.session_state.machine_confirmation_done = True
+                            st.session_state.processing_step = 2
+                            st.rerun()
             else:
                 st.warning("No items found for confirmation. Please process the document again.")
-        
-        # Step 2: Confirm Common Options (if main machines confirmed but common options not yet)
-        elif not st.session_state.common_options_confirmation_done:
-            st.subheader("Step 2: Select Common Options")
+                if st.button("⬅️ Back to Upload", key="back_to_upload_no_items"):
+                    st.session_state.processing_step = 0
+                    st.rerun()
+        else:
+            # If machines already confirmed, move to next step
+            st.session_state.processing_step = 2
+            st.rerun()
+    
+    # Step 3: Select Common Options
+    elif current_step == 2:
+        if not st.session_state.common_options_confirmation_done:
             st.markdown("Select items that are **common options** applying to all machines (warranty, training, etc.)")
             
             items = st.session_state.items_for_confirmation
@@ -672,547 +840,597 @@ with tab_processor:
                         first_line = desc.split('\n')[0] if '\n' in desc else desc
                         st.markdown(f"- {first_line}")
                 
-                # Button to confirm selections and finalize grouping
-                if st.button("Confirm Common Options", key="confirm_common_btn"):
-                    # Group items based on confirmed machines and common options
-                    grouped_data = group_items_by_confirmed_machines(
-                        items, 
-                        st.session_state.selected_main_machines,
-                        st.session_state.selected_common_options
-                    )
-                    
-                    # Store the grouped data
-                    st.session_state.identified_machines_data = grouped_data
-                    
-                    # Save the machines to the database
-                    if st.session_state.selected_pdf_items_structured:
-                        quote_ref = items[0].get('client_quote_ref') if items and items[0].get('client_quote_ref') else "unknown"
-                        if save_machines_data(quote_ref, grouped_data):
-                            st.success(f"Machine groupings saved to database.")
-                        else:
-                            st.warning(f"Failed to save machine groupings to database.")
-                    
-                    st.session_state.common_options_confirmation_done = True
-                    st.rerun()
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("⬅️ Back", key="back_to_machines"):
+                        st.session_state.machine_confirmation_done = False
+                        st.session_state.processing_step = 1
+                        st.rerun()
+                
+                with col2:
+                    if st.button("Next ➡️", key="confirm_common_btn", type="primary"):
+                        # Group items based on confirmed machines and common options
+                        grouped_data = group_items_by_confirmed_machines(
+                            items, 
+                            st.session_state.selected_main_machines,
+                            st.session_state.selected_common_options
+                        )
+                        
+                        # Store the grouped data
+                        st.session_state.identified_machines_data = grouped_data
+                        
+                        # Save the machines to the database
+                        if st.session_state.selected_pdf_items_structured:
+                            quote_ref = items[0].get('client_quote_ref') if items and items[0].get('client_quote_ref') else "unknown"
+                            if save_machines_data(quote_ref, grouped_data):
+                                st.success(f"Machine groupings saved to database.")
+                            else:
+                                st.warning(f"Failed to save machine groupings to database.")
+                        
+                        st.session_state.common_options_confirmation_done = True
+                        st.session_state.processing_step = 3
+                        st.rerun()
             else:
                 st.warning("No items found for confirmation. Please process the document again.")
-        
-        # Step 3: Select machine to process (if all confirmations are done)
+                if st.button("⬅️ Back to Upload", key="back_to_upload_no_common_items"):
+                    st.session_state.processing_step = 0
+                    st.rerun()
         else:
-            # Add machine selection UI
-            st.subheader("🔍 Select Machine to Process")
-            
-            if st.session_state.identified_machines_data and "machines" in st.session_state.identified_machines_data:
-                machines = st.session_state.identified_machines_data["machines"]
-                if machines:
-                    # Create list of machine options for selection
-                    machine_options = [f"{m.get('machine_name', 'Unknown Machine')}" for m in machines]
-                    
-                    # Show selection dropdown
-                    selected_machine_idx = st.selectbox(
-                        "Choose a machine to process:",
-                        range(len(machine_options)),
-                        format_func=lambda i: machine_options[i],
-                        key=f"machine_select_{st.session_state.run_key}"
-                    )
-                    
-                    # Store selected machine index
-                    st.session_state.selected_machine_index = selected_machine_idx
-                    
-                    # Show machine details
-                    selected_machine = machines[selected_machine_idx]
-                    with st.expander(f"Machine Details: {selected_machine.get('machine_name')}", expanded=True):
-                        st.markdown("**Main Machine Description:**")
-                        st.markdown(f"```\n{selected_machine.get('main_item', {}).get('description', 'No description')}\n```")
-                        
-                        st.markdown("**Add-on Items:**")
-                        add_ons = selected_machine.get('add_ons', [])
-                        if add_ons:
-                            for i, addon in enumerate(add_ons):
-                                st.markdown(f"{i+1}. {addon.get('description', 'No description')}")
-                        else:
-                            st.markdown("No add-on items for this machine.")
-                    
-                    # Common items apply to all machines
-                    common_items = st.session_state.identified_machines_data.get("common_items", [])
-                    with st.expander("Common Items (apply to all machines)", expanded=False):
-                        if common_items:
-                            for i, item in enumerate(common_items):
-                                st.markdown(f"{i+1}. {item.get('description', 'No description')}")
-                        else:
-                            st.markdown("No common items identified.")
-                    
-                    # Process this machine button
-                    if st.button("🔨 Process Selected Machine", key=f"process_machine_btn_{st.session_state.run_key}"):
-                        success = process_machine_specific_data(selected_machine, TEMPLATE_FILE)
-                        if success:
-                            st.success(f"Machine '{selected_machine.get('machine_name')}' processed successfully!")
-                            # Force rerun to update UI with new document
-                            st.rerun()
-                else:
-                    st.warning("No machines identified in the document.")
-            else:
-                st.warning("Machine data not available. Please process the document first.")
-            
-            # Show download for machine-specific document if available
-            if hasattr(st.session_state, 'machine_docx_path') and os.path.exists(st.session_state.machine_docx_path):
-                st.subheader("📂 Machine-Specific Document")
-                with open(st.session_state.machine_docx_path, "rb") as fp:
-                    st.download_button(
-                        "Download Machine-Specific Document",
-                        fp,
-                        os.path.basename(st.session_state.machine_docx_path),
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        key=f"dl_machine_{st.session_state.run_key}",
-                        type="primary"
-                    )
+            # If common options already confirmed, move to next step
+            st.session_state.processing_step = 3
+            st.rerun()
+    
+    # Step 4: Process Machine
+    elif current_step == 3:
+        # Machine selection and processing
+        st.subheader("🔍 Select Machine to Process")
         
-        # Original processing results section
-        st.subheader("📊 Initial Processing Results")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**📌 Selected PDF Item Descriptions**")
-            with st.expander("View Extracted PDF Descriptions", expanded=False):
-                st.json(st.session_state.selected_pdf_descs if st.session_state.selected_pdf_descs else [])
-        with col2:
-            st.markdown("**🤖 Identified Machines**")
-            if st.session_state.identified_machines_data and "machines" in st.session_state.identified_machines_data:
-                machines = st.session_state.identified_machines_data["machines"]
-                st.write(f"Found {len(machines)} machine(s) in the quote:")
-                for i, machine in enumerate(machines):
-                    st.markdown(f"{i+1}. **{machine.get('machine_name')}** with {len(machine.get('add_ons', []))} add-on(s)")
-            else:
-                st.info("No machines identified in the document.")
-
-        # Original download section for initial/corrected docs
-        st.subheader("📂 Original Document Downloads")
-        dl_c1, dl_c2 = st.columns(2)
-        with dl_c1:
-            if os.path.exists(st.session_state.initial_docx_path):
-                with open(st.session_state.initial_docx_path, "rb") as fp:
-                    st.download_button("Initial Document", fp, os.path.basename(st.session_state.initial_docx_path), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_init_{st.session_state.run_key}")
-        with dl_c2:
-            if st.session_state.correction_applied and os.path.exists(st.session_state.corrected_docx_path):
-                with open(st.session_state.corrected_docx_path, "rb") as fp:
-                    st.download_button("Corrected Document", fp, os.path.basename(st.session_state.corrected_docx_path), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_corr_{st.session_state.run_key}")
-            elif st.session_state.processing_done : st.info("Correct via chat for an updated document.")
-        st.markdown("---")
-        
-        st.subheader("💬 Interactive Chat") 
-        if st.session_state.chat_log:
-            with st.expander("View Chat Log", expanded=True):
-                for role, content in st.session_state.chat_log:
-                    st.markdown(f"**{role.capitalize()}:** {content}")
-        user_chat_msg = st.text_input("Ask a question or give a correction:", key=f"chat_msg_{st.session_state.run_key}")
-        if st.button("Send Message", key=f"send_msg_btn_{st.session_state.run_key}"):
-            if user_chat_msg and st.session_state.processing_done:
-                st.session_state.chat_log.append(("user", user_chat_msg))
-                is_q = user_chat_msg.strip().endswith("?")
-                with st.spinner("🤖 Thinking..."):
-                    try:
-                        if is_q:
-                            ans = answer_pdf_question(user_chat_msg, st.session_state.selected_pdf_descs, st.session_state.full_pdf_text, st.session_state.template_contexts)
-                            st.session_state.chat_log.append(("assistant", ans))
-                        else: 
-                            updated_llm_data = get_llm_chat_update(st.session_state.llm_corrected_filled_data, user_chat_msg, st.session_state.selected_pdf_descs, st.session_state.template_contexts, st.session_state.full_pdf_text)
-                            st.session_state.llm_corrected_filled_data = updated_llm_data 
-                            fill_word_document_from_llm_data(TEMPLATE_FILE, st.session_state.llm_corrected_filled_data, st.session_state.corrected_docx_path)
-                            st.session_state.correction_applied = True
-                            st.session_state.chat_log.append(("assistant", f"Correction applied. Doc '{os.path.basename(st.session_state.corrected_docx_path)}' updated."))
+        if st.session_state.identified_machines_data and "machines" in st.session_state.identified_machines_data:
+            machines = st.session_state.identified_machines_data["machines"]
+            if machines:
+                # Create list of machine options for selection
+                machine_options = [f"{m.get('machine_name', 'Unknown Machine')}" for m in machines]
+                
+                # Show selection dropdown
+                selected_machine_idx = st.selectbox(
+                    "Choose a machine to process:",
+                    range(len(machine_options)),
+                    format_func=lambda i: machine_options[i],
+                    key=f"machine_select_{st.session_state.run_key}"
+                )
+                
+                # Store selected machine index
+                st.session_state.selected_machine_index = selected_machine_idx
+                
+                # Show machine details
+                selected_machine = machines[selected_machine_idx]
+                with st.expander(f"Machine Details: {selected_machine.get('machine_name')}", expanded=True):
+                    st.markdown("**Main Machine Description:**")
+                    st.markdown(f"```\n{selected_machine.get('main_item', {}).get('description', 'No description')}\n```")
+                    
+                    st.markdown("**Add-on Items:**")
+                    add_ons = selected_machine.get('add_ons', [])
+                    if add_ons:
+                        for i, addon in enumerate(add_ons):
+                            st.markdown(f"{i+1}. {addon.get('description', 'No description')}")
+                    else:
+                        st.markdown("No add-on items for this machine.")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("⬅️ Back", key="back_to_common_options"):
+                        st.session_state.common_options_confirmation_done = False
+                        st.session_state.processing_step = 2
                         st.rerun()
-                    except Exception as e:
-                        st.session_state.error_message = f"Chat error: {e}"; st.text(traceback.format_exc())
-            elif not st.session_state.processing_done: st.warning("Process a document first.")
-            else: st.warning("Enter question/correction.")
-    else:
-        st.info("👈 Upload a PDF and click 'Process Document' in the sidebar to begin.")
-
-with tab_export:
-    st.header("📦 Export Documents")
-    
-    # Client selection
-    st.subheader("Select Client")
-    
-    client_options_display = ["Select a Client..."] + \
-                             [f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')} (ID: {c.get('id')})" 
-                              for c in st.session_state.all_crm_clients]
-    
-    selected_client_option_str = st.selectbox(
-        "Choose a client to generate documents for:", 
-        client_options_display, 
-        key=f"export_client_select_{st.session_state.run_key}", 
-        index=0
-    )
-    
-    if selected_client_option_str != "Select a Client...":
-        try:
-            selected_id = int(selected_client_option_str.split("(ID: ")[-1][:-1])
-            client_data = get_client_by_id(selected_id)
-            
-            if client_data:
-                st.session_state.selected_client_for_detail_edit = client_data
                 
-                # Load machines for this client
-                quote_ref = client_data.get('quote_ref')
-                machines_data = load_machines_for_quote(quote_ref)
-                
-                if machines_data:
-                    # Show the list of identified machines for this client
-                    st.subheader("Generate Export Documents")
-                    
-                    # Extract and process machine data
-                    processed_machines = []
-                    for machine in machines_data:
-                        # Parse machine_data_json
-                        try:
-                            machine_data = machine.get("machine_data", {})
-                            # Store the machine record ID for later use
-                            machine_data["id"] = machine.get("id")
-                            processed_machines.append(machine_data)
-                        except Exception as e:
-                            st.error(f"Error processing machine data: {e}")
-                    
-                    # Find common items (they should be the same in all machines)
-                    common_items = []
-                    if processed_machines:
-                        common_items = processed_machines[0].get("common_items", [])
-                    
-                    # Let user select machines to include in export documents
-                    selected_machine_indices = []
-                    with st.form(key=f"export_docs_form_{client_data.get('id')}"):
-                        st.markdown("Select machines to include in export documents:")
-                        
-                        # Machine selection
-                        for i, machine in enumerate(processed_machines):
-                            machine_name = machine.get("machine_name", f"Machine {i+1}")
-                            # Calculate price for display
-                            machine_price = calculate_machine_price(machine)
-                            if st.checkbox(f"{machine_name} (${machine_price:.2f})", 
-                                           value=True, 
-                                           key=f"export_machine_{client_data.get('id')}_{i}"):
-                                selected_machine_indices.append(i)
-                        
-                        # Option to include common items
-                        include_common = st.checkbox("Include common items (warranty, shipping, etc.)", 
-                                                    value=True,
-                                                    key=f"include_common_{client_data.get('id')}")
-                        
-                        # Template selection
-                        template_options = []
-                        
-                        if os.path.exists("Packing Slip.docx"):
-                            template_options.append("Packing Slip")
-                        if os.path.exists("Commercial Invoice.docx"):
-                            template_options.append("Commercial Invoice")
-                        if os.path.exists("CERTIFICATION OF ORIGIN_NAFTA.docx"):
-                            template_options.append("Certificate of Origin")
-                        
-                        if not template_options:
-                            st.warning("No document templates found. Please create template files.")
-                            template_type = None
-                        else: 
-                            template_type = st.radio("Select document type:", template_options)
-                        
-                        # Submit button
-                        submit_button = st.form_submit_button("Generate Selected Document")
-                    
-                    # Process form submission (outside the form to avoid state issues)
-                    if submit_button:
-                        if not selected_machine_indices:
-                            st.warning("Please select at least one machine to generate documents.")
-                        elif template_type:
-                            # Get selected machines data
-                            selected_machines = [processed_machines[i] for i in selected_machine_indices]
-                            
-                            # Map template selection to document type and file path
-                            document_type = ""
-                            template_path = ""
-                            if template_type == "Packing Slip":
-                                document_type = "packing_slip"
-                                template_path = "Packing Slip.docx"
-                            elif template_type == "Commercial Invoice":
-                                document_type = "commercial_invoice"
-                                template_path = "Commercial Invoice.docx"
-                            elif template_type == "Certificate of Origin":
-                                document_type = "certificate_of_origin"
-                                template_path = "CERTIFICATION OF ORIGIN_NAFTA.docx"
-                            
-                            with st.spinner(f"Generating {template_type}..."):
-                                output_path = generate_export_document(
-                                    document_type, 
-                                    selected_machines, 
-                                    include_common,
-                                    template_path,
-                                    client_data
-                                )
-                                
-                                if output_path and os.path.exists(output_path):
-                                    st.success(f"{template_type} generated: {output_path}")
-                                    # Provide download button
-                                    with open(output_path, "rb") as f:
-                                        st.download_button(
-                                            f"Download {template_type}",
-                                            f,
-                                            file_name=output_path,
-                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                        )
-                                else:
-                                    st.error(f"Failed to generate {template_type}.")
+                with col2:
+                    if st.button("🔨 Process Selected Machine", key=f"process_machine_btn_{st.session_state.run_key}", type="primary"):
+                        TEMPLATE_FILE = "template.docx"
+                        if not os.path.exists(TEMPLATE_FILE): 
+                            st.error(f"Template '{TEMPLATE_FILE}' not found.")
                         else:
-                            st.error("Please select a document type.")
-                else:
-                    st.warning("No machines identified for this client.")
-                    st.markdown("To generate export documents, you need to first process the quote to identify machines.")
-                    st.markdown("Go to the Document Processor tab to process a quote and identify machines.")
+                            success = process_machine_specific_data(selected_machine, TEMPLATE_FILE)
+                            if success:
+                                st.success(f"Machine '{selected_machine.get('machine_name')}' processed successfully!")
+                                
+                                # Show download for machine-specific document if available
+                                if hasattr(st.session_state, 'machine_docx_path') and os.path.exists(st.session_state.machine_docx_path):
+                                    st.subheader("📂 Machine-Specific Document")
+                                    with open(st.session_state.machine_docx_path, "rb") as fp:
+                                        st.download_button(
+                                            "Download Machine-Specific Document",
+                                            fp,
+                                            os.path.basename(st.session_state.machine_docx_path),
+                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            key=f"dl_machine_{st.session_state.run_key}",
+                                            type="primary"
+                                        )
             else:
-                st.error(f"Could not load client data for ID: {selected_id}")
-        except Exception as e:
-            st.error(f"Error loading client data: {e}")
-            st.text(traceback.format_exc())
-    else:
-        st.info("Select a client to generate export documents.")
-
-with tab_crm_management:
-    st.header("📒 CRM Management")
-    if st.button("Refresh CRM List", key=f"refresh_crm_main_tab_{st.session_state.run_key}"):
-        load_crm_data()
-        st.success("CRM data refreshed.")
-
-    st.subheader("Client Records")
-    
-    # --- Select Client to View/Edit Details & Priced Items ---
-    client_options_display = ["Select a Client Record..."] + \
-                             [f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')} (ID: {c.get('id')})" 
-                              for c in st.session_state.all_crm_clients]
-    
-    selected_client_option_str_for_view = st.selectbox(
-        "Select Client to View/Edit Details:", 
-        client_options_display, 
-        key=f"crm_select_for_view_main_tab_{st.session_state.run_key}", 
-        index=0
-    )
-
-    client_detail_editor_placeholder = st.empty()
-    save_button_placeholder = st.empty()
-    delete_section_placeholder = st.empty() # Placeholder for the entire delete UI section
-    priced_items_placeholder = st.empty()
-
-    if selected_client_option_str_for_view != "Select a Client Record...":
-        try:
-            selected_id_for_view = int(selected_client_option_str_for_view.split("(ID: ")[-1][:-1])
-            if st.session_state.selected_client_for_detail_edit is None or st.session_state.selected_client_for_detail_edit.get('id') != selected_id_for_view:
-                st.session_state.selected_client_for_detail_edit = get_client_by_id(selected_id_for_view)
-                st.session_state.editing_client_id = selected_id_for_view
-                st.session_state.confirming_delete_client_id = None # Reset delete confirmation if client changes
-            
-            client_to_display_and_edit = st.session_state.selected_client_for_detail_edit
-
-            if client_to_display_and_edit:
-                with client_detail_editor_placeholder.container():
-                    st.markdown("**Edit Client Details:**")
-                    client_detail_list = [{
-                        'id': client_to_display_and_edit.get('id'), 
-                        'quote_ref': client_to_display_and_edit.get('quote_ref',''),
-                        'customer_name': client_to_display_and_edit.get('customer_name',''),
-                        'machine_model': client_to_display_and_edit.get('machine_model',''),
-                        'country_destination': client_to_display_and_edit.get('country_destination',''),
-                        'sold_to_address': client_to_display_and_edit.get('sold_to_address',''),
-                        'ship_to_address': client_to_display_and_edit.get('ship_to_address',''),
-                        'telephone': client_to_display_and_edit.get('telephone',''),
-                        'customer_contact_person': client_to_display_and_edit.get('customer_contact_person',''),
-                        'customer_po': client_to_display_and_edit.get('customer_po','')
-                    }]
-                    df_for_editor = pd.DataFrame(client_detail_list)
-                    
-                    # The edited_df from data_editor is the new state
-                    edited_df_output = st.data_editor(
-                        df_for_editor,
-                        key=f"client_detail_editor_{client_to_display_and_edit.get('id', 'new')}",
-                        num_rows="fixed", hide_index=True, use_container_width=True,
-                        column_config={ 
-                            "id": None, 
-                            "quote_ref": st.column_config.TextColumn("Quote Ref (Required)", required=True),
-                            "sold_to_address": st.column_config.TextColumn("Sold To Address", width="medium"),
-                            "ship_to_address": st.column_config.TextColumn("Ship To Address", width="medium"),
-                        }
-                    )
-                    st.session_state.edited_client_details_df = edited_df_output # Always store the output
-
-                with save_button_placeholder.container():
-                    if st.button("💾 Save Client Detail Changes", key=f"save_details_btn_{client_to_display_and_edit.get('id', 'new')}"):
-                        if not st.session_state.edited_client_details_df.empty:
-                            updated_row = st.session_state.edited_client_details_df.iloc[0].to_dict()
-                            client_id_to_update = client_to_display_and_edit.get('id') # Get ID from originally loaded client
-                            update_payload = { k: v for k, v in updated_row.items() if k != 'id' } # Exclude ID from payload
-                            
-                            if not update_payload.get('quote_ref'):
-                                st.error("Quote Reference is required!")
-                            elif update_client_record(client_id_to_update, update_payload):
-                                st.success("Client details updated!")
-                                load_crm_data() # Refresh full CRM list
-                                st.session_state.selected_client_for_detail_edit = get_client_by_id(client_id_to_update) # Refresh this client's view
-                                st.rerun()
-                            else: st.error("Failed to update client details.")
-                        else: st.warning("No client data in editor to save.")
+                st.warning("No machines identified in the document.")
+                if st.button("⬅️ Start Over", key="restart_no_machines"):
+                    st.session_state.processing_step = 0
+                    st.rerun()
+        else:
+            st.warning("Machine data not available. Please process the document first.")
+            if st.button("⬅️ Start Over", key="restart_no_machine_data"):
+                st.session_state.processing_step = 0
+                st.rerun()
                 
-                # --- Delete Button and Confirmation Logic ---
-                with delete_section_placeholder.container():
-                    st.markdown("--- Delete Record ---") # Changed header slightly
-                    current_client_id = client_to_display_and_edit.get('id')
-                    current_quote_ref = client_to_display_and_edit.get('quote_ref')
+        # Option to go to export documents
+        st.markdown("---")
+        if st.button("Go to Export Documents", key="goto_export_docs"):
+            st.session_state.current_page = "Export Documents"
+            st.rerun()
 
-                    # If we are not currently confirming a delete for this specific client, show the initial delete button.
-                    if st.session_state.confirming_delete_client_id != current_client_id:
-                        if st.button("🗑️ Initiate Delete Sequence", key=f"init_del_btn_{current_client_id}"):
-                            st.session_state.confirming_delete_client_id = current_client_id
-                            st.rerun() # Rerun to show the confirmation state
-                    
-                    # If we ARE confirming a delete for THIS client, show warning and final delete button.
-                    if st.session_state.confirming_delete_client_id == current_client_id:
-                        st.warning(f"**CONFIRM DELETION**: Are you sure you want to permanently delete all data for client ID {current_client_id} (Quote: {current_quote_ref})? This action cannot be undone.")
-                        col_confirm, col_cancel = st.columns(2)
-                        with col_confirm:
-                            if st.button(f"YES, DELETE ID {current_client_id}", key=f"confirm_del_btn_{current_client_id}", type="primary"):
-                                st.write(f"DEBUG: Attempting to delete client ID: {current_client_id}") # Debug
-                                if delete_client_record(current_client_id):
-                                    st.success(f"Client record ID {current_client_id} and associated data deleted.")
-                                    load_crm_data()
-                                    st.session_state.selected_client_for_detail_edit = None
-                                    st.session_state.editing_client_id = None
-                                    st.session_state.edited_client_details_df = pd.DataFrame()
-                                    st.session_state.confirming_delete_client_id = None # Reset confirmation state
-                                    st.rerun()
-                                else:
-                                    st.error(f"Failed to delete client record ID {current_client_id}.")
-                                    st.session_state.confirming_delete_client_id = None # Reset on failure too
-                                    st.rerun()
-                        with col_cancel:
-                            if st.button("Cancel Deletion", key=f"cancel_del_btn_{current_client_id}"):
-                                st.session_state.confirming_delete_client_id = None
-                                st.info("Deletion cancelled.")
-                                st.rerun()
-                # ---------------------------------------------
-                st.markdown("---")
-                # --- Display Priced Items for this selected client ---
-                with priced_items_placeholder.container():
-                    quote_ref_for_items = client_to_display_and_edit.get('quote_ref')
-                    st.subheader(f"Priced Items for Quote: {quote_ref_for_items}")
-                    
-                    # Load or use already loaded items for editing
-                    # We need a way to know if this is the first load for the data_editor for this client
-                    # or if it's a re-render after an edit. Let's always reload for simplicity now.
-                    priced_items_for_quote = load_priced_items_for_quote(quote_ref_for_items)
-                    st.session_state.current_priced_items_for_editing = priced_items_for_quote # Store original
+# --- Chat Component ---
+def render_chat_ui():
+    with st.sidebar.expander("💬 Chat Assistant", expanded=False):
+        # Get current context for the chat
+        context_type, context_data = get_current_context()
+        
+        # Display current context to the user
+        if context_type == "quote":
+            st.markdown("**Current context:** Quote processing")
+        elif context_type == "client" and context_data:
+            st.markdown(f"**Current context:** Client {context_data.get('customer_name', '')}")
+        elif context_type == "crm":
+            st.markdown("**Current context:** CRM management")
+        else:
+            st.markdown("**Current context:** General assistance")
+        
+        # Chat input
+        user_query = st.text_input("Ask a question:", key="sidebar_chat_query")
+        if st.button("Send", key="send_chat_query"):
+            if user_query:
+                # Add query to chat history
+                st.session_state.chat_history.append({"role": "user", "content": user_query})
+                
+                # Process the query based on current context
+                response = process_chat_query(user_query, context_type, context_data)
+                
+                # Add response to chat history
+                st.session_state.chat_history.append({"role": "assistant", "content": response})
+                
+                # Clear the input box (need to rerun)
+                st.session_state.sidebar_chat_query = ""
+                st.rerun()
+        
+        # Display chat history (last 5 exchanges)
+        if st.session_state.chat_history:
+            st.markdown("### Chat History")
+            max_display = min(5, len(st.session_state.chat_history))
+            for msg in st.session_state.chat_history[-max_display:]:
+                if msg["role"] == "user":
+                    st.markdown(f"**You:** {msg['content']}")
+                else:
+                    st.markdown(f"**Assistant:** {msg['content']}")
+            
+            if st.button("Clear History", key="clear_chat_history"):
+                st.session_state.chat_history = []
+                st.rerun()
 
-                    if priced_items_for_quote:
-                        df_priced_items = pd.DataFrame(priced_items_for_quote)
-                        # Define column configuration for st.data_editor if needed (e.g., column order, types)
-                        # For now, default configuration will be used.
-                        # Only allow editing of description, quantity, and price_str. ID is hidden, numeric price is derived.
-                        editable_df = df_priced_items[['id', 'item_description', 'item_quantity', 'item_price_str']].copy()
+# --- Streamlit UI --- 
+st.set_page_config(layout="wide", page_title="GOA LLM Assistant")
+st.title("📄 GOA Document Assistant with LLM")
+
+# Load CRM data once on first load if not already loaded
+if not st.session_state.crm_data_loaded:
+    load_crm_data()
+
+# Show error message if there is one
+if st.session_state.error_message: 
+    st.error(st.session_state.error_message)
+
+# --- Sidebar Navigation ---
+st.sidebar.title("Navigation")
+page_options = ["Welcome", "Quote Processing", "Export Documents", "CRM Management"]
+selected_page = st.sidebar.radio("Go to", page_options, index=page_options.index(st.session_state.current_page))
+
+# Update current page in session state
+if selected_page != st.session_state.current_page:
+    st.session_state.current_page = selected_page
+    # Reset processing step when navigating to Quote Processing
+    if selected_page == "Quote Processing":
+        st.session_state.processing_step = 0
+    st.rerun()
+
+# Render the chat UI in the sidebar
+render_chat_ui()
+
+# --- Display the selected page ---
+if st.session_state.current_page == "Welcome":
+    show_welcome_page()
+elif st.session_state.current_page == "Quote Processing":
+    show_quote_processing()
+elif st.session_state.current_page == "Export Documents":
+    # Use our existing export documents tab content
+    with st.container():
+        st.header("📦 Export Documents")
+        
+        # Client selection
+        st.subheader("Select Client")
+        
+        client_options_display = ["Select a Client..."] + \
+                                [f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')} (ID: {c.get('id')})" 
+                                for c in st.session_state.all_crm_clients]
+        
+        selected_client_option_str = st.selectbox(
+            "Choose a client to generate documents for:", 
+            client_options_display, 
+            key=f"export_client_select_{st.session_state.run_key}", 
+            index=0
+        )
+        
+        if selected_client_option_str != "Select a Client...":
+            try:
+                selected_id = int(selected_client_option_str.split("(ID: ")[-1][:-1])
+                client_data = get_client_by_id(selected_id)
+                
+                if client_data:
+                    st.session_state.selected_client_for_detail_edit = client_data
+                    
+                    # Load machines for this client
+                    quote_ref = client_data.get('quote_ref')
+                    machines_data = load_machines_for_quote(quote_ref)
+                    
+                    if machines_data:
+                        # Show the list of identified machines for this client
+                        st.subheader("Generate Export Documents")
                         
-                        st.markdown("**Edit Priced Items:**")
-                        # Key the data_editor to ensure it re-renders when the underlying selection changes
-                        edited_df = st.data_editor(
-                            editable_df, 
-                            key=f"data_editor_priced_items_{st.session_state.editing_client_id}",
-                            num_rows="dynamic", # Allow adding/deleting rows (more advanced, start with fixed)
-                            # disabled=["id"], # Make id column non-editable if displayed or hide it
-                            hide_index=True,
-                            use_container_width=True,
-                            column_config={
-                                "id": None, # Hide ID column from editor
-                                "item_description": st.column_config.TextColumn("Description", width="large", required=True),
-                                "item_quantity": st.column_config.TextColumn("Qty"), # Text for flexibility like "As required"
-                                "item_price_str": st.column_config.TextColumn("Price (Text)")
+                        # Extract and process machine data
+                        processed_machines = []
+                        for machine in machines_data:
+                            # Parse machine_data_json
+                            try:
+                                machine_data = machine.get("machine_data", {})
+                                # Store the machine record ID for later use
+                                machine_data["id"] = machine.get("id")
+                                processed_machines.append(machine_data)
+                            except Exception as e:
+                                st.error(f"Error processing machine data: {e}")
+                        
+                        # Find common items (they should be the same in all machines)
+                        common_items = []
+                        if processed_machines:
+                            common_items = processed_machines[0].get("common_items", [])
+                        
+                        # Let user select machines to include in export documents
+                        selected_machine_indices = []
+                        with st.form(key=f"export_docs_form_{client_data.get('id')}"):
+                            st.markdown("Select machines to include in export documents:")
+                            
+                            # Machine selection
+                            for i, machine in enumerate(processed_machines):
+                                machine_name = machine.get("machine_name", f"Machine {i+1}")
+                                # Calculate price for display
+                                machine_price = calculate_machine_price(machine)
+                                if st.checkbox(f"{machine_name} (${machine_price:.2f})", 
+                                            value=True, 
+                                            key=f"export_machine_{client_data.get('id')}_{i}"):
+                                    selected_machine_indices.append(i)
+                            
+                            # Option to include common items
+                            include_common = st.checkbox("Include common items (warranty, shipping, etc.)", 
+                                                        value=True,
+                                                        key=f"include_common_{client_data.get('id')}")
+                            
+                            # Template selection
+                            template_options = []
+                            
+                            if os.path.exists("Packing Slip.docx"):
+                                template_options.append("Packing Slip")
+                            if os.path.exists("Commercial Invoice.docx"):
+                                template_options.append("Commercial Invoice")
+                            if os.path.exists("CERTIFICATION OF ORIGIN_NAFTA.docx"):
+                                template_options.append("Certificate of Origin")
+                            
+                            if not template_options:
+                                st.warning("No document templates found. Please create template files.")
+                                template_type = None
+                            else: 
+                                template_type = st.radio("Select document type:", template_options)
+                            
+                            # Submit button
+                            submit_button = st.form_submit_button("Generate Selected Document")
+                        
+                        # Process form submission (outside the form to avoid state issues)
+                        if submit_button:
+                            if not selected_machine_indices:
+                                st.warning("Please select at least one machine to generate documents.")
+                            elif template_type:
+                                # Get selected machines data
+                                selected_machines = [processed_machines[i] for i in selected_machine_indices]
+                                
+                                # Map template selection to document type and file path
+                                document_type = ""
+                                template_path = ""
+                                if template_type == "Packing Slip":
+                                    document_type = "packing_slip"
+                                    template_path = "Packing Slip.docx"
+                                elif template_type == "Commercial Invoice":
+                                    document_type = "commercial_invoice"
+                                    template_path = "Commercial Invoice.docx"
+                                elif template_type == "Certificate of Origin":
+                                    document_type = "certificate_of_origin"
+                                    template_path = "CERTIFICATION OF ORIGIN_NAFTA.docx"
+                                
+                                with st.spinner(f"Generating {template_type}..."):
+                                    output_path = generate_export_document(
+                                        document_type, 
+                                        selected_machines, 
+                                        include_common,
+                                        template_path,
+                                        client_data
+                                    )
+                                    
+                                    if output_path and os.path.exists(output_path):
+                                        st.success(f"{template_type} generated: {output_path}")
+                                        # Provide download button
+                                        with open(output_path, "rb") as f:
+                                            st.download_button(
+                                                f"Download {template_type}",
+                                                f,
+                                                file_name=output_path,
+                                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                            )
+                                    else:
+                                        st.error(f"Failed to generate {template_type}.")
+                            else:
+                                st.error("Please select a document type.")
+                    else:
+                        st.warning("No machines identified for this client.")
+                        st.markdown("To generate export documents, you need to first process the quote to identify machines.")
+                        st.markdown("Go to the Quote Processing section to process a quote and identify machines.")
+                else:
+                    st.error(f"Could not load client data for ID: {selected_id}")
+            except Exception as e:
+                st.error(f"Error loading client data: {e}")
+                st.text(traceback.format_exc())
+        else:
+            st.info("Select a client to generate export documents.")
+
+elif st.session_state.current_page == "CRM Management":
+    with st.container():
+        st.header("📒 CRM Management")
+        if st.button("Refresh CRM List", key=f"refresh_crm_main_tab_{st.session_state.run_key}"):
+            load_crm_data()
+            st.success("CRM data refreshed.")
+
+        st.subheader("Client Records")
+        
+        # --- Select Client to View/Edit Details & Priced Items ---
+        client_options_display = ["Select a Client Record..."] + \
+                                [f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')} (ID: {c.get('id')})" 
+                                for c in st.session_state.all_crm_clients]
+        
+        selected_client_option_str_for_view = st.selectbox(
+            "Select Client to View/Edit Details:", 
+            client_options_display, 
+            key=f"crm_select_for_view_main_tab_{st.session_state.run_key}", 
+            index=0
+        )
+
+        client_detail_editor_placeholder = st.empty()
+        save_button_placeholder = st.empty()
+        delete_section_placeholder = st.empty() # Placeholder for the entire delete UI section
+        priced_items_placeholder = st.empty()
+
+        if selected_client_option_str_for_view != "Select a Client Record...":
+            try:
+                selected_id_for_view = int(selected_client_option_str_for_view.split("(ID: ")[-1][:-1])
+                if st.session_state.selected_client_for_detail_edit is None or st.session_state.selected_client_for_detail_edit.get('id') != selected_id_for_view:
+                    st.session_state.selected_client_for_detail_edit = get_client_by_id(selected_id_for_view)
+                    st.session_state.editing_client_id = selected_id_for_view
+                    st.session_state.confirming_delete_client_id = None # Reset delete confirmation if client changes
+                
+                client_to_display_and_edit = st.session_state.selected_client_for_detail_edit
+
+                if client_to_display_and_edit:
+                    with client_detail_editor_placeholder.container():
+                        st.markdown("**Edit Client Details:**")
+                        client_detail_list = [{
+                            'id': client_to_display_and_edit.get('id'), 
+                            'quote_ref': client_to_display_and_edit.get('quote_ref',''),
+                            'customer_name': client_to_display_and_edit.get('customer_name',''),
+                            'machine_model': client_to_display_and_edit.get('machine_model',''),
+                            'country_destination': client_to_display_and_edit.get('country_destination',''),
+                            'sold_to_address': client_to_display_and_edit.get('sold_to_address',''),
+                            'ship_to_address': client_to_display_and_edit.get('ship_to_address',''),
+                            'telephone': client_to_display_and_edit.get('telephone',''),
+                            'customer_contact_person': client_to_display_and_edit.get('customer_contact_person',''),
+                            'customer_po': client_to_display_and_edit.get('customer_po','')
+                        }]
+                        df_for_editor = pd.DataFrame(client_detail_list)
+                        
+                        # The edited_df from data_editor is the new state
+                        edited_df_output = st.data_editor(
+                            df_for_editor,
+                            key=f"client_detail_editor_{client_to_display_and_edit.get('id', 'new')}",
+                            num_rows="fixed", hide_index=True, use_container_width=True,
+                            column_config={ 
+                                "id": None, 
+                                "quote_ref": st.column_config.TextColumn("Quote Ref (Required)", required=True),
+                                "sold_to_address": st.column_config.TextColumn("Sold To Address", width="medium"),
+                                "ship_to_address": st.column_config.TextColumn("Ship To Address", width="medium"),
                             }
                         )
-                        st.session_state.edited_priced_items_df = edited_df # Store edited df
+                        st.session_state.edited_client_details_df = edited_df_output # Always store the output
 
-                        if st.button("💾 Save Priced Item Changes", key=f"save_priced_items_btn_{st.session_state.editing_client_id}"):
-                            changes_applied = 0
-                            if not st.session_state.edited_priced_items_df.empty:
-                                for index, edited_row in st.session_state.edited_priced_items_df.iterrows():
-                                    item_id = edited_row.get('id') # Get original ID
-                                    original_item = next((item for item in st.session_state.current_priced_items_for_editing if item['id'] == item_id), None)
-                                    
-                                    if original_item:
-                                        # Check if anything actually changed for this row
-                                        if (original_item.get('item_description') != edited_row.get('item_description') or
-                                            str(original_item.get('item_quantity', '')) != str(edited_row.get('item_quantity', '')) or # Compare as strings
-                                            str(original_item.get('item_price_str', '')) != str(edited_row.get('item_price_str', ''))):
-                                            
-                                            update_payload = {
-                                                'item_description': edited_row.get('item_description'),
-                                                'item_quantity': edited_row.get('item_quantity'),
-                                                'item_price_str': edited_row.get('item_price_str')
-                                            }
-                                            if update_single_priced_item(item_id, update_payload):
-                                                changes_applied += 1
-                                            else:
-                                                st.error(f"Failed to update item ID {item_id}.")
-                            # else: Item might be a new row if num_rows="dynamic" and add works (not fully implemented here)
+                    with save_button_placeholder.container():
+                        if st.button("💾 Save Client Detail Changes", key=f"save_details_btn_{client_to_display_and_edit.get('id', 'new')}"):
+                            if not st.session_state.edited_client_details_df.empty:
+                                updated_row = st.session_state.edited_client_details_df.iloc[0].to_dict()
+                                client_id_to_update = client_to_display_and_edit.get('id') # Get ID from originally loaded client
+                                update_payload = { k: v for k, v in updated_row.items() if k != 'id' } # Exclude ID from payload
+                                
+                                if not update_payload.get('quote_ref'):
+                                    st.error("Quote Reference is required!")
+                                elif update_client_record(client_id_to_update, update_payload):
+                                    st.success("Client details updated!")
+                                    load_crm_data() # Refresh full CRM list
+                                    st.session_state.selected_client_for_detail_edit = get_client_by_id(client_id_to_update) # Refresh this client's view
+                                    st.rerun()
+                                else: st.error("Failed to update client details.")
+                            else: st.warning("No client data in editor to save.")
+                    
+                    # --- Delete Button and Confirmation Logic ---
+                    with delete_section_placeholder.container():
+                        st.markdown("--- Delete Record ---") # Changed header slightly
+                        current_client_id = client_to_display_and_edit.get('id')
+                        current_quote_ref = client_to_display_and_edit.get('quote_ref')
 
-                            if changes_applied > 0:
-                                st.success(f"{changes_applied} priced item(s) updated successfully!")
-                                load_crm_data() # Reload all clients to reflect potential changes in display elsewhere if needed
-                                st.rerun() # Rerun to refresh the data_editor with fresh data from DB
-                            else:
-                                st.info("No changes detected in priced items to save.")
+                        # If we are not currently confirming a delete for this specific client, show the initial delete button.
+                        if st.session_state.confirming_delete_client_id != current_client_id:
+                            if st.button("🗑️ Initiate Delete Sequence", key=f"init_del_btn_{current_client_id}"):
+                                st.session_state.confirming_delete_client_id = current_client_id
+                                st.rerun() # Rerun to show the confirmation state
+                        
+                        # If we ARE confirming a delete for THIS client, show warning and final delete button.
+                        if st.session_state.confirming_delete_client_id == current_client_id:
+                            st.warning(f"**CONFIRM DELETION**: Are you sure you want to permanently delete all data for client ID {current_client_id} (Quote: {current_quote_ref})? This action cannot be undone.")
+                            col_confirm, col_cancel = st.columns(2)
+                            with col_confirm:
+                                if st.button(f"YES, DELETE ID {current_client_id}", key=f"confirm_del_btn_{current_client_id}", type="primary"):
+                                    st.write(f"DEBUG: Attempting to delete client ID: {current_client_id}") # Debug
+                                    if delete_client_record(current_client_id):
+                                        st.success(f"Client record ID {current_client_id} and associated data deleted.")
+                                        load_crm_data()
+                                        st.session_state.selected_client_for_detail_edit = None
+                                        st.session_state.editing_client_id = None
+                                        st.session_state.edited_client_details_df = pd.DataFrame()
+                                        st.session_state.confirming_delete_client_id = None # Reset confirmation state
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Failed to delete client record ID {current_client_id}.")
+                                        st.session_state.confirming_delete_client_id = None # Reset on failure too
+                                        st.rerun()
+                            with col_cancel:
+                                if st.button("Cancel Deletion", key=f"cancel_del_btn_{current_client_id}"):
+                                    st.session_state.confirming_delete_client_id = None
+                                    st.info("Deletion cancelled.")
+                                    st.rerun()
+                    # ---------------------------------------------
+                    st.markdown("---")
+                    # --- Display Priced Items for this selected client ---
+                    with priced_items_placeholder.container():
+                        quote_ref_for_items = client_to_display_and_edit.get('quote_ref')
+                        st.subheader(f"Priced Items for Quote: {quote_ref_for_items}")
+                        
+                        # Load or use already loaded items for editing
+                        # We need a way to know if this is the first load for the data_editor for this client
+                        # or if it's a re-render after an edit. Let's always reload for simplicity now.
+                        priced_items_for_quote = load_priced_items_for_quote(quote_ref_for_items)
+                        st.session_state.current_priced_items_for_editing = priced_items_for_quote # Store original
+
+                        if priced_items_for_quote:
+                            df_priced_items = pd.DataFrame(priced_items_for_quote)
+                            # Define column configuration for st.data_editor if needed (e.g., column order, types)
+                            # For now, default configuration will be used.
+                            # Only allow editing of description, quantity, and price_str. ID is hidden, numeric price is derived.
+                            editable_df = df_priced_items[['id', 'item_description', 'item_quantity', 'item_price_str']].copy()
+                            
+                            st.markdown("**Edit Priced Items:**")
+                            # Key the data_editor to ensure it re-renders when the underlying selection changes
+                            edited_df = st.data_editor(
+                                editable_df, 
+                                key=f"data_editor_priced_items_{st.session_state.editing_client_id}",
+                                num_rows="dynamic", # Allow adding/deleting rows (more advanced, start with fixed)
+                                # disabled=["id"], # Make id column non-editable if displayed or hide it
+                                hide_index=True,
+                                use_container_width=True,
+                                column_config={
+                                    "id": None, # Hide ID column from editor
+                                    "item_description": st.column_config.TextColumn("Description", width="large", required=True),
+                                    "item_quantity": st.column_config.TextColumn("Qty"), # Text for flexibility like "As required"
+                                    "item_price_str": st.column_config.TextColumn("Price (Text)")
+                                }
+                            )
+                            st.session_state.edited_priced_items_df = edited_df # Store edited df
+
+                            if st.button("💾 Save Priced Item Changes", key=f"save_priced_items_btn_{st.session_state.editing_client_id}"):
+                                changes_applied = 0
+                                if not st.session_state.edited_priced_items_df.empty:
+                                    for index, edited_row in st.session_state.edited_priced_items_df.iterrows():
+                                        item_id = edited_row.get('id') # Get original ID
+                                        original_item = next((item for item in st.session_state.current_priced_items_for_editing if item['id'] == item_id), None)
+                                        
+                                        if original_item:
+                                            # Check if anything actually changed for this row
+                                            if (original_item.get('item_description') != edited_row.get('item_description') or
+                                                str(original_item.get('item_quantity', '')) != str(edited_row.get('item_quantity', '')) or # Compare as strings
+                                                str(original_item.get('item_price_str', '')) != str(edited_row.get('item_price_str', ''))):
+                                                
+                                                update_payload = {
+                                                    'item_description': edited_row.get('item_description'),
+                                                    'item_quantity': edited_row.get('item_quantity'),
+                                                    'item_price_str': edited_row.get('item_price_str')
+                                                }
+                                                if update_single_priced_item(item_id, update_payload):
+                                                    changes_applied += 1
+                                                else:
+                                                    st.error(f"Failed to update item ID {item_id}.")
+                                # else: Item might be a new row if num_rows="dynamic" and add works (not fully implemented here)
+
+                                if changes_applied > 0:
+                                    st.success(f"{changes_applied} priced item(s) updated successfully!")
+                                    load_crm_data() # Reload all clients to reflect potential changes in display elsewhere if needed
+                                    st.rerun() # Rerun to refresh the data_editor with fresh data from DB
+                                else:
+                                    st.info("No changes detected in priced items to save.")
+                        else:
+                            st.info("No priced items recorded for this quote to edit.")
+            except Exception as e:
+                st.error(f"Error in CRM client display/edit/delete section: {e}"); traceback.print_exc()
+        else: # Nothing selected in the main client dropdown
+            client_detail_editor_placeholder.empty()
+            save_button_placeholder.empty()
+            delete_section_placeholder.empty()
+            priced_items_placeholder.empty()
+            st.session_state.confirming_delete_client_id = None # Ensure confirmation state is reset
+            st.info("Select a client record above to view or edit its details and priced items.")
+
+        # --- Add New Client Form (Can be a separate button/form or integrated differently) ---
+        with st.expander("Manually Add New Client Record"):
+            with st.form(key=f"crm_add_new_form_{st.session_state.run_key}"):
+                st.markdown("**Enter New Client Details:**")
+                new_quote_ref = st.text_input("Quote Reference (Required)", key=f"new_qr_{st.session_state.run_key}")
+                new_cust_name = st.text_input("Customer Name", key=f"new_cn_{st.session_state.run_key}")
+                # ... (add all other text inputs for new client) ...
+                new_machine_model = st.text_input("Machine Model", key=f"new_mm_{st.session_state.run_key}")
+                new_country = st.text_input("Country Destination", key=f"new_cd_{st.session_state.run_key}")
+                new_sold_addr = st.text_area("Sold To Address", key=f"new_sta_{st.session_state.run_key}")
+                new_ship_addr = st.text_area("Ship To Address", key=f"new_shipta_{st.session_state.run_key}")
+                new_tel = st.text_input("Telephone", key=f"new_tel_{st.session_state.run_key}")
+                new_contact = st.text_input("Customer Contact", key=f"new_ccp_{st.session_state.run_key}")
+                new_po = st.text_input("Customer PO", key=f"new_cpo_{st.session_state.run_key}")
+
+                submit_new_client_button = st.form_submit_button("➕ Add New Client to CRM")
+                if submit_new_client_button:
+                    if not new_quote_ref:
+                        st.error("Quote Reference is required for new client.")
                     else:
-                        st.info("No priced items recorded for this quote to edit.")
-        except Exception as e:
-            st.error(f"Error in CRM client display/edit/delete section: {e}"); traceback.print_exc()
-    else: # Nothing selected in the main client dropdown
-        client_detail_editor_placeholder.empty()
-        save_button_placeholder.empty()
-        delete_section_placeholder.empty()
-        priced_items_placeholder.empty()
-        st.session_state.confirming_delete_client_id = None # Ensure confirmation state is reset
-        st.info("Select a client record above to view or edit its details and priced items.")
-
-    # --- Add New Client Form (Can be a separate button/form or integrated differently) ---
-    with st.expander("Manually Add New Client Record"):
-        with st.form(key=f"crm_add_new_form_{st.session_state.run_key}"):
-            st.markdown("**Enter New Client Details:**")
-            new_quote_ref = st.text_input("Quote Reference (Required)", key=f"new_qr_{st.session_state.run_key}")
-            new_cust_name = st.text_input("Customer Name", key=f"new_cn_{st.session_state.run_key}")
-            # ... (add all other text inputs for new client) ...
-            new_machine_model = st.text_input("Machine Model", key=f"new_mm_{st.session_state.run_key}")
-            new_country = st.text_input("Country Destination", key=f"new_cd_{st.session_state.run_key}")
-            new_sold_addr = st.text_area("Sold To Address", key=f"new_sta_{st.session_state.run_key}")
-            new_ship_addr = st.text_area("Ship To Address", key=f"new_shipta_{st.session_state.run_key}")
-            new_tel = st.text_input("Telephone", key=f"new_tel_{st.session_state.run_key}")
-            new_contact = st.text_input("Customer Contact", key=f"new_ccp_{st.session_state.run_key}")
-            new_po = st.text_input("Customer PO", key=f"new_cpo_{st.session_state.run_key}")
-
-            submit_new_client_button = st.form_submit_button("➕ Add New Client to CRM")
-            if submit_new_client_button:
-                if not new_quote_ref:
-                    st.error("Quote Reference is required for new client.")
-                else:
-                    new_client_data = {
-                        'quote_ref': new_quote_ref, 'customer_name': new_cust_name,
-                        'machine_model': new_machine_model, 'country_destination': new_country,
-                        'sold_to_address': new_sold_addr, 'ship_to_address': new_ship_addr,
-                        'telephone': new_tel, 'customer_contact_person': new_contact,
-                        'customer_po': new_po
-                    }
-                    if save_client_info(new_client_data): # save_client_info handles INSERT
-                        st.success("New client added successfully!")
-                        load_crm_data()
-                        st.rerun()
-                    else:
-                        st.error("Failed to add new client.")
-    st.markdown("---")
-    st.subheader("All Client Records Table")
-    if st.session_state.all_crm_clients:
-        df_all_clients = pd.DataFrame(st.session_state.all_crm_clients)
-        # Add new fields to the display list for the main CRM table
-        all_clients_cols = ['id', 'quote_ref', 'customer_name', 'machine_model', 'country_destination', 
-                            'sold_to_address', 'ship_to_address', 'telephone', 
-                            'customer_contact_person', 'customer_po', 'processing_date']
-        df_all_clients_final = df_all_clients[[c for c in all_clients_cols if c in df_all_clients.columns]]
-        st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
-    else:
-        st.info("No client records in CRM yet.")
+                        new_client_data = {
+                            'quote_ref': new_quote_ref, 'customer_name': new_cust_name,
+                            'machine_model': new_machine_model, 'country_destination': new_country,
+                            'sold_to_address': new_sold_addr, 'ship_to_address': new_ship_addr,
+                            'telephone': new_tel, 'customer_contact_person': new_contact,
+                            'customer_po': new_po
+                        }
+                        if save_client_info(new_client_data): # save_client_info handles INSERT
+                            st.success("New client added successfully!")
+                            load_crm_data()
+                            st.rerun()
+                        else:
+                            st.error("Failed to add new client.")
+        st.markdown("---")
+        st.subheader("All Client Records Table")
+        if st.session_state.all_crm_clients:
+            df_all_clients = pd.DataFrame(st.session_state.all_crm_clients)
+            # Add new fields to the display list for the main CRM table
+            all_clients_cols = ['id', 'quote_ref', 'customer_name', 'machine_model', 'country_destination', 
+                                'sold_to_address', 'ship_to_address', 'telephone', 
+                                'customer_contact_person', 'customer_po', 'processing_date']
+            df_all_clients_final = df_all_clients[[c for c in all_clients_cols if c in df_all_clients.columns]]
+            st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
+        else:
+            st.info("No client records in CRM yet.")
