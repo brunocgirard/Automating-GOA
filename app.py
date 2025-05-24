@@ -283,6 +283,55 @@ def generate_export_document(document_type, selected_machines, include_common_it
         st.text(traceback.format_exc())
         return None
 
+def quick_extract_and_catalog(uploaded_pdf_file):
+    """
+    Quickly extract data from a PDF and catalog it in the database without full processing
+    """
+    temp_pdf_path = None
+    try:
+        temp_pdf_path = os.path.join(".", uploaded_pdf_file.name)
+        with open(temp_pdf_path, "wb") as f:
+            f.write(uploaded_pdf_file.getbuffer())
+        
+        # Extract items and full text
+        items = extract_line_item_details(temp_pdf_path)
+        full_text = extract_full_pdf_text(temp_pdf_path)
+        
+        if not items:
+            return None
+        
+        # Create a client record using filename as quote reference
+        quote_ref = uploaded_pdf_file.name.split('.')[0]
+        client_info = {
+            "quote_ref": quote_ref,
+            "customer_name": "",  # These fields will be filled in later
+            "machine_model": "",
+            "country_destination": "",
+            "sold_to_address": "",
+            "ship_to_address": "",
+            "telephone": "",
+            "customer_contact_person": "",
+            "customer_po": ""
+        }
+        
+        # Save to database
+        if save_client_info(client_info):
+            if save_priced_items(quote_ref, items):
+                if full_text:
+                    save_document_content(quote_ref, full_text, uploaded_pdf_file.name)
+                return {
+                    "quote_ref": quote_ref,
+                    "items": items
+                }
+        return None
+    except Exception as e:
+        print(f"Error in quick_extract_and_catalog: {e}")
+        traceback.print_exc()
+        return None
+    finally:
+        if temp_pdf_path and os.path.exists(temp_pdf_path):
+            os.remove(temp_pdf_path)
+
 def perform_initial_processing(uploaded_pdf_file, template_file_path):
     initialize_session_state(is_new_processing_run=True) # Reset state for a new run
     temp_pdf_path = None 
