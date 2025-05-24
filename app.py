@@ -140,6 +140,137 @@ def group_items_by_confirmed_machines(all_items, main_machine_indices, common_op
         "common_items": common_items
     }
 
+def calculate_machine_price(machine_data):
+    """
+    Calculate the total price for a machine including its add-ons
+    """
+    total_price = 0.0
+    
+    # Add main machine price
+    main_item = machine_data.get("main_item", {})
+    main_price = main_item.get("item_price_numeric", 0)
+    if main_price is not None:
+        total_price += main_price
+    
+    # Add prices of add-ons
+    add_ons = machine_data.get("add_ons", [])
+    for item in add_ons:
+        addon_price = item.get("item_price_numeric", 0)
+        if addon_price is not None:
+            total_price += addon_price
+    
+    return total_price
+
+def calculate_common_items_price(common_items):
+    """
+    Calculate the total price for common items
+    """
+    total_price = 0.0
+    
+    for item in common_items:
+        item_price = item.get("item_price_numeric", 0)
+        if item_price is not None:
+            total_price += item_price
+    
+    return total_price
+
+def generate_export_document(document_type, selected_machines, include_common_items, template_file_path, client_data):
+    """
+    Generate a packing slip or commercial invoice for selected machines
+    
+    Args:
+        document_type: "packing_slip", "commercial_invoice", or "certificate_of_origin"
+        selected_machines: List of selected machine data dictionaries
+        include_common_items: Whether to include common items
+        template_file_path: Path to the document template
+        client_data: Client information from database
+        
+    Returns:
+        Path to generated document
+    """
+    try:
+        # Get common items if requested
+        common_items = []
+        if include_common_items and "identified_machines_data" in st.session_state:
+            common_items = st.session_state.identified_machines_data.get("common_items", [])
+        
+        # Calculate total price
+        total_price = sum(calculate_machine_price(machine) for machine in selected_machines)
+        if include_common_items:
+            total_price += calculate_common_items_price(common_items)
+        
+        # Create a list of all items to include in the document
+        all_items = []
+        
+        # Add main machines and their add-ons
+        for machine in selected_machines:
+            # Add main machine
+            main_item = machine.get("main_item", {})
+            if main_item:
+                all_items.append(main_item)
+            
+            # Add this machine's add-ons
+            add_ons = machine.get("add_ons", [])
+            all_items.extend(add_ons)
+        
+        # Add common items if requested
+        if include_common_items:
+            all_items.extend(common_items)
+        
+        # Create a filename for the generated document
+        machine_names = "_".join([m.get("machine_name", "").replace(" ", "") for m in selected_machines])
+        if len(machine_names) > 30:  # Avoid extremely long filenames
+            machine_names = machine_names[:30] + "..."
+        
+        output_filename = f"{document_type}_{machine_names}_{st.session_state.run_key}.docx"
+        
+        # Prepare data for the document based on its type
+        if document_type == "packing_slip":
+            # Import packing slip generator if not already available
+            from document_generators import generate_packing_slip_data
+            
+            document_data = generate_packing_slip_data(client_data, all_items)
+            
+            # Add additional calculated fields
+            document_data["total_price"] = f"{total_price:.2f}"
+            document_data["packing_slip_no"] = f"PS-{client_data.get('quote_ref', '')}"
+            document_data["selected_machines"] = ", ".join([m.get("machine_name", "") for m in selected_machines])
+            
+        elif document_type == "commercial_invoice":
+            # Import commercial invoice generator
+            from document_generators import generate_commercial_invoice_data
+            
+            document_data = generate_commercial_invoice_data(client_data, all_items)
+            
+            # Add additional calculated fields
+            document_data["total_price"] = f"{total_price:.2f}"
+            document_data["invoice_no"] = f"INV-{client_data.get('quote_ref', '')}"
+            document_data["selected_machines"] = ", ".join([m.get("machine_name", "") for m in selected_machines])
+            
+        elif document_type == "certificate_of_origin":
+            # Import certificate of origin generator
+            from document_generators import generate_certificate_of_origin_data
+            
+            document_data = generate_certificate_of_origin_data(client_data, all_items)
+            
+            # Add additional calculated fields
+            document_data["total_price"] = f"{total_price:.2f}"
+            document_data["certificate_no"] = f"COO-{client_data.get('quote_ref', '')}"
+            document_data["selected_machines"] = ", ".join([m.get("machine_name", "") for m in selected_machines])
+            
+        else:
+            raise ValueError(f"Unknown document type: {document_type}")
+        
+        # Fill the document with the prepared data
+        fill_word_document_from_llm_data(template_file_path, document_data, output_filename)
+        
+        return output_filename
+        
+    except Exception as e:
+        st.error(f"Error generating {document_type}: {e}")
+        st.text(traceback.format_exc())
+        return None
+
 def perform_initial_processing(uploaded_pdf_file, template_file_path):
     initialize_session_state(is_new_processing_run=True) # Reset state for a new run
     temp_pdf_path = None 
@@ -394,7 +525,7 @@ if uploaded_pdf:
 if st.session_state.error_message: st.error(st.session_state.error_message)
 
 # --- Main Page Tabs ---
-tab_processor, tab_crm_management = st.tabs(["📄 Document Processor", "📒 CRM Management"])
+tab_processor, tab_export, tab_crm_management = st.tabs(["📄 Document Processor", "📦 Export Documents", "📒 CRM Management"])
 
 with tab_processor:
     st.header("📝 Document Processing & Chat")
@@ -695,6 +826,151 @@ with tab_processor:
             else: st.warning("Enter question/correction.")
     else:
         st.info("👈 Upload a PDF and click 'Process Document' in the sidebar to begin.")
+
+with tab_export:
+    st.header("📦 Export Documents")
+    
+    # Client selection
+    st.subheader("Select Client")
+    
+    client_options_display = ["Select a Client..."] + \
+                             [f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')} (ID: {c.get('id')})" 
+                              for c in st.session_state.all_crm_clients]
+    
+    selected_client_option_str = st.selectbox(
+        "Choose a client to generate documents for:", 
+        client_options_display, 
+        key=f"export_client_select_{st.session_state.run_key}", 
+        index=0
+    )
+    
+    if selected_client_option_str != "Select a Client...":
+        try:
+            selected_id = int(selected_client_option_str.split("(ID: ")[-1][:-1])
+            client_data = get_client_by_id(selected_id)
+            
+            if client_data:
+                st.session_state.selected_client_for_detail_edit = client_data
+                
+                # Load machines for this client
+                quote_ref = client_data.get('quote_ref')
+                machines_data = load_machines_for_quote(quote_ref)
+                
+                if machines_data:
+                    # Show the list of identified machines for this client
+                    st.subheader("Generate Export Documents")
+                    
+                    # Extract and process machine data
+                    processed_machines = []
+                    for machine in machines_data:
+                        # Parse machine_data_json
+                        try:
+                            machine_data = machine.get("machine_data", {})
+                            # Store the machine record ID for later use
+                            machine_data["id"] = machine.get("id")
+                            processed_machines.append(machine_data)
+                        except Exception as e:
+                            st.error(f"Error processing machine data: {e}")
+                    
+                    # Find common items (they should be the same in all machines)
+                    common_items = []
+                    if processed_machines:
+                        common_items = processed_machines[0].get("common_items", [])
+                    
+                    # Let user select machines to include in export documents
+                    selected_machine_indices = []
+                    with st.form(key=f"export_docs_form_{client_data.get('id')}"):
+                        st.markdown("Select machines to include in export documents:")
+                        
+                        # Machine selection
+                        for i, machine in enumerate(processed_machines):
+                            machine_name = machine.get("machine_name", f"Machine {i+1}")
+                            # Calculate price for display
+                            machine_price = calculate_machine_price(machine)
+                            if st.checkbox(f"{machine_name} (${machine_price:.2f})", 
+                                           value=True, 
+                                           key=f"export_machine_{client_data.get('id')}_{i}"):
+                                selected_machine_indices.append(i)
+                        
+                        # Option to include common items
+                        include_common = st.checkbox("Include common items (warranty, shipping, etc.)", 
+                                                    value=True,
+                                                    key=f"include_common_{client_data.get('id')}")
+                        
+                        # Template selection
+                        template_options = []
+                        
+                        if os.path.exists("Packing Slip.docx"):
+                            template_options.append("Packing Slip")
+                        if os.path.exists("Commercial Invoice.docx"):
+                            template_options.append("Commercial Invoice")
+                        if os.path.exists("CERTIFICATION OF ORIGIN_NAFTA.docx"):
+                            template_options.append("Certificate of Origin")
+                        
+                        if not template_options:
+                            st.warning("No document templates found. Please create template files.")
+                            template_type = None
+                        else: 
+                            template_type = st.radio("Select document type:", template_options)
+                        
+                        # Submit button
+                        submit_button = st.form_submit_button("Generate Selected Document")
+                    
+                    # Process form submission (outside the form to avoid state issues)
+                    if submit_button:
+                        if not selected_machine_indices:
+                            st.warning("Please select at least one machine to generate documents.")
+                        elif template_type:
+                            # Get selected machines data
+                            selected_machines = [processed_machines[i] for i in selected_machine_indices]
+                            
+                            # Map template selection to document type and file path
+                            document_type = ""
+                            template_path = ""
+                            if template_type == "Packing Slip":
+                                document_type = "packing_slip"
+                                template_path = "Packing Slip.docx"
+                            elif template_type == "Commercial Invoice":
+                                document_type = "commercial_invoice"
+                                template_path = "Commercial Invoice.docx"
+                            elif template_type == "Certificate of Origin":
+                                document_type = "certificate_of_origin"
+                                template_path = "CERTIFICATION OF ORIGIN_NAFTA.docx"
+                            
+                            with st.spinner(f"Generating {template_type}..."):
+                                output_path = generate_export_document(
+                                    document_type, 
+                                    selected_machines, 
+                                    include_common,
+                                    template_path,
+                                    client_data
+                                )
+                                
+                                if output_path and os.path.exists(output_path):
+                                    st.success(f"{template_type} generated: {output_path}")
+                                    # Provide download button
+                                    with open(output_path, "rb") as f:
+                                        st.download_button(
+                                            f"Download {template_type}",
+                                            f,
+                                            file_name=output_path,
+                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                        )
+                                else:
+                                    st.error(f"Failed to generate {template_type}.")
+                        else:
+                            st.error("Please select a document type.")
+                else:
+                    st.warning("No machines identified for this client.")
+                    st.markdown("To generate export documents, you need to first process the quote to identify machines.")
+                    st.markdown("Go to the Document Processor tab to process a quote and identify machines.")
+            else:
+                st.error(f"Could not load client data for ID: {selected_id}")
+        except Exception as e:
+            st.error(f"Error loading client data: {e}")
+            st.text(traceback.format_exc())
+    else:
+        st.info("Select a client to generate export documents.")
 
 with tab_crm_management:
     st.header("📒 CRM Management")
