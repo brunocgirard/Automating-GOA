@@ -656,19 +656,72 @@ def show_welcome_page():
     
     ## Getting Started
     
-    1. Start by uploading a quote PDF in the Quote Processing section
-    2. Identify machines and their add-ons
-    3. Generate GOA documents for specific machines
-    4. Create export documents as needed
+    Upload a quote PDF to start:
     """)
+    
+    # New file uploader directly on welcome page
+    uploaded_pdf = st.file_uploader("Choose PDF Quote", type="pdf", key="welcome_page_uploader")
+    
+    if uploaded_pdf:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📋 Extract Client Profile", type="primary"):
+                with st.spinner("Extracting client profile..."):
+                    # Save PDF temporarily
+                    temp_pdf_path = os.path.join(".", uploaded_pdf.name)
+                    try:
+                        with open(temp_pdf_path, "wb") as f:
+                            f.write(uploaded_pdf.getbuffer())
+                        
+                        # Extract profile
+                        profile = extract_client_profile(temp_pdf_path)
+                        
+                        if profile:
+                            # Store in session state
+                            st.session_state.extracted_profile = profile
+                            st.session_state.profile_extraction_step = "confirm"
+                            st.rerun()
+                        else:
+                            st.error("Failed to extract client profile. Please try again.")
+                    finally:
+                        if os.path.exists(temp_pdf_path):
+                            os.remove(temp_pdf_path)
+        
+        with col2:
+            if st.button("🚀 Process Document Directly", key="direct_process_btn"):
+                st.session_state.current_page = "Quote Processing"
+                st.rerun()
+    
+    # Check if we're in profile confirmation step
+    if st.session_state.get("profile_extraction_step") == "confirm":
+        confirmed_profile = confirm_client_profile(st.session_state.get("extracted_profile"))
+        
+        if confirmed_profile:
+            st.session_state.confirmed_profile = confirmed_profile
+            st.session_state.profile_extraction_step = "action_selection"
+            st.rerun()
+    
+    # Check if we're in action selection step
+    elif st.session_state.get("profile_extraction_step") == "action_selection":
+        action = show_action_selection(st.session_state.get("confirmed_profile"))
+        
+        if action:
+            handle_selected_action(action, st.session_state.get("confirmed_profile"))
+            st.session_state.profile_extraction_step = None  # Reset the flow
+            st.rerun()
+    
+    # Alternative options at the bottom
+    st.markdown("---")
+    st.markdown("### Alternative Options")
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Go to Quote Processing", type="primary"):
+        if st.button("Go to Quote Processing", key="goto_processing"):
             st.session_state.current_page = "Quote Processing"
             st.rerun()
     with col2:
-        if st.button("View CRM Data"):
+        if st.button("View CRM Data", key="goto_crm"):
             st.session_state.current_page = "CRM Management"
             st.rerun()
 
@@ -1058,6 +1111,477 @@ def render_chat_ui():
                 st.session_state.chat_history = []
                 st.rerun()
 
+# --- Helper Functions for Client Profile Workflow ---
+
+def extract_client_profile(pdf_path):
+    """
+    Extract client information from PDF and build comprehensive profile
+    """
+    try:
+        # Extract full text for LLM processing
+        full_text = extract_full_pdf_text(pdf_path)
+        
+        # Extract line items
+        line_items = extract_line_item_details(pdf_path)
+        
+        # Use LLM to extract client information
+        prompt = f"""
+        Extract the following client information from this quote text:
+        - Client/Company Name
+        - Contact Person
+        - Email Address (if available)
+        - Phone Number (if available)
+        - Billing Address
+        - Shipping Address (if different)
+        - Quote Reference Number
+        - Quote Date
+        
+        Format the response as JSON.
+        
+        Quote text:
+        {full_text[:8000]}  # Limit text length to avoid token limits
+        """
+        
+        if not configure_gemini_client():
+            return None
+            
+        client_info = {}
+        try:
+            # Use the LLM to extract client info
+            from llm_handler import gemini_client
+            response = gemini_client.generate_content(prompt)
+            response_text = response.text
+            
+            # Try to parse as JSON
+            import json
+            import re
+            
+            # Look for JSON pattern in the response
+            json_match = re.search(r'{.*}', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                client_info = json.loads(json_str)
+            else:
+                # Fallback to simple parsing
+                client_info = {
+                    "client_name": re.search(r'Client/Company Name:?\s*([^\n]+)', response_text, re.IGNORECASE),
+                    "contact_person": re.search(r'Contact Person:?\s*([^\n]+)', response_text, re.IGNORECASE),
+                    "quote_ref": re.search(r'Quote Reference:?\s*([^\n]+)', response_text, re.IGNORECASE),
+                    "quote_date": re.search(r'Quote Date:?\s*([^\n]+)', response_text, re.IGNORECASE),
+                }
+                client_info = {k: v.group(1).strip() if v else "" for k, v in client_info.items()}
+        except Exception as e:
+            print(f"Error extracting client info via LLM: {e}")
+            # Fallback to simple extraction
+            client_info = {
+                "client_name": "",
+                "contact_person": "",
+                "quote_ref": os.path.basename(pdf_path).split('.')[0]
+            }
+        
+        # Identify machines from line items
+        machines_data = identify_machines_from_items(line_items)
+        
+        # Build the complete profile
+        profile = {
+            "client_info": client_info,
+            "line_items": line_items,
+            "machines_data": machines_data,
+            "full_text": full_text,
+            "pdf_filename": os.path.basename(pdf_path)
+        }
+        
+        return profile
+    except Exception as e:
+        print(f"Error in extract_client_profile: {e}")
+        traceback.print_exc()
+        return None
+
+def confirm_client_profile(extracted_profile):
+    """
+    Display UI for confirming and editing client profile information
+    Returns confirmed profile data
+    """
+    st.subheader("📋 Confirm Client Profile")
+    
+    if not extracted_profile:
+        st.error("No profile data to confirm.")
+        return None
+    
+    # Create a copy for editing
+    confirmed_profile = extracted_profile.copy()
+    client_info = confirmed_profile.get("client_info", {}).copy()
+    
+    # Client Information Form
+    st.markdown("### Client Information")
+    with st.form("client_info_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            client_info["client_name"] = st.text_input(
+                "Client/Company Name", 
+                value=client_info.get("client_name", "")
+            )
+            client_info["contact_person"] = st.text_input(
+                "Contact Person", 
+                value=client_info.get("contact_person", "")
+            )
+            client_info["email"] = st.text_input(
+                "Email", 
+                value=client_info.get("email", "")
+            )
+            client_info["phone"] = st.text_input(
+                "Phone", 
+                value=client_info.get("phone", "")
+            )
+        
+        with col2:
+            client_info["quote_ref"] = st.text_input(
+                "Quote Reference", 
+                value=client_info.get("quote_ref", "") or confirmed_profile.get("pdf_filename", "").split('.')[0]
+            )
+            client_info["quote_date"] = st.text_input(
+                "Quote Date", 
+                value=client_info.get("quote_date", "")
+            )
+            client_info["billing_address"] = st.text_area(
+                "Billing Address", 
+                value=client_info.get("billing_address", "")
+            )
+            client_info["shipping_address"] = st.text_area(
+                "Shipping Address", 
+                value=client_info.get("shipping_address", "")
+            )
+        
+        submit_button = st.form_submit_button("Confirm Profile")
+    
+    # Update the profile with confirmed info
+    confirmed_profile["client_info"] = client_info
+    
+    # Machine Information Summary
+    st.markdown("### Identified Machines")
+    machines = confirmed_profile.get("machines_data", {}).get("machines", [])
+    
+    if machines:
+        for i, machine in enumerate(machines):
+            with st.expander(f"Machine {i+1}: {machine.get('machine_name', 'Unknown')}", expanded=i==0):
+                st.markdown(f"**Main Item:** {machine.get('main_item', {}).get('description', 'No description')}")
+                add_ons = machine.get('add_ons', [])
+                if add_ons:
+                    st.markdown(f"**Add-ons:** {len(add_ons)} items")
+                    for j, addon in enumerate(add_ons[:3]):  # Show first 3 add-ons only
+                        st.markdown(f"- {addon.get('description', '')[:100]}...")
+                    if len(add_ons) > 3:
+                        st.markdown(f"- ... and {len(add_ons) - 3} more add-ons")
+                else:
+                    st.markdown("**Add-ons:** None")
+    else:
+        st.info("No machines identified. You'll need to manually select machines later.")
+    
+    # Common items summary
+    common_items = confirmed_profile.get("machines_data", {}).get("common_items", [])
+    if common_items:
+        with st.expander("Common Items", expanded=False):
+            st.markdown(f"**{len(common_items)} common items** (applying to all machines)")
+            for i, item in enumerate(common_items[:5]):  # Show first 5 common items only
+                st.markdown(f"- {item.get('description', '')[:100]}...")
+            if len(common_items) > 5:
+                st.markdown(f"- ... and {len(common_items) - 5} more common items")
+    
+    # Return the confirmed profile
+    if submit_button:
+        # Save to database if needed
+        if client_info.get("client_name") and client_info.get("quote_ref"):
+            # Create database client record
+            client_record = {
+                "quote_ref": client_info.get("quote_ref"),
+                "customer_name": client_info.get("client_name"),
+                "customer_contact_person": client_info.get("contact_person"),
+                "telephone": client_info.get("phone"),
+                "sold_to_address": client_info.get("billing_address"),
+                "ship_to_address": client_info.get("shipping_address"),
+                "machine_model": ""  # To be filled later
+            }
+            
+            # Save to database
+            if save_client_info(client_record):
+                st.success("Client profile saved to database.")
+                
+                # Save line items
+                if confirmed_profile.get("line_items"):
+                    save_priced_items(client_info.get("quote_ref"), confirmed_profile.get("line_items"))
+                
+                # Save machine data
+                if confirmed_profile.get("machines_data"):
+                    save_machines_data(client_info.get("quote_ref"), confirmed_profile.get("machines_data"))
+                
+                # Save document content for chat
+                save_document_content(
+                    client_info.get("quote_ref"),
+                    confirmed_profile.get("full_text", ""),
+                    confirmed_profile.get("pdf_filename", "")
+                )
+                
+                # Refresh CRM data
+                load_crm_data()
+                
+                return confirmed_profile
+            else:
+                st.error("Failed to save client profile to database.")
+                return None
+        else:
+            st.warning("Client name and quote reference are required.")
+            return None
+    
+    return None  # Return None if not submitted
+
+def show_action_selection(client_profile):
+    """
+    Display action selection hub interface
+    """
+    st.subheader("🎯 Select an Action")
+    
+    if not client_profile:
+        st.error("No client profile data available.")
+        return None
+    
+    client_info = client_profile.get("client_info", {})
+    
+    # Client profile summary
+    with st.container():
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            st.markdown(f"### {client_info.get('client_name', 'Unknown Client')}")
+            st.markdown(f"**Quote:** {client_info.get('quote_ref', 'N/A')}")
+            st.markdown(f"**Contact:** {client_info.get('contact_person', 'N/A')}")
+        
+        with col2:
+            machines_count = len(client_profile.get("machines_data", {}).get("machines", []))
+            items_count = len(client_profile.get("line_items", []))
+            st.metric("Machines", machines_count)
+            st.metric("Line Items", items_count)
+    
+    # Action cards
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        goa_card = st.container(border=True)
+        with goa_card:
+            st.markdown("### 📄 Generate GOA Document")
+            st.markdown("Create General Order Agreement documents for specific machines")
+            if st.button("Generate GOA", key="action_goa", use_container_width=True):
+                st.session_state.current_action = "goa_generation"
+                st.session_state.action_profile = client_profile
+                return "goa_generation"
+    
+    with col2:
+        export_card = st.container(border=True)
+        with export_card:
+            st.markdown("### 📦 Export Documents")
+            st.markdown("Create packing slips, commercial invoices and certificates")
+            if st.button("Export Documents", key="action_export", use_container_width=True):
+                st.session_state.current_action = "export_documents"
+                st.session_state.action_profile = client_profile
+                return "export_documents"
+    
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        edit_card = st.container(border=True)
+        with edit_card:
+            st.markdown("### ✏️ Edit Profile")
+            st.markdown("Update client information and manage machines")
+            if st.button("Edit Profile", key="action_edit", use_container_width=True):
+                st.session_state.current_action = "edit_profile"
+                st.session_state.action_profile = client_profile
+                return "edit_profile"
+    
+    with col4:
+        chat_card = st.container(border=True)
+        with chat_card:
+            st.markdown("### 💬 Chat with Quote")
+            st.markdown("Ask questions about the quote and get answers")
+            if st.button("Chat Interface", key="action_chat", use_container_width=True):
+                st.session_state.current_action = "chat"
+                st.session_state.action_profile = client_profile
+                return "chat"
+    
+    return None
+
+def handle_selected_action(action, profile_data):
+    """
+    Route to the appropriate function based on selected action
+    """
+    if action == "goa_generation":
+        # Set the current page and step for the wizard interface
+        st.session_state.current_page = "Quote Processing"
+        st.session_state.processing_step = 1  # Skip to machine selection step
+        
+        # Pre-populate session state with profile data
+        st.session_state.full_pdf_text = profile_data.get("full_text", "")
+        st.session_state.items_for_confirmation = profile_data.get("line_items", [])
+        st.session_state.processing_done = True
+        
+        # Extract placeholder contexts
+        TEMPLATE_FILE = "template.docx"
+        if os.path.exists(TEMPLATE_FILE):
+            st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
+        
+        # Pre-select machines
+        machines_data = profile_data.get("machines_data", {})
+        
+        # Setup for machine confirmation
+        st.session_state.selected_main_machines = []
+        st.session_state.selected_common_options = []
+        
+        # Add pre-selection logic based on machines_data
+        for i, item in enumerate(st.session_state.items_for_confirmation):
+            # Check if this item is a main item in any machine
+            is_main_machine = False
+            for machine in machines_data.get("machines", []):
+                if machine.get("main_item") == item:
+                    is_main_machine = True
+                    st.session_state.selected_main_machines.append(i)
+                    break
+            
+            # Check if this item is in common items
+            if not is_main_machine:
+                for common_item in machines_data.get("common_items", []):
+                    if common_item == item:
+                        st.session_state.selected_common_options.append(i)
+                        break
+        
+        return
+    
+    elif action == "export_documents":
+        # Set the current page to export documents
+        st.session_state.current_page = "Export Documents"
+        
+        # Pre-select the client in the export UI
+        client_info = profile_data.get("client_info", {})
+        quote_ref = client_info.get("quote_ref")
+        
+        # Find the client ID from the quote reference
+        if st.session_state.all_crm_clients:
+            for client in st.session_state.all_crm_clients:
+                if client.get("quote_ref") == quote_ref:
+                    st.session_state.selected_client_for_detail_edit = client
+                    break
+        
+        return
+    
+    elif action == "edit_profile":
+        # Set the current page to CRM management
+        st.session_state.current_page = "CRM Management"
+        
+        # Pre-select the client in the CRM UI
+        client_info = profile_data.get("client_info", {})
+        quote_ref = client_info.get("quote_ref")
+        
+        # Find the client ID from the quote reference
+        if st.session_state.all_crm_clients:
+            for client in st.session_state.all_crm_clients:
+                if client.get("quote_ref") == quote_ref:
+                    st.session_state.selected_client_for_detail_edit = client
+                    st.session_state.editing_client_id = client.get("id")
+                    break
+        
+        return
+    
+    elif action == "chat":
+        # Set up chat interface with the quote context
+        st.session_state.current_page = "Chat"
+        st.session_state.chat_context = {
+            "full_pdf_text": profile_data.get("full_text", ""),
+            "client_info": profile_data.get("client_info", {})
+        }
+        
+        return
+    
+    return
+
+def show_chat_page():
+    """
+    Display the chat interface for interacting with a specific quote
+    """
+    st.title("💬 Chat with Quote")
+    
+    # Check if we have chat context
+    if not st.session_state.get("chat_context"):
+        st.warning("No quote context available for chat. Please select a quote first.")
+        
+        if st.button("Return to Welcome Page"):
+            st.session_state.current_page = "Welcome"
+            st.rerun()
+        return
+    
+    # Display client info
+    client_info = st.session_state.chat_context.get("client_info", {})
+    if client_info:
+        st.markdown(f"**Client:** {client_info.get('client_name', 'Unknown')}")
+        st.markdown(f"**Quote:** {client_info.get('quote_ref', 'Unknown')}")
+    
+    # Chat interface
+    st.markdown("### Ask questions about this quote")
+    
+    # Initialize chat history if needed
+    if "quote_chat_history" not in st.session_state:
+        st.session_state.quote_chat_history = []
+    
+    # Display chat history
+    for message in st.session_state.quote_chat_history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+    
+    # Input for new messages
+    if prompt := st.chat_input("Ask a question about this quote..."):
+        # Add user message to history
+        st.session_state.quote_chat_history.append({"role": "user", "content": prompt})
+        
+        # Display user message
+        with st.chat_message("user"):
+            st.write(prompt)
+        
+        # Generate response
+        with st.spinner("Thinking..."):
+            try:
+                # Get the full PDF text from context
+                full_pdf_text = st.session_state.chat_context.get("full_pdf_text", "")
+                
+                # Use the answer_pdf_question function to get a response
+                response = answer_pdf_question(
+                    prompt, 
+                    [],  # No specific descriptions needed
+                    full_pdf_text,
+                    {}   # No template contexts needed
+                )
+                
+                # Add assistant response to history
+                st.session_state.quote_chat_history.append({"role": "assistant", "content": response})
+                
+                # Display assistant response
+                with st.chat_message("assistant"):
+                    st.write(response)
+            except Exception as e:
+                st.error(f"Error generating response: {e}")
+                traceback.print_exc()
+    
+    # Button to return to action selection
+    st.markdown("---")
+    if st.button("Return to Action Selection", key="return_to_actions"):
+        # Reset the flow to action selection
+        if st.session_state.get("confirmed_profile"):
+            st.session_state.profile_extraction_step = "action_selection"
+            st.session_state.chat_context = None
+            st.session_state.current_page = "Welcome"
+            st.rerun()
+        else:
+            st.session_state.current_page = "Welcome"
+            st.rerun()
+
 # --- Streamlit UI --- 
 st.set_page_config(layout="wide", page_title="GOA LLM Assistant")
 st.title("📄 GOA Document Assistant with LLM")
@@ -1072,8 +1596,8 @@ if st.session_state.error_message:
 
 # --- Sidebar Navigation ---
 st.sidebar.title("Navigation")
-page_options = ["Welcome", "Quote Processing", "Export Documents", "CRM Management"]
-selected_page = st.sidebar.radio("Go to", page_options, index=page_options.index(st.session_state.current_page))
+page_options = ["Welcome", "Quote Processing", "Export Documents", "CRM Management", "Chat"]
+selected_page = st.sidebar.radio("Go to", page_options, index=page_options.index(st.session_state.current_page) if st.session_state.current_page in page_options else 0)
 
 # Update current page in session state
 if selected_page != st.session_state.current_page:
@@ -1483,3 +2007,6 @@ elif st.session_state.current_page == "CRM Management":
             st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
         else:
             st.info("No client records in CRM yet.")
+
+elif st.session_state.current_page == "Chat":
+    show_chat_page()
