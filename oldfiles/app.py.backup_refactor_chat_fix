@@ -7,34 +7,34 @@ import traceback
 import shutil
 
 # Import from new modules
-from src.ui.ui_pages import (
+from ui_pages import (
     show_welcome_page, show_client_dashboard_page, show_quote_processing, 
     show_export_documents, show_crm_management_page, show_chat_page, render_chat_ui
 )
-from src.workflows.profile_workflow import (
+from profile_workflow import (
     extract_client_profile, confirm_client_profile, show_action_selection, 
     handle_selected_action, load_full_client_profile
 )
 
 # Import from existing utility modules
-from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
-from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical
-from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
-from src.utils.doc_filler import fill_word_document_from_llm_data
-from src.utils.crm_utils import (
+from pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
+from template_utils import extract_placeholders, extract_placeholder_context_hierarchical
+from llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
+from doc_filler import fill_word_document_from_llm_data
+from crm_utils import (
     init_db, save_client_info, load_all_clients, get_client_by_id, 
     update_client_record, save_priced_items, load_priced_items_for_quote, 
     update_single_priced_item, delete_client_record, save_machines_data, 
     load_machines_for_quote, save_machine_template_data, load_machine_template_data, 
     save_document_content, load_document_content
 )
-from src.generators.document_generators import generate_packing_slip_data, generate_commercial_invoice_data, generate_certificate_of_origin_data
+from document_generators import generate_packing_slip_data, generate_commercial_invoice_data, generate_certificate_of_origin_data
 
 # Define Template File Constants
-TEMPLATE_FILE = os.path.join("templates", "template.docx")
-TEMPLATE_PACKING_SLIP = os.path.join("templates", "Packing Slip.docx")
-TEMPLATE_COMMERCIAL_INVOICE = os.path.join("templates", "Commercial Invoice.docx")
-TEMPLATE_CERTIFICATE_OF_ORIGIN = os.path.join("templates", "CERTIFICATION OF ORIGIN_NAFTA.docx")
+TEMPLATE_FILE = "template.docx"
+TEMPLATE_PACKING_SLIP = "Packing Slip.docx"
+TEMPLATE_COMMERCIAL_INVOICE = "Commercial Invoice.docx"
+TEMPLATE_CERTIFICATE_OF_ORIGIN = "CERTIFICATION OF ORIGIN_NAFTA.docx"
 
 # --- App State Initialization ---
 def initialize_session_state(is_new_processing_run=False):

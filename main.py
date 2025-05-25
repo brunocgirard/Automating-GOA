@@ -4,11 +4,11 @@ import json
 from typing import Dict, List
 import traceback
 
-from pdf_utils import extract_selected_item_descriptions, extract_full_pdf_text
-from template_utils import extract_placeholders, extract_placeholder_context_hierarchical
-from llm_handler import configure_gemini_client, get_all_fields_via_llm, get_llm_chat_update
-from doc_filler import fill_word_document_from_llm_data
-from crm_utils import init_db, save_client_info
+from src.utils.pdf_utils import extract_selected_item_descriptions, extract_full_pdf_text
+from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical
+from src.utils.llm_handler import configure_gemini_client, get_all_fields_via_llm, get_llm_chat_update
+from src.utils.doc_filler import fill_word_document_from_llm_data
+from src.utils.crm_utils import init_db, save_client_info
 
 def main():
     parser = argparse.ArgumentParser(description="Extract info from PDF, use LLM to map to template, and fill Word doc.")
