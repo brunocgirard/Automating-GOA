@@ -20,23 +20,21 @@ def init_db(db_path: str = DB_FILE):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Create clients table (simplified - LLM output and selected items will be linked via quote_ref if stored elsewhere or handled by priced_items)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             quote_ref TEXT UNIQUE NOT NULL, 
             customer_name TEXT,
-            machine_model TEXT,
-            country_destination TEXT,
-            sold_to_address TEXT,
-            ship_to_address TEXT,
-            telephone TEXT,
-            customer_contact_person TEXT,
-            customer_po TEXT,
-            processing_date TEXT NOT NULL
-            -- Removed full_llm_data_json and selected_pdf_items_json
-            -- We will store priced items in a separate table.
-            -- The full LLM output for the template could be stored in another table linked by quote_ref if needed.
+            machine_model TEXT,          -- Comma-separated list of machine names from machines_data
+            country_destination TEXT,    -- This seems to be missing from client_info, might need to add to extraction/form
+            sold_to_address TEXT,        -- Maps to client_info.billing_address
+            ship_to_address TEXT,        -- Maps to client_info.shipping_address
+            telephone TEXT,              -- Maps to client_info.phone
+            customer_contact_person TEXT, -- Maps to client_info.contact_person
+            customer_po TEXT,            -- Maps to client_info.customer_po
+            processing_date TEXT NOT NULL,
+            incoterm TEXT,               -- Maps to client_info.incoterm
+            quote_date TEXT              -- Maps to client_info.quote_date
         )
         """)
 
@@ -154,48 +152,73 @@ def parse_price_string(price_input_str: Optional[str]) -> Dict[str, Optional[Any
     return {"price_str": price_str_cleaned, "price_numeric": price_numeric}
 
 def save_client_info(client_data: Dict[str, any], db_path: str = DB_FILE) -> bool:
-    print("DEBUG: save_client_info (clients table part) called with:", client_data)
+    print("DEBUG: save_client_info called with:", client_data)
     required_fields = ['quote_ref'] 
     for field in required_fields:
         if field not in client_data or not client_data[field]:
-            print(f"Error: Required field '{field}' is missing or empty in client_data for clients table.")
+            print(f"Error: Required field '{field}' is missing or empty.")
             return False
     conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         processing_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("SELECT id FROM clients WHERE quote_ref = ?", (client_data.get('quote_ref'),))
+        
+        # Map app's client_info keys to database columns
+        # Note: machine_model is derived in app.py before calling this
+        db_field_mapping = {
+            "customer_name": client_data.get("customer_name"),
+            "machine_model": client_data.get("machine_model"), # Passed directly now
+            "country_destination": client_data.get("country_destination"), # Assuming it might be added to client_data
+            "sold_to_address": client_data.get("sold_to_address"),
+            "ship_to_address": client_data.get("ship_to_address"),
+            "telephone": client_data.get("telephone"),
+            "customer_contact_person": client_data.get("customer_contact_person"),
+            "customer_po": client_data.get("customer_po"),
+            "incoterm": client_data.get("incoterm"),
+            "quote_date": client_data.get("quote_date")
+        }
+        
+        cursor.execute("SELECT id FROM clients WHERE quote_ref = ?", (client_data['quote_ref'],))
         existing_record = cursor.fetchone()
+        
         if existing_record:
             updates = []
             params = []
-            for field in ["customer_name", "machine_model", "country_destination", "sold_to_address", "ship_to_address", "telephone", "customer_contact_person", "customer_po"]:
-                if field in client_data:
-                    updates.append(f"{field} = ?")
-                    params.append(client_data.get(field))
-            updates.append("processing_date = ?")
-            params.append(processing_ts)
-            if not updates: return True # Should not happen if processing_date is always updated
-            params.append(client_data.get('quote_ref')) 
-            sql = f"UPDATE clients SET {', '.join(updates)} WHERE quote_ref = ?"
-            cursor.execute(sql, tuple(params))
-            print(f"Updated record in 'clients' for quote: {client_data.get('quote_ref')}")
+            for db_col, value in db_field_mapping.items():
+                if value is not None: # Only update if value is provided
+                    updates.append(f"{db_col} = ?")
+                    params.append(value)
+            
+            if not updates: # No actual fields to update other than processing_date
+                cursor.execute("UPDATE clients SET processing_date = ? WHERE quote_ref = ?", 
+                               (processing_ts, client_data['quote_ref']))
+            else:
+                updates.append("processing_date = ?")
+                params.append(processing_ts)
+                params.append(client_data['quote_ref']) 
+                sql = f"UPDATE clients SET {', '.join(updates)} WHERE quote_ref = ?"
+                cursor.execute(sql, tuple(params))
+            print(f"Updated record in 'clients' for quote: {client_data['quote_ref']}")
         else:
-            cursor.execute("""
-            INSERT INTO clients (quote_ref, customer_name, machine_model, country_destination, sold_to_address, ship_to_address, telephone, customer_contact_person, customer_po, processing_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                client_data.get('quote_ref'), client_data.get('customer_name', ""),
-                client_data.get('machine_model', ""), client_data.get('country_destination', ""),
-                client_data.get('sold_to_address', ""), client_data.get('ship_to_address', ""),
-                client_data.get('telephone', ""), client_data.get('customer_contact_person', ""),
-                client_data.get('customer_po', ""), processing_ts
-            ))
-            print(f"Inserted new record into 'clients' for quote: {client_data.get('quote_ref')}")
+            columns = ['quote_ref', 'processing_date']
+            values = [client_data['quote_ref'], processing_ts]
+            placeholders = ['?', '?']
+            
+            for db_col, value in db_field_mapping.items():
+                columns.append(db_col)
+                values.append(value if value is not None else "") # Use empty string for missing optional fields
+                placeholders.append('?')
+            
+            sql = f"INSERT INTO clients ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
+            cursor.execute(sql, tuple(values))
+            print(f"Inserted new record into 'clients' for quote: {client_data['quote_ref']}")
         conn.commit()
         return True
-    except sqlite3.Error as e: print(f"DB error in save_client_info (clients): {e}"); return False
+    except sqlite3.Error as e: 
+        print(f"DB error in save_client_info (clients): {e}"); 
+        print(f"Data attempted: {client_data}") # Print data on error
+        return False
     finally: 
         if conn: conn.close()
 
@@ -233,20 +256,24 @@ def update_client_record(client_id: int, data_to_update: Dict[str, str], db_path
         
         fields = []
         params = []
-        allowed_fields = ["customer_name", "machine_model", "country_destination", "sold_to_address", "ship_to_address", "telephone", "customer_contact_person", "customer_po"]
+        allowed_fields = [
+            "customer_name", "machine_model", "country_destination", 
+            "sold_to_address", "ship_to_address", "telephone", 
+            "customer_contact_person", "customer_po", "incoterm", "quote_date"
+        ]
         for key, value in data_to_update.items():
             if key in allowed_fields:
                 fields.append(f"{key} = ?")
                 params.append(value)
         
-        if not fields: # Only update processing_date if no other allowed fields are being changed
+        if not fields: 
             cursor.execute("UPDATE clients SET processing_date = ? WHERE id = ?", 
                            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client_id))
             print(f"Only updated processing_date for client ID: {client_id}")
         else:
             fields.append("processing_date = ?")
             params.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            params.append(client_id) # For the WHERE clause
+            params.append(client_id) 
             
             sql = f"UPDATE clients SET {', '.join(fields)} WHERE id = ?"
             cursor.execute(sql, tuple(params))
@@ -276,9 +303,15 @@ def load_all_clients(db_path: str = DB_FILE) -> List[Dict]:
     clients = []
     try:
         conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row # Access columns by name
+        conn.row_factory = sqlite3.Row 
         cursor = conn.cursor()
-        cursor.execute("SELECT id, quote_ref, customer_name, machine_model, country_destination, processing_date FROM clients ORDER BY processing_date DESC")
+        # Select all relevant fields for client list display
+        cursor.execute("""
+        SELECT id, quote_ref, customer_name, machine_model, country_destination, 
+               sold_to_address, ship_to_address, telephone, customer_contact_person, 
+               customer_po, processing_date, incoterm, quote_date 
+        FROM clients ORDER BY processing_date DESC
+        """)
         rows = cursor.fetchall()
         for row in rows:
             clients.append(dict(row))
