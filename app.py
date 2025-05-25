@@ -1115,7 +1115,7 @@ def render_chat_ui():
 
 def extract_client_profile(pdf_path):
     """
-    Extract client information from PDF and build comprehensive profile
+    Extract standard client information from PDF and build comprehensive profile
     """
     try:
         # Extract full text for LLM processing
@@ -1124,22 +1124,41 @@ def extract_client_profile(pdf_path):
         # Extract line items
         line_items = extract_line_item_details(pdf_path)
         
-        # Use LLM to extract client information
+        # Define standard fields based on mapping_mailmerge.txt
+        standard_fields = [
+            "Company",
+            "Customer",
+            "Machine",
+            "Quote No",
+            "Serial Number",
+            "Sold to/Address 1",
+            "Sold to/Address 2",
+            "Sold to/Address 3",
+            "Ship to/Address 1",
+            "Ship to/Address 2",
+            "Ship to/Address 3",
+            "Telefone",
+            "Customer PO",
+            "Order date",
+            "Via",
+            "Incoterm",
+            "Tax ID",
+            "H.S",
+            "Customer Number",
+            "Customer contact"
+        ]
+        
+        # Use LLM to extract client information with specific field focus
         prompt = f"""
-        Extract the following client information from this quote text:
-        - Client/Company Name
-        - Contact Person
-        - Email Address (if available)
-        - Phone Number (if available)
-        - Billing Address
-        - Shipping Address (if different)
-        - Quote Reference Number
-        - Quote Date
+        Extract the following standard fields from this quote PDF text.
+        Return results in JSON format with exactly these field names:
         
-        Format the response as JSON.
+        {', '.join(standard_fields)}
         
-        Quote text:
-        {full_text[:8000]}  # Limit text length to avoid token limits
+        If you can't find a value for a field, leave it as an empty string.
+        
+        PDF text:
+        {full_text[:7000]}  # Limit text length to avoid token limits
         """
         
         if not configure_gemini_client():
@@ -1162,29 +1181,50 @@ def extract_client_profile(pdf_path):
                 json_str = json_match.group(0)
                 client_info = json.loads(json_str)
             else:
-                # Fallback to simple parsing
+                # Fallback to extracting quote ref from filename
                 client_info = {
-                    "client_name": re.search(r'Client/Company Name:?\s*([^\n]+)', response_text, re.IGNORECASE),
-                    "contact_person": re.search(r'Contact Person:?\s*([^\n]+)', response_text, re.IGNORECASE),
-                    "quote_ref": re.search(r'Quote Reference:?\s*([^\n]+)', response_text, re.IGNORECASE),
-                    "quote_date": re.search(r'Quote Date:?\s*([^\n]+)', response_text, re.IGNORECASE),
+                    "Quote No": os.path.basename(pdf_path).split('.')[0],
+                    "Customer": "",
+                    "Company": ""
                 }
-                client_info = {k: v.group(1).strip() if v else "" for k, v in client_info.items()}
         except Exception as e:
             print(f"Error extracting client info via LLM: {e}")
             # Fallback to simple extraction
             client_info = {
-                "client_name": "",
-                "contact_person": "",
-                "quote_ref": os.path.basename(pdf_path).split('.')[0]
+                "Quote No": os.path.basename(pdf_path).split('.')[0],
+                "Customer": "",
+                "Company": ""
             }
+        
+        # Map standard fields to client_info structure
+        mapped_client_info = {
+            "client_name": client_info.get("Customer", "") or client_info.get("Company", ""),
+            "quote_ref": client_info.get("Quote No", os.path.basename(pdf_path).split('.')[0]),
+            "contact_person": client_info.get("Customer contact", ""),
+            "phone": client_info.get("Telefone", ""),
+            "billing_address": "\n".join([
+                client_info.get("Sold to/Address 1", ""),
+                client_info.get("Sold to/Address 2", ""),
+                client_info.get("Sold to/Address 3", "")
+            ]).strip(),
+            "shipping_address": "\n".join([
+                client_info.get("Ship to/Address 1", ""),
+                client_info.get("Ship to/Address 2", ""),
+                client_info.get("Ship to/Address 3", "")
+            ]).strip(),
+            "machine_model": client_info.get("Machine", ""),
+            "customer_po": client_info.get("Customer PO", ""),
+            "incoterm": client_info.get("Incoterm", ""),
+            "quote_date": client_info.get("Order date", "")
+        }
         
         # Identify machines from line items
         machines_data = identify_machines_from_items(line_items)
         
         # Build the complete profile
         profile = {
-            "client_info": client_info,
+            "client_info": mapped_client_info,
+            "standard_fields": client_info,  # Keep original extraction for reference
             "line_items": line_items,
             "machines_data": machines_data,
             "full_text": full_text,
@@ -1211,52 +1251,95 @@ def confirm_client_profile(extracted_profile):
     # Create a copy for editing
     confirmed_profile = extracted_profile.copy()
     client_info = confirmed_profile.get("client_info", {}).copy()
+    standard_fields = confirmed_profile.get("standard_fields", {}).copy()
     
     # Client Information Form
     st.markdown("### Client Information")
     with st.form("client_info_form"):
-        col1, col2 = st.columns(2)
+        tab1, tab2 = st.tabs(["Basic Info", "Advanced Info"])
         
-        with col1:
-            client_info["client_name"] = st.text_input(
-                "Client/Company Name", 
-                value=client_info.get("client_name", "")
-            )
-            client_info["contact_person"] = st.text_input(
-                "Contact Person", 
-                value=client_info.get("contact_person", "")
-            )
-            client_info["email"] = st.text_input(
-                "Email", 
-                value=client_info.get("email", "")
-            )
-            client_info["phone"] = st.text_input(
-                "Phone", 
-                value=client_info.get("phone", "")
-            )
+        with tab1:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                client_info["client_name"] = st.text_input(
+                    "Client/Company Name", 
+                    value=client_info.get("client_name", "")
+                )
+                client_info["contact_person"] = st.text_input(
+                    "Contact Person", 
+                    value=client_info.get("contact_person", "")
+                )
+                client_info["phone"] = st.text_input(
+                    "Phone", 
+                    value=client_info.get("phone", "")
+                )
+                client_info["quote_ref"] = st.text_input(
+                    "Quote Reference", 
+                    value=client_info.get("quote_ref", "") or confirmed_profile.get("pdf_filename", "").split('.')[0]
+                )
+            
+            with col2:
+                client_info["machine_model"] = st.text_input(
+                    "Machine Model", 
+                    value=client_info.get("machine_model", "")
+                )
+                client_info["customer_po"] = st.text_input(
+                    "Customer PO", 
+                    value=client_info.get("customer_po", "")
+                )
+                client_info["quote_date"] = st.text_input(
+                    "Quote Date", 
+                    value=client_info.get("quote_date", "")
+                )
+                client_info["incoterm"] = st.text_input(
+                    "Incoterm", 
+                    value=client_info.get("incoterm", "")
+                )
         
-        with col2:
-            client_info["quote_ref"] = st.text_input(
-                "Quote Reference", 
-                value=client_info.get("quote_ref", "") or confirmed_profile.get("pdf_filename", "").split('.')[0]
-            )
-            client_info["quote_date"] = st.text_input(
-                "Quote Date", 
-                value=client_info.get("quote_date", "")
-            )
-            client_info["billing_address"] = st.text_area(
-                "Billing Address", 
-                value=client_info.get("billing_address", "")
-            )
-            client_info["shipping_address"] = st.text_area(
-                "Shipping Address", 
-                value=client_info.get("shipping_address", "")
-            )
+        with tab2:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                client_info["billing_address"] = st.text_area(
+                    "Billing Address", 
+                    value=client_info.get("billing_address", ""),
+                    height=150
+                )
+                
+                # Add more advanced fields
+                standard_fields["Tax ID"] = st.text_input(
+                    "Tax ID",
+                    value=standard_fields.get("Tax ID", "")
+                )
+                
+                standard_fields["H.S"] = st.text_input(
+                    "H.S Code",
+                    value=standard_fields.get("H.S", "")
+                )
+            
+            with col2:
+                client_info["shipping_address"] = st.text_area(
+                    "Shipping Address", 
+                    value=client_info.get("shipping_address", ""),
+                    height=150
+                )
+                
+                standard_fields["Via"] = st.text_input(
+                    "Shipping Method",
+                    value=standard_fields.get("Via", "")
+                )
+                
+                standard_fields["Serial Number"] = st.text_input(
+                    "Serial Number",
+                    value=standard_fields.get("Serial Number", "")
+                )
         
         submit_button = st.form_submit_button("Confirm Profile")
     
     # Update the profile with confirmed info
     confirmed_profile["client_info"] = client_info
+    confirmed_profile["standard_fields"] = standard_fields
     
     # Machine Information Summary
     st.markdown("### Identified Machines")
@@ -1300,7 +1383,8 @@ def confirm_client_profile(extracted_profile):
                 "telephone": client_info.get("phone"),
                 "sold_to_address": client_info.get("billing_address"),
                 "ship_to_address": client_info.get("shipping_address"),
-                "machine_model": ""  # To be filled later
+                "machine_model": client_info.get("machine_model"),
+                "customer_po": client_info.get("customer_po")
             }
             
             # Save to database
@@ -1346,24 +1430,37 @@ def show_action_selection(client_profile):
         return None
     
     client_info = client_profile.get("client_info", {})
+    standard_fields = client_profile.get("standard_fields", {})
     
     # Client profile summary
-    with st.container():
-        col1, col2 = st.columns([2, 1])
+    with st.container(border=True):
+        col1, col2, col3 = st.columns([2, 2, 1])
         
         with col1:
             st.markdown(f"### {client_info.get('client_name', 'Unknown Client')}")
             st.markdown(f"**Quote:** {client_info.get('quote_ref', 'N/A')}")
             st.markdown(f"**Contact:** {client_info.get('contact_person', 'N/A')}")
+            if client_info.get("phone"):
+                st.markdown(f"**Phone:** {client_info.get('phone', 'N/A')}")
         
         with col2:
+            if client_info.get("machine_model"):
+                st.markdown(f"**Machine Model:** {client_info.get('machine_model', 'N/A')}")
+            if client_info.get("incoterm"):
+                st.markdown(f"**Incoterm:** {client_info.get('incoterm', 'N/A')}")
+            if client_info.get("quote_date"):
+                st.markdown(f"**Date:** {client_info.get('quote_date', 'N/A')}")
+            if client_info.get("customer_po"):
+                st.markdown(f"**PO:** {client_info.get('customer_po', 'N/A')}")
+        
+        with col3:
             machines_count = len(client_profile.get("machines_data", {}).get("machines", []))
             items_count = len(client_profile.get("line_items", []))
             st.metric("Machines", machines_count)
             st.metric("Line Items", items_count)
     
     # Action cards
-    st.markdown("---")
+    st.markdown("### Available Actions")
     
     col1, col2 = st.columns(2)
     
@@ -1408,6 +1505,33 @@ def show_action_selection(client_profile):
                 st.session_state.current_action = "chat"
                 st.session_state.action_profile = client_profile
                 return "chat"
+    
+    # Profile details expander
+    with st.expander("View Full Profile Details", expanded=False):
+        tab1, tab2 = st.tabs(["Addresses", "Additional Fields"])
+        
+        with tab1:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Billing Address:**")
+                st.text(client_info.get("billing_address", "Not provided"))
+            with col2:
+                st.markdown("**Shipping Address:**")
+                st.text(client_info.get("shipping_address", "Not provided"))
+        
+        with tab2:
+            # Display any additional standard fields that might be useful
+            st.markdown("**Additional Information:**")
+            extra_fields = []
+            for key, value in standard_fields.items():
+                if value and key not in ["Customer", "Company", "Quote No", "Machine"]:
+                    extra_fields.append((key, value))
+            
+            if extra_fields:
+                for key, value in extra_fields:
+                    st.markdown(f"**{key}:** {value}")
+            else:
+                st.info("No additional information available")
     
     return None
 
