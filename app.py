@@ -635,7 +635,7 @@ def process_chat_query(query, context_type, context_data=None):
 
 # --- Page Display Functions ---
 def show_welcome_page():
-    st.title("Welcome to the GOA Document Assistant")
+    st.title("Welcome to the QuoteFlow Document Assistant")
     
     st.markdown("""
     ## What This Application Does
@@ -1707,8 +1707,8 @@ def show_chat_page():
             st.rerun()
 
 # --- Streamlit UI --- 
-st.set_page_config(layout="wide", page_title="GOA LLM Assistant")
-st.title("📄 GOA Document Assistant with LLM")
+st.set_page_config(layout="wide", page_title="QuoteFlow Document Assistant")
+st.title("📄 QuoteFlow Document Assistant")
 
 # Load CRM data once on first load if not already loaded
 if not st.session_state.crm_data_loaded:
