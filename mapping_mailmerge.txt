@@ -1,0 +1,23 @@
+Ax
+Company	
+Customer	
+Machine	
+Quote No	
+Serial Number	
+Sold to/Address 1	
+Sold to/Address 2	
+Sold to/Address 3	
+Ship to/Address 1	
+Ship to/Address 2	
+Ship to/Address 3	
+Telefone	
+Customer PO	
+Order 
+date	
+Ox	
+Via	
+Incoterm	
+Tax ID	
+H.S	
+Customer Number	
+Customer contact
