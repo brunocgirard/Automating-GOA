@@ -18,7 +18,7 @@ from src.workflows.profile_workflow import (
 
 # Import from existing utility modules
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
-from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical
+from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, extract_placeholder_schema
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.crm_utils import (
@@ -210,16 +210,65 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
             if not st.session_state.full_pdf_text: st.warning("Full PDF text extraction failed.")
 
             st.write("Analyzing GOA template...")
+            # First get a list of all placeholders
             all_placeholders = extract_placeholders(template_file_path)
-            st.session_state.template_contexts = extract_placeholder_context_hierarchical(template_file_path)
-            if not st.session_state.template_contexts: raise ValueError("Could not extract GOA template contexts.")
-            initial_data_dict = {ph: ("NO" if ph.endswith("_check") else "") for ph in all_placeholders}
+            if not all_placeholders: 
+                st.error("No placeholders found in template.")
+                return False
+                
+            # Try to extract the schema
+            st.write("Extracting template schema...")
+            try:
+                st.session_state.template_contexts = extract_placeholder_schema(template_file_path)
+                
+                # Add diagnostic information
+                using_schema_format = isinstance(next(iter(st.session_state.template_contexts.values()), ""), dict)
+                st.write(f"Using {'schema' if using_schema_format else 'legacy'} format with {len(st.session_state.template_contexts)} fields")
+                
+                # If schema extraction fails, try legacy format
+                if not st.session_state.template_contexts:
+                    st.warning("Schema extraction failed, trying legacy format")
+                    st.session_state.template_contexts = extract_placeholder_context_hierarchical(template_file_path)
+                    if not st.session_state.template_contexts:
+                        st.error("Could not extract template contexts using either method.")
+                        return False
+            except Exception as e:
+                st.error(f"Error extracting template schema: {e}")
+                # Try legacy format
+                st.warning("Falling back to legacy format due to error")
+                st.session_state.template_contexts = extract_placeholder_context_hierarchical(template_file_path)
+                if not st.session_state.template_contexts:
+                    st.error("Could not extract template contexts using legacy method.")
+                    return False
+            
+            # Create initial blank data dictionary based on schema type
+            using_schema_format = isinstance(next(iter(st.session_state.template_contexts.values()), ""), dict)
+            if using_schema_format:
+                initial_data_dict = {
+                    key: ("NO" if schema_info.get("type") == "boolean" else "") 
+                    for key, schema_info in st.session_state.template_contexts.items()
+                }
+            else:
+                initial_data_dict = {ph: ("NO" if ph.endswith("_check") else "") for ph in all_placeholders}
+                
             st.session_state.llm_initial_filled_data = initial_data_dict.copy()
             st.session_state.llm_corrected_filled_data = initial_data_dict.copy()
             st.write(f"Creating initial blank GOA template: {st.session_state.initial_docx_path}...")
+            
+            # Add diagnostic information about the data being used for initial template
+            with st.expander("Preview of template data", expanded=False):
+                # Take first 5 fields to show as example
+                sample_data = {k: v for i, (k, v) in enumerate(initial_data_dict.items()) if i < 5}
+                st.write(sample_data)
+                st.write(f"Total fields: {len(initial_data_dict)}")
+            
             fill_word_document_from_llm_data(template_file_path, initial_data_dict, st.session_state.initial_docx_path)
-            if os.path.exists(st.session_state.initial_docx_path): shutil.copy(st.session_state.initial_docx_path, st.session_state.corrected_docx_path)
-            else: st.warning(f"Initial GOA doc {st.session_state.initial_docx_path} not created.")
+            if os.path.exists(st.session_state.initial_docx_path): 
+                shutil.copy(st.session_state.initial_docx_path, st.session_state.corrected_docx_path)
+                st.success(f"Initial template created successfully: {st.session_state.initial_docx_path}")
+            else: 
+                st.error(f"Initial GOA doc {st.session_state.initial_docx_path} not created.")
+                return False
             
             status_bar.update(label="Saving GOA data to CRM...")
             client_info_payload = {"quote_ref": uploaded_pdf_file.name.split('.')[0], "customer_name": "", "machine_model": "", "country_destination": "", "sold_to_address": "", "ship_to_address": "", "telephone": "", "customer_contact_person": "", "customer_po": ""}
@@ -245,10 +294,49 @@ def process_machine_specific_data(machine_data, template_file_path):
              common_items = st.session_state.identified_machines_data.get("common_items", [])
 
         with st.spinner(f"Processing machine for GOA: {machine_data.get('machine_name')}..."):
+            # Check if template_contexts are valid before proceeding
+            if not st.session_state.template_contexts:
+                st.warning("Template contexts not found. Regenerating from template.")
+                try:
+                    # Try with the new schema format first
+                    st.session_state.template_contexts = extract_placeholder_schema(template_file_path)
+                    if not st.session_state.template_contexts:
+                        # Fall back to legacy format if schema extraction fails
+                        st.warning("Schema extraction failed, trying legacy format")
+                        st.session_state.template_contexts = extract_placeholder_context_hierarchical(template_file_path)
+                        if not st.session_state.template_contexts:
+                            st.error("Could not extract template contexts using either method.")
+                            return False
+                except Exception as e:
+                    st.error(f"Error extracting template contexts: {e}")
+                    return False
+            
+            # Add diagnostic information
+            using_schema_format = isinstance(next(iter(st.session_state.template_contexts.values()), ""), dict)
+            st.info(f"Using {'schema' if using_schema_format else 'legacy'} format with {len(st.session_state.template_contexts)} fields")
+            
             machine_filled_data = get_machine_specific_fields_via_llm(machine_data, common_items, st.session_state.template_contexts, st.session_state.full_pdf_text)
             st.session_state.machine_specific_filled_data = machine_filled_data
             machine_specific_output_path = f"output_{machine_data.get('machine_name', 'machine').replace(' ', '_')}_GOA.docx"
+            
+            # Check that we have data before filling
+            if not machine_filled_data:
+                st.error("No data received from LLM to fill the template.")
+                return False
+                
+            # Show sample of the data for debugging
+            with st.expander("Preview of data from LLM", expanded=False):
+                # Take first 5 fields to show as example
+                sample_data = {k: v for i, (k, v) in enumerate(machine_filled_data.items()) if i < 5}
+                st.write(sample_data)
+                st.write(f"Total fields: {len(machine_filled_data)}")
+            
             fill_word_document_from_llm_data(template_file_path, machine_filled_data, machine_specific_output_path)
+            
+            if not os.path.exists(machine_specific_output_path):
+                st.error(f"Failed to create output file: {machine_specific_output_path}")
+                return False
+                
             st.session_state.machine_docx_path = machine_specific_output_path
             if "id" in machine_data:
                 save_machine_template_data(machine_data["id"], "GOA", machine_filled_data, machine_specific_output_path)
@@ -288,8 +376,27 @@ def load_previous_document(client_id):
         st.session_state.common_options_confirmation_done = True
         st.session_state.processing_step = 3  # Skip directly to machine processing step
         
-        if not st.session_state.template_contexts and os.path.exists(TEMPLATE_FILE):
-            st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
+        # Always regenerate the template contexts when loading an existing document
+        if os.path.exists(TEMPLATE_FILE):
+            try:
+                # First try with the new schema format
+                st.session_state.template_contexts = extract_placeholder_schema(TEMPLATE_FILE)
+                
+                # Add debug message
+                st.info(f"Template schema loaded with {len(st.session_state.template_contexts)} fields. Using new format: {isinstance(next(iter(st.session_state.template_contexts.values()), ''), dict)}")
+                
+                # If no fields were found or another issue occurred, try the legacy format
+                if not st.session_state.template_contexts:
+                    st.warning("Could not extract template schema, falling back to legacy format.")
+                    st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
+            except Exception as e:
+                st.error(f"Error extracting template schema: {e}")
+                # Fall back to legacy format
+                st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
+                st.info(f"Using legacy format: {len(st.session_state.template_contexts)} fields found")
+        else:
+            st.error(f"Template file {TEMPLATE_FILE} not found")
+        
         return True
     except Exception as e: st.error(f"Error loading previous GOA doc: {e}"); traceback.print_exc(); return False
 

@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional
 import json
 import traceback # For more detailed error logging
+from src.utils.template_utils import add_section_aware_instructions # Import the new function
 
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
@@ -87,6 +88,9 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
             print("LLM client not configured. Returning empty data for all fields.")
             return {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
 
+    # Determine if we're using the old format (string context) or new format (schema)
+    using_schema_format = isinstance(next(iter(template_placeholder_contexts.values()), ""), dict)
+
     prompt_parts = [
         "You are an AI assistant tasked with accurately extracting information from a PDF quote to fill a structured Word template.",
         "You will be given:",
@@ -107,15 +111,71 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
         for i, desc in enumerate(selected_pdf_descriptions):
             prompt_parts.append(f"  - PDF Item {i+1}: {desc}")
     
-    prompt_parts.append("\nTEMPLATE FIELDS TO FILL (Placeholder Key: Description from template):")
-    placeholder_list_for_prompt = []
-    for key, context in template_placeholder_contexts.items():
-        placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
-    if not placeholder_list_for_prompt:
-        prompt_parts.append("  (No template fields provided to evaluate.)")
-        return {}
-    for item_for_prompt in placeholder_list_for_prompt:
-        prompt_parts.append(item_for_prompt)
+    if using_schema_format:
+        # Group fields by section when using schema format
+        sections = {}
+        for key, field_info in template_placeholder_contexts.items():
+            section = field_info.get("section", "General")
+            if section not in sections:
+                sections[section] = []
+            sections[section].append((key, field_info))
+        
+        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section):")
+        
+        for section, fields in sorted(sections.items()):
+            prompt_parts.append(f"\n## {section} SECTION:")
+            
+            # Group by field type within section
+            text_fields = [f for f in fields if f[1].get("type") == "string"]
+            checkbox_fields = [f for f in fields if f[1].get("type") == "boolean"]
+            
+            if text_fields:
+                prompt_parts.append("TEXT FIELDS:")
+                for key, field_info in text_fields:
+                    desc = field_info.get("description", key)
+                    subsection = field_info.get("subsection", "")
+                    if subsection:
+                        prompt_parts.append(f"  - '{key}': [{subsection}] {desc}")
+                    else:
+                        prompt_parts.append(f"  - '{key}': {desc}")
+            
+            if checkbox_fields:
+                prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):")
+                for key, field_info in checkbox_fields:
+                    desc = field_info.get("description", key)
+                    subsection = field_info.get("subsection", "")
+                    
+                    # Include synonyms and positive indicators for checkbox fields
+                    synonyms = field_info.get("synonyms", [])
+                    positive_indicators = field_info.get("positive_indicators", [])
+                    
+                    # Format the synonyms and indicators for the prompt
+                    synonym_text = ""
+                    if synonyms:
+                        synonym_text = f" [Alternative terms: {', '.join(synonyms[:5])}]" if synonyms else ""
+                    
+                    # Add positive indicators only for the first few checkboxes to avoid making the prompt too long
+                    indicator_text = ""
+                    if positive_indicators and len(checkbox_fields) < 20:  # Only if not too many checkboxes
+                        indicator_text = f" [Indicators: {', '.join(positive_indicators[:3])}]" if positive_indicators else ""
+                    
+                    if subsection:
+                        prompt_parts.append(f"  - '{key}': [{subsection}] {desc}{synonym_text}{indicator_text}")
+                    else:
+                        prompt_parts.append(f"  - '{key}': {desc}{synonym_text}{indicator_text}")
+        
+        # Add section-aware instructions
+        prompt_parts = add_section_aware_instructions(template_placeholder_contexts, prompt_parts)
+    else:
+        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (Placeholder Key: Description from template):")
+        placeholder_list_for_prompt = []
+        for key, context in template_placeholder_contexts.items():
+            placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
+        if not placeholder_list_for_prompt:
+            prompt_parts.append("  (No template fields provided to evaluate.)")
+            return {}
+        for item_for_prompt in placeholder_list_for_prompt:
+            prompt_parts.append(item_for_prompt)
 
     prompt_parts.append("\nYOUR TASK & RESPONSE FORMAT:")
     prompt_parts.append("Carefully analyze all provided information.")
@@ -128,6 +188,20 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
     prompt_parts.append("Be accurate and conservative. For checkboxes, if unsure, default to \"NO\". If an entire category of options (e.g., 'Street Fighter Tablet Counter') is NOT MENTIONED AT ALL in the PDF text or selected items, all its related checkboxes should be \"NO\".")
     prompt_parts.append("For text fields, if not found, use an empty string.")
     prompt_parts.append("Respond with a single, valid JSON object. The keys in the JSON MUST be ALL the TEMPLATE PLACEHOLDER KEYS listed above, and the values must be their extracted text or \"YES\"/\"NO\".")
+    
+    # Add example JSON response format
+    prompt_parts.append("\nEXAMPLE JSON RESPONSE FORMAT:")
+    prompt_parts.append("""```json
+{
+  "machine_model": "LabelStar Model System 1", 
+  "production_speed": "60 units per minute",
+  "barcode_scanner_check": "YES",
+  "extended_conveyor_check": "NO",
+  "customer_name": "ACME Corp",
+  ... (other fields)
+}
+```""")
+    
     prompt_parts.append("\nYour JSON Response:")
     
     prompt = "\n".join(prompt_parts)
@@ -159,9 +233,24 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
         try:
             parsed_llm_output = json.loads(cleaned_response_text)
             if isinstance(parsed_llm_output, dict):
+                # Validate the response if using schema format
+                if using_schema_format:
+                    validation_errors = validate_llm_response(parsed_llm_output, template_placeholder_contexts)
+                    if validation_errors:
+                        print("Validation errors found in LLM response:")
+                        for field, errors in validation_errors.items():
+                            print(f"  - '{field}': {', '.join(errors)}")
+                        # Continue anyway - we'll use what we got
+                
+                # Update the response data with values
                 for key, value in parsed_llm_output.items():
                     if key in llm_response_data: # Only update keys that were expected
-                        if key.endswith("_check"):
+                        is_checkbox = (using_schema_format and 
+                                      isinstance(template_placeholder_contexts.get(key), dict) and 
+                                      template_placeholder_contexts.get(key, {}).get("type") == "boolean") or \
+                                      (not using_schema_format and key.endswith("_check"))
+                        
+                        if is_checkbox:
                             if isinstance(value, str) and value.upper() in ["YES", "NO"]:
                                 llm_response_data[key] = value.upper()
                             # else: keep default "NO"
@@ -292,11 +381,95 @@ def answer_pdf_question(user_question: str,
     """
     Answers a user's question based on the provided PDF content (selected items and full text).
     Optionally uses template contexts if questions might refer to template field names.
+    Uses retrieval-augmented prompting to handle long PDFs more effectively.
     """
     global GENERATIVE_MODEL
     if GENERATIVE_MODEL is None:
         if not configure_gemini_client():
             return "Error: LLM client not configured. Please check API key."
+
+    # Implement retrieval-augmented prompting for long PDFs
+    def chunk_pdf_text(text, chunk_size=1000, overlap=200):
+        """Split text into overlapping chunks for better context preservation."""
+        chunks = []
+        if not text or len(text) <= chunk_size:
+            return [text] if text else []
+            
+        start = 0
+        while start < len(text):
+            end = min(start + chunk_size, len(text))
+            # Try to find a sensible break point (newline or period)
+            if end < len(text):
+                # Look for newline first
+                newline_pos = text.rfind('\n', start, end)
+                period_pos = text.rfind('. ', start, end)
+                if newline_pos > start + chunk_size // 2:
+                    end = newline_pos + 1  # Include the newline
+                elif period_pos > start + chunk_size // 2:
+                    end = period_pos + 2  # Include the period and space
+            
+            chunks.append(text[start:end])
+            start = end - overlap  # Create overlap with previous chunk
+        
+        return chunks
+    
+    def score_chunk_relevance(query, chunk):
+        """
+        Score chunk relevance to the query using simple keyword matching.
+        A more sophisticated approach would use embeddings and semantic similarity.
+        """
+        query_terms = query.lower().split()
+        # Remove common words
+        stopwords = {'the', 'and', 'is', 'of', 'in', 'to', 'a', 'for', 'with', 'on', 'what', 'how', 'why', 'can', 'does', 'do'}
+        query_terms = [term for term in query_terms if term not in stopwords]
+        
+        score = 0
+        chunk_lower = chunk.lower()
+        
+        # Score based on term frequency
+        for term in query_terms:
+            term_count = chunk_lower.count(term)
+            score += term_count * 2  # Weight term matches
+            
+        # Score based on phrase matches (more weight)
+        query_phrases = [' '.join(query_terms[i:i+2]) for i in range(len(query_terms)-1)]
+        for phrase in query_phrases:
+            if len(phrase.split()) > 1:  # Only count actual phrases
+                phrase_count = chunk_lower.count(phrase)
+                score += phrase_count * 5  # Higher weight for phrase matches
+                
+        # Normalize by chunk length to avoid bias toward longer chunks
+        return score / (len(chunk) / 100) if chunk else 0
+    
+    # Process the PDF text
+    if len(full_pdf_text) > 10000:
+        print(f"PDF text is long ({len(full_pdf_text)} chars). Using retrieval-augmented prompting.")
+        chunks = chunk_pdf_text(full_pdf_text)
+        scored_chunks = [(chunk, score_chunk_relevance(user_question, chunk)) for chunk in chunks]
+        
+        # Sort chunks by relevance score in descending order
+        scored_chunks.sort(key=lambda x: x[1], reverse=True)
+        
+        # Select the top relevant chunks (up to a token limit)
+        top_chunks = []
+        total_chars = 0
+        max_chars = 10000  # Stay within safe token limits
+        
+        for chunk, score in scored_chunks:
+            if score > 0 and total_chars + len(chunk) <= max_chars:
+                top_chunks.append(chunk)
+                total_chars += len(chunk)
+                
+        # Always include the beginning of the document (first chunk) for context
+        if chunks and chunks[0] not in top_chunks and total_chars + len(chunks[0]) <= max_chars:
+            top_chunks.insert(0, chunks[0])
+            
+        # Create a context summary with metadata
+        relevant_text = "\n\n==== CHUNK BREAK ====\n\n".join(top_chunks)
+        context_note = f"[PDF document chunked for retrieval. Showing {len(top_chunks)} most relevant chunks out of {len(chunks)} total.]"
+    else:
+        relevant_text = full_pdf_text
+        context_note = "[Full PDF text included - document is within token limits]"
 
     prompt_parts = [
         "You are an AI assistant designed to answer questions about a technical equipment PDF quote.",
@@ -316,8 +489,8 @@ def answer_pdf_question(user_question: str,
         for i, desc in enumerate(selected_pdf_descriptions):
             prompt_parts.append(f"  - PDF Item {i+1}: {desc}")
     
-    prompt_parts.append("\n2. FULL PDF TEXT (for general information or details not in selected items - showing first 10,000 chars if long to save tokens. Prioritize start of document if truncated.):")
-    prompt_parts.append((full_pdf_text[:10000] + "... (text truncated if longer)") if len(full_pdf_text) > 10000 else full_pdf_text)
+    prompt_parts.append(f"\n2. PDF TEXT CONTEXT: {context_note}")
+    prompt_parts.append(relevant_text)
 
     # Optionally add template contexts if questions might refer to template field names
     if template_placeholder_contexts:
@@ -472,6 +645,50 @@ def map_crm_to_document_via_llm(crm_client_data: Dict[str, Any],
     print(f"Prepared data for {document_type_hint}:", json.dumps(output_data_for_document, indent=2))
     return output_data_for_document
 
+def validate_llm_response(response_data: Dict[str, Any], expected_schema: Dict[str, Dict]) -> Dict[str, List[str]]:
+    """
+    Validates the LLM response against the expected schema.
+    
+    Args:
+        response_data: The LLM response data
+        expected_schema: The template schema
+        
+    Returns:
+        A dictionary of errors by field, empty if all valid
+    """
+    errors = {}
+    
+    # Check for missing fields
+    for key, schema in expected_schema.items():
+        if key not in response_data:
+            if key not in errors:
+                errors[key] = []
+            errors[key].append("Missing field")
+            continue
+            
+        value = response_data[key]
+        
+        # Validate by type
+        if schema.get("type") == "boolean":
+            if not isinstance(value, str) or value.upper() not in ["YES", "NO"]:
+                if key not in errors:
+                    errors[key] = []
+                errors[key].append(f"Expected 'YES' or 'NO', got: {value}")
+        elif schema.get("type") == "string":
+            if not isinstance(value, str):
+                if key not in errors:
+                    errors[key] = []
+                errors[key].append(f"Expected string, got: {type(value).__name__}")
+    
+    # Check for extra fields
+    for key in response_data:
+        if key not in expected_schema:
+            if key not in errors:
+                errors[key] = []
+            errors[key].append("Unexpected field")
+    
+    return errors
+
 def get_machine_specific_fields_via_llm(machine_data: Dict, 
                                        common_items: List[Dict],
                                        template_placeholder_contexts: Dict[str, str],
@@ -483,7 +700,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     Args:
         machine_data: Dictionary containing machine_name, main_item, and add_ons
         common_items: List of items common to all machines (warranty, etc.)
-        template_placeholder_contexts: Dictionary of template field contexts
+        template_placeholder_contexts: Dictionary of template field contexts or schema
         full_pdf_text: Full text of the PDF document
         
     Returns:
@@ -501,102 +718,256 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     addon_descs = [item.get("description", "") for item in machine_data.get("add_ons", [])]
     common_item_descs = [item.get("description", "") for item in common_items]
     
-    prompt_parts = [
-        f"You are an AI assistant tasked with accurately extracting information about a SPECIFIC MACHINE from a PDF quote to fill a structured Word template.",
-        "You will be given:",
-        "  1. A main machine description",
-        "  2. Add-on items specifically for this machine",
-        "  3. Common items that apply to all machines (warranty, shipping, etc.)",
-        "  4. The full PDF text for context",
-        "  5. A list of template fields to fill",
-        
-        f"\nMAIN MACHINE: {machine_name}",
-        main_item_desc,
-        
-        "\nADD-ON ITEMS SPECIFIC TO THIS MACHINE:"
-    ]
-    
-    if not addon_descs:
-        prompt_parts.append("  (No specific add-on items for this machine)")
-    else:
-        for i, desc in enumerate(addon_descs):
-            prompt_parts.append(f"  - Add-on {i+1}: {desc}")
-    
-    prompt_parts.append("\nCOMMON ITEMS (apply to all machines):")
-    if not common_item_descs:
-        prompt_parts.append("  (No common items identified)")
-    else:
-        for i, desc in enumerate(common_item_descs):
-            prompt_parts.append(f"  - Common Item {i+1}: {desc}")
-    
-    prompt_parts.append("\nFULL PDF TEXT (for additional context):")
-    prompt_parts.append((full_pdf_text[:10000] + "... (text truncated)") if len(full_pdf_text) > 10000 else full_pdf_text)
-    
-    prompt_parts.append("\nTEMPLATE FIELDS TO FILL (Placeholder Key: Description from template):")
-    placeholder_list_for_prompt = []
-    for key, context in template_placeholder_contexts.items():
-        placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
-    
-    if not placeholder_list_for_prompt:
-        prompt_parts.append("  (No template fields provided to evaluate.)")
-        return {}
-    
-    for item_for_prompt in placeholder_list_for_prompt:
-        prompt_parts.append(item_for_prompt)
-
-    prompt_parts.append("\nYOUR TASK & RESPONSE FORMAT:")
-    prompt_parts.append(f"Focus ONLY on the specified machine '{machine_name}' and its add-ons, plus common items.")
-    prompt_parts.append("Carefully analyze all provided information.")
-    prompt_parts.append("For each TEMPLATE FIELD:")
-    prompt_parts.append("  - If the field key ends with '_check' (a checkbox): Determine if it is confirmed as selected for THIS SPECIFIC MACHINE. Value must be \"YES\" or \"NO\".")
-    prompt_parts.append("  - If the field key does NOT end with '_check' (a text field): Extract the specific information relevant to THIS MACHINE.")
-    prompt_parts.append("Be accurate and conservative. For checkboxes, if unsure, default to \"NO\".")
-    prompt_parts.append("For text fields, if not found, use an empty string.")
-    prompt_parts.append("Respond with a single, valid JSON object. The keys in the JSON MUST be ALL the TEMPLATE PLACEHOLDER KEYS listed above.")
-    prompt_parts.append("\nYour JSON Response:")
-    
-    prompt = "\n".join(prompt_parts)
+    # Determine if we're using the old format (string context) or new format (schema)
+    using_schema_format = isinstance(next(iter(template_placeholder_contexts.values()), ""), dict)
     
     # Initialize with default values
-    llm_response_data = {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
-
-    try:
-        print(f"Sending machine-specific prompt for '{machine_name}' to Gemini API...")
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    llm_response_data = {key: ("NO" if isinstance(val, dict) and val.get("type") == "boolean" else "") 
+                        for key, val in template_placeholder_contexts.items()} if using_schema_format else {
+                            key: ("NO" if key.endswith("_check") else "") 
+                            for key in template_placeholder_contexts.keys()
+                        }
+    
+    # Define a function to create the main prompt
+    def build_main_prompt(include_validation_feedback=False, validation_errors=None):
+        prompt_parts = [
+            f"You are an AI assistant tasked with accurately extracting information about a SPECIFIC MACHINE from a PDF quote to fill a structured Word template.",
+            "You will be given:",
+            "  1. A main machine description",
+            "  2. Add-on items specifically for this machine",
+            "  3. Common items that apply to all machines (warranty, shipping, etc.)",
+            "  4. The full PDF text for context",
+            "  5. A structured template schema showing fields to fill",
+            
+            f"\nMAIN MACHINE: {machine_name}",
+            main_item_desc,
+            
+            "\nADD-ON ITEMS SPECIFIC TO THIS MACHINE:"
         ]
-        response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
         
-        cleaned_response_text = response.text.strip()
-        if cleaned_response_text.startswith("```json"):
-            cleaned_response_text = cleaned_response_text[7:]
-            if cleaned_response_text.endswith("```"):
-                cleaned_response_text = cleaned_response_text[:-3]
-        cleaned_response_text = cleaned_response_text.strip()
+        if not addon_descs:
+            prompt_parts.append("  (No specific add-on items for this machine)")
+        else:
+            for i, desc in enumerate(addon_descs):
+                prompt_parts.append(f"  - Add-on {i+1}: {desc}")
         
-        try:
-            parsed_llm_output = json.loads(cleaned_response_text)
-            if isinstance(parsed_llm_output, dict):
-                for key, value in parsed_llm_output.items():
-                    if key in llm_response_data: # Only update keys that were expected
-                        if key.endswith("_check"):
-                            if isinstance(value, str) and value.upper() in ["YES", "NO"]:
-                                llm_response_data[key] = value.upper()
-                            # else: keep default "NO"
-                        else: # It's a text field
-                            llm_response_data[key] = str(value) # Assign extracted text
-            else:
-                print(f"Warning: LLM response for machine '{machine_name}' was not a JSON dictionary: {parsed_llm_output}")
-        except json.JSONDecodeError as e:
-            print(f"Error decoding LLM JSON response for machine '{machine_name}': {e}")
-            print(f"LLM Response Text was: {repr(cleaned_response_text)}")
-    except Exception as e:
-        print(f"Error communicating with Gemini API or processing response for machine '{machine_name}': {e}")
-        traceback.print_exc()
+        prompt_parts.append("\nCOMMON ITEMS (apply to all machines):")
+        if not common_item_descs:
+            prompt_parts.append("  (No common items identified)")
+        else:
+            for i, desc in enumerate(common_item_descs):
+                prompt_parts.append(f"  - Common Item {i+1}: {desc}")
+        
+        # Include validation feedback if this is a retry
+        if include_validation_feedback and validation_errors:
+            prompt_parts.append("\nVALIDATION ERRORS FROM PREVIOUS RESPONSE:")
+            prompt_parts.append("Please correct the following issues in your response:")
+            for field, field_errors in validation_errors.items():
+                for error in field_errors:
+                    prompt_parts.append(f"  - '{field}': {error}")
+        
+        prompt_parts.append("\nFULL PDF TEXT (for additional context):")
+        prompt_parts.append((full_pdf_text[:10000] + "... (text truncated)") if len(full_pdf_text) > 10000 else full_pdf_text)
+        
+        # Add few-shot examples to show how to extract information
+        prompt_parts.append("\nEXAMPLES OF INFORMATION EXTRACTION:")
+        
+        prompt_parts.append("Example 1: Text Field Extraction")
+        prompt_parts.append("Machine Description: 'LabelStar Model System 1 with high capacity label rolls'")
+        prompt_parts.append("Field: 'machine_model' (description: 'Machine Model Number')")
+        prompt_parts.append("Correct extraction: \"LabelStar Model System 1\"")
+        
+        prompt_parts.append("\nExample 2: Checkbox Field (YES) Extraction")
+        prompt_parts.append("Machine Description: 'LabelStar with integrated barcode scanner'")
+        prompt_parts.append("Add-on: 'Barcode scanner, high resolution'")
+        prompt_parts.append("Field: 'barcode_scanner_check' (description: 'Barcode Scanner Option')")
+        prompt_parts.append("Correct extraction: \"YES\"")
+        
+        prompt_parts.append("\nExample 3: Checkbox Field (NO) Extraction")
+        prompt_parts.append("Machine Description: 'LabelStar with standard conveyor'")
+        prompt_parts.append("Field: 'extended_conveyor_check' (description: 'Extended Conveyor Option')")
+        prompt_parts.append("Correct extraction: \"NO\" (because extended conveyor is not mentioned)")
+        
+        # Structure the field information by section when using schema format
+        if using_schema_format:
+            # Group fields by section
+            sections = {}
+            for key, field_info in template_placeholder_contexts.items():
+                section = field_info.get("section", "General")
+                if section not in sections:
+                    sections[section] = []
+                sections[section].append((key, field_info))
+            
+            prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section):")
+            
+            for section, fields in sorted(sections.items()):
+                prompt_parts.append(f"\n## {section} SECTION:")
+                
+                # Group by field type within section
+                text_fields = [f for f in fields if f[1].get("type") == "string"]
+                checkbox_fields = [f for f in fields if f[1].get("type") == "boolean"]
+                
+                if text_fields:
+                    prompt_parts.append("TEXT FIELDS:")
+                    for key, field_info in text_fields:
+                        desc = field_info.get("description", key)
+                        subsection = field_info.get("subsection", "")
+                        if subsection:
+                            prompt_parts.append(f"  - '{key}': [{subsection}] {desc}")
+                        else:
+                            prompt_parts.append(f"  - '{key}': {desc}")
+                
+                if checkbox_fields:
+                    prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):")
+                    for key, field_info in checkbox_fields:
+                        desc = field_info.get("description", key)
+                        subsection = field_info.get("subsection", "")
+                        
+                        # Include synonyms and positive indicators for checkbox fields
+                        synonyms = field_info.get("synonyms", [])
+                        positive_indicators = field_info.get("positive_indicators", [])
+                        
+                        # Format the synonyms and indicators for the prompt
+                        synonym_text = ""
+                        if synonyms:
+                            synonym_text = f" [Alternative terms: {', '.join(synonyms[:5])}]" if synonyms else ""
+                        
+                        # Add positive indicators only for the first few checkboxes to avoid making the prompt too long
+                        indicator_text = ""
+                        if positive_indicators and len(checkbox_fields) < 20:  # Only if not too many checkboxes
+                            indicator_text = f" [Indicators: {', '.join(positive_indicators[:3])}]" if positive_indicators else ""
+                        
+                        if subsection:
+                            prompt_parts.append(f"  - '{key}': [{subsection}] {desc}{synonym_text}{indicator_text}")
+                        else:
+                            prompt_parts.append(f"  - '{key}': {desc}{synonym_text}{indicator_text}")
+            
+            # Add section-aware instructions when using schema format
+            prompt_parts = add_section_aware_instructions(template_placeholder_contexts, prompt_parts)
+        else:
+            # Use the old flat format
+            prompt_parts.append("\nTEMPLATE FIELDS TO FILL (Placeholder Key: Description from template):")
+            placeholder_list_for_prompt = []
+            for key, context in template_placeholder_contexts.items():
+                placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
+            
+            if not placeholder_list_for_prompt:
+                prompt_parts.append("  (No template fields provided to evaluate.)")
+                return {}
+            
+            for item_for_prompt in placeholder_list_for_prompt:
+                prompt_parts.append(item_for_prompt)
 
+        prompt_parts.append("\nYOUR TASK & RESPONSE FORMAT:")
+        prompt_parts.append(f"Focus ONLY on the specified machine '{machine_name}' and its add-ons, plus common items.")
+        prompt_parts.append("Carefully analyze all provided information.")
+        prompt_parts.append("For each TEMPLATE FIELD:")
+        prompt_parts.append("  - If the field key ends with '_check' (a checkbox): Determine if it is confirmed as selected for THIS SPECIFIC MACHINE. Look for mentions of the term or its synonyms. Value must be \"YES\" or \"NO\".")
+        prompt_parts.append("  - If the field key does NOT end with '_check' (a text field): Extract the specific information relevant to THIS MACHINE.")
+        prompt_parts.append("Be accurate and conservative. For checkboxes, if unsure, default to \"NO\".")
+        prompt_parts.append("For text fields, if not found, use an empty string.")
+        prompt_parts.append("IMPORTANT: You MUST include ALL the template fields in your response, even if empty.")
+        prompt_parts.append("Respond with a single, valid JSON object. The keys in the JSON MUST be ALL the TEMPLATE PLACEHOLDER KEYS listed above.")
+        
+        # Add example JSON response format
+        prompt_parts.append("\nEXAMPLE JSON RESPONSE FORMAT:")
+        prompt_parts.append("""```json
+{
+  "machine_model": "LabelStar Model System 1", 
+  "production_speed": "60 units per minute",
+  "barcode_scanner_check": "YES",
+  "extended_conveyor_check": "NO",
+  "customer_name": "ACME Corp",
+  ... (other fields)
+}
+```""")
+        
+        prompt_parts.append("\nYour JSON Response:")
+        
+        return "\n".join(prompt_parts)
+
+    # First attempt
+    prompt = build_main_prompt()
+    max_retries = 2
+    retries = 0
+    validation_errors = {}
+    
+    while retries <= max_retries:
+        try:
+            print(f"Sending machine-specific prompt for '{machine_name}' to Gemini API (attempt {retries + 1})...")
+            safety_settings = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ]
+            response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
+            
+            cleaned_response_text = response.text.strip()
+            if cleaned_response_text.startswith("```json"):
+                cleaned_response_text = cleaned_response_text[7:]
+                if cleaned_response_text.endswith("```"):
+                    cleaned_response_text = cleaned_response_text[:-3]
+            cleaned_response_text = cleaned_response_text.strip()
+            
+            try:
+                parsed_llm_output = json.loads(cleaned_response_text)
+                if isinstance(parsed_llm_output, dict):
+                    # Validate the response if using schema format
+                    if using_schema_format:
+                        validation_errors = validate_llm_response(parsed_llm_output, template_placeholder_contexts)
+                        if validation_errors and retries < max_retries:
+                            print(f"Validation errors found in LLM response, retrying ({retries + 1}/{max_retries}):")
+                            for field, errors in validation_errors.items():
+                                print(f"  - '{field}': {', '.join(errors)}")
+                            retries += 1
+                            prompt = build_main_prompt(include_validation_feedback=True, validation_errors=validation_errors)
+                            continue
+                    
+                    # Update the response data with validated values
+                    for key, value in parsed_llm_output.items():
+                        if key in llm_response_data: # Only update keys that were expected
+                            is_checkbox = (using_schema_format and 
+                                         isinstance(template_placeholder_contexts.get(key), dict) and 
+                                         template_placeholder_contexts.get(key, {}).get("type") == "boolean") or \
+                                         (not using_schema_format and key.endswith("_check"))
+                            
+                            if is_checkbox:
+                                if isinstance(value, str) and value.upper() in ["YES", "NO"]:
+                                    llm_response_data[key] = value.upper()
+                                # else: keep default "NO"
+                            else: # It's a text field
+                                llm_response_data[key] = str(value) # Assign extracted text
+                    
+                    # If we got here without validation errors or we're at max retries, break the loop
+                    break
+                else:
+                    print(f"Warning: LLM response for machine '{machine_name}' was not a JSON dictionary: {parsed_llm_output}")
+                    if retries < max_retries:
+                        retries += 1
+                        prompt = build_main_prompt(include_validation_feedback=True, 
+                                                 validation_errors={"format": ["Response was not a valid JSON object"]})
+                        continue
+                    else:
+                        break
+            except json.JSONDecodeError as e:
+                print(f"Error decoding LLM JSON response for machine '{machine_name}': {e}")
+                print(f"LLM Response Text was: {repr(cleaned_response_text)}")
+                if retries < max_retries:
+                    retries += 1
+                    prompt = build_main_prompt(include_validation_feedback=True, 
+                                             validation_errors={"format": ["Response was not valid JSON: " + str(e)]})
+                    continue
+                else:
+                    break
+        except Exception as e:
+            print(f"Error getting LLM data for machine '{machine_name}': {e}")
+            if retries < max_retries:
+                retries += 1
+                continue
+            else:
+                break
+    
     return llm_response_data
 
 # Example Usage:
