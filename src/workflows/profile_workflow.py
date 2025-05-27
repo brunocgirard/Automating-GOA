@@ -17,11 +17,24 @@ def extract_client_profile(pdf_path):
     Extract standard client information from PDF and build comprehensive profile
     """
     try:
+        temp_pdf_path = None
+        
+        # Handle both file paths and UploadedFile objects
+        if hasattr(pdf_path, "name"):  # It's a Streamlit UploadedFile
+            temp_pdf_path = os.path.join(".", pdf_path.name)
+            with open(temp_pdf_path, "wb") as f:
+                f.write(pdf_path.getbuffer())
+            pdf_filename = pdf_path.name
+            actual_pdf_path = temp_pdf_path
+        else:  # It's already a file path
+            pdf_filename = os.path.basename(pdf_path)
+            actual_pdf_path = pdf_path
+        
         # Extract full text for LLM processing
-        full_text = extract_full_pdf_text(pdf_path)
+        full_text = extract_full_pdf_text(actual_pdf_path)
         
         # Extract line items
-        line_items = extract_line_item_details(pdf_path)
+        line_items = extract_line_item_details(actual_pdf_path)
         
         # Define standard fields based on mapping_mailmerge.txt
         standard_fields = [
@@ -92,7 +105,7 @@ def extract_client_profile(pdf_path):
             else:
                 # Fallback to extracting quote ref from filename
                 client_info = {
-                    "Quote No": os.path.basename(pdf_path).split('.')[0],
+                    "Quote No": pdf_filename.split('.')[0],
                     "Customer": "",
                     "Company": ""
                 }
@@ -100,7 +113,7 @@ def extract_client_profile(pdf_path):
             print(f"Error extracting client info via LLM: {e}")
             # Fallback to simple extraction
             client_info = {
-                "Quote No": os.path.basename(pdf_path).split('.')[0],
+                "Quote No": pdf_filename.split('.')[0],
                 "Customer": "",
                 "Company": ""
             }
@@ -108,7 +121,7 @@ def extract_client_profile(pdf_path):
         # Map standard fields to client_info structure
         mapped_client_info = {
             "client_name": client_info.get("Customer", "") or client_info.get("Company", ""),
-            "quote_ref": client_info.get("Quote No", os.path.basename(pdf_path).split('.')[0]),
+            "quote_ref": client_info.get("Quote No", pdf_filename.split('.')[0]),
             "contact_person": client_info.get("Customer contact", ""),
             "phone": client_info.get("Telefone", ""),
             "billing_address": "\n".join([
@@ -139,7 +152,7 @@ def extract_client_profile(pdf_path):
             "line_items": line_items,
             "machines_data": machines_data, # This will be refined by user confirmation
             "full_text": full_text,
-            "pdf_filename": os.path.basename(pdf_path)
+            "pdf_filename": pdf_filename
         }
         
         return profile
@@ -147,6 +160,10 @@ def extract_client_profile(pdf_path):
         print(f"Error in extract_client_profile: {e}")
         traceback.print_exc()
         return None
+    finally:
+        # Clean up temporary file if created
+        if temp_pdf_path and os.path.exists(temp_pdf_path) and hasattr(pdf_path, "name"):
+            os.remove(temp_pdf_path)
 
 def confirm_client_profile(extracted_profile):
     """
@@ -396,6 +413,12 @@ def confirm_client_profile(extracted_profile):
                 # Call load_crm_data from app.py or pass it as an argument if needed to refresh lists
                 # For now, assuming direct call might error or session_state is used by load_crm_data directly
                 st.session_state.all_crm_clients = load_all_clients() # Direct call to refresh
+                if confirmed_profile:
+                    st.session_state.confirmed_profile = confirmed_profile
+                    st.session_state.profile_extraction_step = "action_selection" 
+                    st.session_state.current_page = "Client Dashboard" 
+                    st.rerun()
+                else: st.error(f"Could not load full profile for {client_record.get('quote_ref')}.")
                 return confirmed_profile
             else:
                 st.error("Failed to save client profile to database.")
@@ -449,22 +472,14 @@ def show_action_selection(client_profile):
                 return "goa_generation"
     with col2:
         with st.container(border=True):
-            st.markdown("### 📦 Export Documents")
-            st.markdown("Create packing slips, commercial invoices and certificates")
-            if st.button("Export Documents", key="action_export", use_container_width=True):
-                st.session_state.current_action = "export_documents"
-                st.session_state.action_profile = client_profile
-                return "export_documents"
-    col3, col4 = st.columns(2)
-    with col3:
-        with st.container(border=True):
             st.markdown("### ✏️ Edit Profile")
             st.markdown("Update client information and manage machines")
             if st.button("Edit Profile", key="action_edit", use_container_width=True):
                 st.session_state.current_action = "edit_profile"
                 st.session_state.action_profile = client_profile
                 return "edit_profile"
-    with col4:
+    col3, col4 = st.columns(2)
+    with col3:
         with st.container(border=True):
             st.markdown("### 💬 Chat with Quote")
             st.markdown("Ask questions about the quote and get answers")
@@ -494,13 +509,25 @@ def handle_selected_action(action, profile_data):
 
     if action == "goa_generation":
         st.session_state.current_page = "Quote Processing"
-        st.session_state.processing_step = 1
         st.session_state.full_pdf_text = profile_data.get("full_text", "")
         st.session_state.items_for_confirmation = profile_data.get("line_items", [])
         st.session_state.processing_done = True
+        
+        # Mark machine selection steps as already complete
+        st.session_state.machine_confirmation_done = True
+        st.session_state.common_options_confirmation_done = True
+        
+        # Set processing step to 3 (machine processing) to skip selection steps
+        st.session_state.processing_step = 3
+        
         if os.path.exists(TEMPLATE_FILE):
             st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
+        
+        # Load the machine data from the profile
         machines_data = profile_data.get("machines_data", {})
+        st.session_state.identified_machines_data = machines_data
+        
+        # Still populate these for compatibility with other functions
         st.session_state.selected_main_machines = []
         st.session_state.selected_common_options = []
         for i, item in enumerate(st.session_state.items_for_confirmation):
@@ -508,13 +535,6 @@ def handle_selected_action(action, profile_data):
             if is_main_machine: st.session_state.selected_main_machines.append(i)
             elif any(common_item == item for common_item in machines_data.get("common_items", [])):
                  st.session_state.selected_common_options.append(i)
-        return
-    elif action == "export_documents":
-        st.session_state.current_page = "Export Documents"
-        client_info = profile_data.get("client_info", {})
-        quote_ref = client_info.get("quote_ref")
-        if st.session_state.all_crm_clients:
-            st.session_state.selected_client_for_detail_edit = next((c for c in st.session_state.all_crm_clients if c.get("quote_ref") == quote_ref), None)
         return
     elif action == "edit_profile":
         st.session_state.current_page = "CRM Management"

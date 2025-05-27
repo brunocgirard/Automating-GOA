@@ -28,112 +28,168 @@ from src.generators.document_generators import generate_packing_slip_data, gener
 
 # Moved from app.py
 def show_welcome_page():
-    st.title("Welcome to the QuoteFlow Document Assistant")
-    if st.session_state.get("profile_extraction_step") == "action_selection" and st.session_state.get("confirmed_profile"):
-        action = show_action_selection(st.session_state.get("confirmed_profile"))
-        if action:
-            handle_selected_action(action, st.session_state.get("confirmed_profile"))
-            st.rerun()
-        return
-    st.markdown("""
-    ## What This Application Does
-    This tool helps you process machine quotes to generate various documents and manage client data.
+    """
+    Displays the welcome page interface with quote upload and client dashboard access
+    """
+    st.title("QuoteFlow Document Assistant")
     
-    ## Getting Started
-    Upload a quote PDF to extract client profile information or process it directly.
-    """)
-    uploaded_pdf = st.file_uploader("Choose PDF Quote", type="pdf", key="welcome_page_uploader")
-    if uploaded_pdf:
-        st.session_state.extracted_profile = None
-        st.session_state.confirmed_profile = None
-        st.session_state.profile_extraction_step = "ready_to_extract"
-        st.session_state.selected_main_machines_profile = []
-        st.session_state.selected_common_options_profile = []
-        st.session_state.profile_machine_confirmation_step = "main_machines"
+    # Status check for existing client profiles
+    if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "action_selection":
+        if "confirmed_profile" in st.session_state and st.session_state.confirmed_profile:
+            return show_action_selection(st.session_state.confirmed_profile)
+    
+    st.subheader("📂 Recent Client Profiles")
+    client_profiles_container = st.container()
+    
+    with client_profiles_container:
+        if st.session_state.all_crm_clients and len(st.session_state.all_crm_clients) > 0:
+            recent_clients = st.session_state.all_crm_clients[:5]  # Show 5 most recent
+            for client_summary_item in recent_clients:
+                with st.container(border=True):
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.markdown(f"### {client_summary_item.get('customer_name', 'Unnamed Client')}")
+                        st.markdown(f"**Quote:** {client_summary_item.get('quote_ref', 'N/A')}")
+                        if client_summary_item.get('machine_model'): 
+                            st.markdown(f"**Machine(s):** {client_summary_item.get('machine_model', 'Unknown')}")
+                    with col2:
+                        if st.button("View Details", key=f"view_client_{client_summary_item.get('id')}", use_container_width=True):
+                            full_profile_data = load_full_client_profile(client_summary_item.get('quote_ref'))
+                            if full_profile_data:
+                                st.session_state.confirmed_profile = full_profile_data
+                                st.session_state.profile_extraction_step = "action_selection" 
+                                st.rerun()
+                            else: st.error(f"Could not load full profile for {client_summary_item.get('quote_ref')}.")
+            st.markdown("&nbsp;") 
+            if len(st.session_state.all_crm_clients) > 5:
+                if st.button("View All Clients", use_container_width=True):
+                    st.session_state.current_page = "Client Dashboard"
+                    st.rerun()
+        else:
+            st.info("No client profiles found. Upload a quote below to create a new profile.")
+    
+    st.markdown("---")
+    st.subheader("📤 Upload New Quote")
+    uploaded_file = st.file_uploader("Choose a PDF quote to process", type=["pdf"], key="pdf_uploader_welcome")
+    
+    if uploaded_file is not None:
+        st.markdown(f"Uploaded: **{uploaded_file.name}**")
+        
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📋 Extract Client Profile", type="primary"):
-                with st.spinner("Extracting client profile..."):
-                    temp_pdf_path = os.path.join(".", uploaded_pdf.name)
-                    try:
-                        with open(temp_pdf_path, "wb") as f: f.write(uploaded_pdf.getbuffer())
-                        profile = extract_client_profile(temp_pdf_path)
-                        if profile:
-                            st.session_state.extracted_profile = profile
-                            st.session_state.profile_extraction_step = "confirm"
-                            st.rerun()
-                        else: st.error("Failed to extract client profile. Please try again.")
-                    finally:
-                        if os.path.exists(temp_pdf_path): os.remove(temp_pdf_path)
-        with col2:
-            if st.button("🚀 Process Document Directly (GOA)", key="direct_process_btn"):
-                st.session_state.current_page = "Quote Processing"
-                TEMPLATE_FILE = "template.docx"
-                if not os.path.exists(TEMPLATE_FILE): st.error(f"Template '{TEMPLATE_FILE}' not found.")
+            if st.button("Extract Full Profile", key="extract_profile_btn", type="primary", use_container_width=True):
+                st.session_state.extracted_profile = extract_client_profile(uploaded_file)
+                if st.session_state.extracted_profile:
+                    st.session_state.profile_extraction_step = "confirmation"
+                    st.rerun()
                 else:
-                    from app import perform_initial_processing # Assuming it's in app.py
-                    if perform_initial_processing(uploaded_pdf, TEMPLATE_FILE):
-                        st.session_state.processing_step = 1
-                    else: st.error("Failed to start direct document processing.")
+                    st.error("Failed to extract profile from the uploaded PDF.")
+        
+        with col2:
+            if st.button("Quick Catalog Only", key="quick_catalog_btn", use_container_width=True):
+                from app import quick_extract_and_catalog
+                result = quick_extract_and_catalog(uploaded_file)
+                if result:
+                    st.success(f"Quote {result['quote_ref']} cataloged with {len(result['items'])} items.")
+                    st.session_state.all_crm_clients = load_all_clients() # Refresh
+                else:
+                    st.error("Failed to catalog the uploaded PDF.")
+    
+    # Profile extraction workflow - confirmation step
+    if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "confirmation":
+        if "extracted_profile" in st.session_state and st.session_state.extracted_profile:
+            # Show confirmation UI
+            st.session_state.confirmed_profile = confirm_client_profile(st.session_state.extracted_profile)
+            if st.session_state.confirmed_profile:
+                st.session_state.profile_extraction_step = "action_selection"
                 st.rerun()
-    if st.session_state.get("profile_extraction_step") == "confirm":
-        if st.session_state.get("extracted_profile"):
-            confirmed_profile_data = confirm_client_profile(st.session_state.get("extracted_profile"))
-            if confirmed_profile_data:
-                st.session_state.confirmed_profile = confirmed_profile_data
-                st.session_state.current_client_profile = confirmed_profile_data 
-                st.session_state.current_page = "Client Dashboard"
-                st.session_state.profile_extraction_step = None 
-                st.rerun()
-        else: st.info("Upload a PDF to extract and confirm a client profile.")
-    st.markdown("---")
-    st.markdown("### Alternative Options")
-    col_alt1, col_alt2, col_alt3 = st.columns(3)
-    with col_alt1: 
-        if st.button("👤 Client Dashboard", key="goto_dashboard"): 
-            st.session_state.current_page = "Client Dashboard"; st.rerun()
-    with col_alt2: 
-        if st.button("⚙️ Process Quote for GOA", key="goto_processing"): 
-            st.session_state.current_page = "Quote Processing"; st.rerun()
-    with col_alt3: 
-        if st.button("📒 View CRM Data", key="goto_crm"): 
-            st.session_state.current_page = "CRM Management"; st.rerun()
 
 def show_client_dashboard_page():
-    st.title("👤 Client Dashboard")
-    st.markdown("Select a client to view their profile and available actions, or upload a new quote on the Welcome page.")
-    if not st.session_state.get('crm_data_loaded', False):
-        from app import load_crm_data # Assuming it's in app.py
-        load_crm_data()
-    clients = st.session_state.all_crm_clients
-    if not clients:
-        st.info("No clients found. Upload a quote on the Welcome page to create a client profile.")
-        if st.button("Go to Welcome Page", key="dash_to_welcome_no_clients"): st.session_state.current_page = "Welcome"; st.rerun()
-        return
-    search_term = st.text_input("Search clients (by name or quote ref)", key="client_dashboard_search_input")
-    filtered_clients = [c for c in clients if (search_term.lower() in c.get("customer_name", "").lower() or 
-                                            search_term.lower() in c.get("quote_ref", "").lower())] if search_term else clients
-    if not filtered_clients and search_term: st.warning(f"No clients found matching '{search_term}'.")
-    for client_summary_item in filtered_clients:
-        with st.container(border=True):
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1: st.subheader(f"{client_summary_item.get('customer_name', 'N/A')}"); st.caption(f"Quote Ref: {client_summary_item.get('quote_ref', 'N/A')}")
-            with col2: 
-                processing_date_str = client_summary_item.get('processing_date', 'N/A'); 
-                try: formatted_date = pd.to_datetime(processing_date_str).strftime('%Y-%m-%d %H:%M')
-                except: formatted_date = processing_date_str
-                st.caption(f"Last Processed: {formatted_date}")
-            with col3:
-                if st.button("View Actions", key=f"view_actions_{client_summary_item.get('id')}", use_container_width=True):
-                    with st.spinner(f"Loading profile for {client_summary_item.get('quote_ref')}..."):
-                        full_profile_data = load_full_client_profile(client_summary_item.get("quote_ref"))
-                    if full_profile_data:
-                        st.session_state.confirmed_profile = full_profile_data
-                        st.session_state.profile_extraction_step = "action_selection" 
-                        st.session_state.current_page = "Welcome" 
+    """
+    Displays the client dashboard interface for browsing and selecting clients
+    """
+    st.title("📊 Client Dashboard")
+    
+    # Status check for existing client profiles
+    if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "action_selection":
+        if "confirmed_profile" in st.session_state and st.session_state.confirmed_profile:
+            action = show_action_selection(st.session_state.confirmed_profile)
+            if action:
+                handle_selected_action(action, st.session_state.confirmed_profile)
+                st.rerun()
+            return
+    
+    # Upload section
+    with st.expander("Upload New Quote", expanded=False):
+        uploaded_file = st.file_uploader("Choose a PDF quote to process", type=["pdf"], key="pdf_uploader_dashboard")
+        
+        if uploaded_file is not None:
+            st.markdown(f"Uploaded: **{uploaded_file.name}**")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Extract Full Profile", key="extract_profile_dash_btn", type="primary", use_container_width=True):
+                    st.session_state.extracted_profile = extract_client_profile(uploaded_file)
+                    if st.session_state.extracted_profile:
+                        st.session_state.profile_extraction_step = "confirmation"
                         st.rerun()
-                    else: st.error(f"Could not load full profile for {client_summary_item.get('quote_ref')}.")
-            st.markdown("&nbsp;") 
+                    else:
+                        st.error("Failed to extract profile from the uploaded PDF.")
+            
+            with col2:
+                if st.button("Quick Catalog Only", key="quick_catalog_dash_btn", use_container_width=True):
+                    from app import quick_extract_and_catalog
+                    result = quick_extract_and_catalog(uploaded_file)
+                    if result:
+                        st.success(f"Quote {result['quote_ref']} cataloged with {len(result['items'])} items.")
+                        st.session_state.all_crm_clients = load_all_clients() # Refresh
+                    else:
+                        st.error("Failed to catalog the uploaded PDF.")
+    
+    # Client browser
+    st.subheader("Client Browser")
+    if st.session_state.all_crm_clients and len(st.session_state.all_crm_clients) > 0:
+        st.markdown("Select a client to view their profile and available actions.")
+        
+        # Search and filter
+        search_term = st.text_input("Search by name or quote reference:", key="client_search")
+        
+        filtered_clients = st.session_state.all_crm_clients
+        if search_term:
+            filtered_clients = [
+                c for c in st.session_state.all_crm_clients
+                if search_term.lower() in c.get('customer_name', '').lower() 
+                or search_term.lower() in c.get('quote_ref', '').lower()
+            ]
+        
+        # Display clients
+        for client_item in filtered_clients:
+            with st.container(border=True):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(f"### {client_item.get('customer_name', 'Unnamed Client')}")
+                    st.markdown(f"**Quote:** {client_item.get('quote_ref', 'N/A')}")
+                    if client_item.get('machine_model'): 
+                        st.markdown(f"**Machine(s):** {client_item.get('machine_model', 'Unknown')}")
+                with col2:
+                    if st.button("View Details", key=f"view_client_dash_{client_item.get('id')}", use_container_width=True):
+                        full_profile_data = load_full_client_profile(client_item.get('quote_ref'))
+                        if full_profile_data:
+                            st.session_state.confirmed_profile = full_profile_data
+                            st.session_state.profile_extraction_step = "action_selection" 
+                            st.rerun()
+                        else: st.error(f"Could not load full profile for {client_item.get('quote_ref')}.")
+    else:
+        st.info("No clients found. Upload a new quote to create a client profile.")
+    
+    # Profile extraction workflow - confirmation step
+    if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "confirmation":
+        if "extracted_profile" in st.session_state and st.session_state.extracted_profile:
+            # Show confirmation UI
+            st.session_state.confirmed_profile = confirm_client_profile(st.session_state.extracted_profile)
+            if st.session_state.confirmed_profile:
+                st.session_state.profile_extraction_step = "action_selection"
+                st.rerun()
 
 def show_quote_processing():
     st.title("📄 Quote Processing")
@@ -252,137 +308,6 @@ def show_quote_processing():
         else: 
             st.warning("No machines for GOA processing.")
             if st.button("⬅️ Start Over (GOA No Machines)", key="goa_restart_no_machines"): st.session_state.processing_step = 0; st.rerun()
-        st.markdown("---"); 
-        if st.button("Go to Export Documents Page", key="goa_goto_export"): st.session_state.current_page = "Export Documents"; st.rerun()
-
-def show_export_documents():
-    st.title("📦 Export Documents")
-    from app import generate_export_document, calculate_machine_price, TEMPLATE_PACKING_SLIP, TEMPLATE_COMMERCIAL_INVOICE, TEMPLATE_CERTIFICATE_OF_ORIGIN
-
-    st.subheader("Select Client for Export Documents")
-    client_options_display = ["Select a Client..."] + [f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')} (ID: {c.get('id')})" for c in st.session_state.all_crm_clients]
-    selected_client_option_str = st.selectbox("Choose client:", client_options_display, key=f"export_client_select_{st.session_state.run_key}", index=0)
-
-    if selected_client_option_str != "Select a Client...":
-        try:
-            selected_id = int(selected_client_option_str.split("(ID: ")[-1][:-1])
-            client_data = get_client_by_id(selected_id)
-            if client_data:
-                st.session_state.selected_client_for_detail_edit = client_data
-                quote_ref = client_data.get('quote_ref')
-                machines_data_db = load_machines_for_quote(quote_ref)
-                
-                if machines_data_db:
-                    st.subheader("Generate Export Documents")
-                    processed_machines = []
-                    for machine_db_item in machines_data_db:
-                        machine_detail = machine_db_item.get("machine_data", {})
-                        machine_detail["id"] = machine_db_item.get("id")
-                        processed_machines.append(machine_detail)
-                    
-                    common_items_from_profile = [] 
-                    if processed_machines: common_items_from_profile = processed_machines[0].get("common_items", [])
-                    st.session_state.identified_machines_data = {"machines": processed_machines, "common_items": common_items_from_profile}
-
-                    with st.form(key=f"export_docs_form_{client_data.get('id')}"):
-                        st.markdown("Select machines for export documents:")
-                        selected_machine_indices_for_export = []
-                        for i, machine_to_select in enumerate(processed_machines):
-                            machine_name = machine_to_select.get("machine_name", f"Machine {i+1}")
-                            machine_price = calculate_machine_price(machine_to_select)
-                            if st.checkbox(f"{machine_name} (${machine_price:.2f})", value=True, key=f"export_sel_mach_{client_data.get('id')}_{i}"):
-                                selected_machine_indices_for_export.append(i)
-                        
-                        include_common_for_export = st.checkbox("Include common items", value=True, key=f"export_inc_common_{client_data.get('id')}")
-                        
-                        available_templates_for_export = []
-                        if os.path.exists(TEMPLATE_PACKING_SLIP): available_templates_for_export.append("Packing Slip")
-                        if os.path.exists(TEMPLATE_COMMERCIAL_INVOICE): available_templates_for_export.append("Commercial Invoice")
-                        if os.path.exists(TEMPLATE_CERTIFICATE_OF_ORIGIN): available_templates_for_export.append("Certificate of Origin")
-                        
-                        if not available_templates_for_export: 
-                            st.warning("No export document templates found.")
-                            template_type_export = None
-                        else: 
-                            template_type_export = st.radio("Select document type:", available_templates_for_export, key=f"export_template_type_{client_data.get('id')}")
-                        
-                        submit_export_button = st.form_submit_button("Generate Selected Export Document")
-
-                    if submit_export_button:
-                        if not selected_machine_indices_for_export: st.warning("Please select at least one machine.")
-                        elif template_type_export:
-                            selected_machines_for_doc = [processed_machines[i] for i in selected_machine_indices_for_export]
-                            doc_type_map = {"Packing Slip": ("packing_slip", TEMPLATE_PACKING_SLIP), 
-                                            "Commercial Invoice": ("commercial_invoice", TEMPLATE_COMMERCIAL_INVOICE),
-                                            "Certificate of Origin": ("certificate_of_origin", TEMPLATE_CERTIFICATE_OF_ORIGIN)}
-                            doc_type_key, template_path_for_doc = doc_type_map.get(template_type_export, (None,None))
-
-                            if doc_type_key and template_path_for_doc:
-                                if doc_type_key == "packing_slip":
-                                    initial_packing_slip_data = generate_packing_slip_data(client_data, st.session_state.identified_machines_data.get("common_items", []) + [item for machine in selected_machines_for_doc for item in [machine.get("main_item")] + machine.get("add_ons",[]) if item])
-                                    st.session_state.interactive_packing_slip_data = initial_packing_slip_data
-                                    st.session_state.packing_slip_template_contexts = extract_placeholder_context_hierarchical(template_path_for_doc)
-                                    st.session_state.show_packing_slip_editor = True
-                                    st.session_state.current_packing_slip_client_data = client_data
-                                    st.session_state.current_packing_slip_selected_machines = selected_machines_for_doc
-                                    st.session_state.current_packing_slip_include_common = include_common_for_export
-                                    st.session_state.current_packing_slip_template_path = template_path_for_doc
-                                    st.rerun()
-                                else:
-                                    with st.spinner(f"Generating {template_type_export}..."):
-                                        output_path = generate_export_document(doc_type_key, selected_machines_for_doc, include_common_for_export, template_path_for_doc, client_data)
-                                        if output_path and os.path.exists(output_path):
-                                            st.success(f"{template_type_export} generated: {os.path.basename(output_path)}")
-                                            with open(output_path, "rb") as f: st.download_button(f"Download {template_type_export}", f, file_name=os.path.basename(output_path), mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                                        else: st.error(f"Failed to generate {template_type_export}.")
-                            else: st.error("Selected document type or template path is invalid.")
-                        else: st.error("Please select a document type.")
-                
-                if st.session_state.get("show_packing_slip_editor", False):
-                    st.subheader(f"📝 Edit Packing Slip Data for {client_data.get('customer_name')}")
-                    interactive_data = st.session_state.interactive_packing_slip_data
-                    template_contexts = st.session_state.packing_slip_template_contexts
-                    edited_data_from_ui = {}
-                    for ph, context_desc in template_contexts.items():
-                        current_val = interactive_data.get(ph, "")
-                        user_label = f"{context_desc} (Placeholder: {ph})" if context_desc and context_desc != ph else ph
-                        if ph.endswith("_check"):
-                            edited_data_from_ui[ph] = st.selectbox(user_label, options=["YES", "NO"], index=0 if current_val == "NO" else 1, key=f"edit_ps_{ph}")
-                        else:
-                            edited_data_from_ui[ph] = st.text_input(user_label, value=current_val, key=f"edit_ps_{ph}")
-                    
-                    if st.button("💾 Save Changes and Generate Packing Slip", key="save_generate_ps"):
-                        st.session_state.interactive_packing_slip_data = edited_data_from_ui
-                        current_client_data = st.session_state.current_packing_slip_client_data
-                        current_template_path = st.session_state.current_packing_slip_template_path
-                        output_filename_ps = f"packing_slip_{current_client_data.get('quote_ref', 'client')}_{st.session_state.run_key}.docx"
-                        fill_word_document_from_llm_data(current_template_path, st.session_state.interactive_packing_slip_data, output_filename_ps)
-                        if os.path.exists(output_filename_ps):
-                            st.success(f"Packing Slip generated with your edits: {output_filename_ps}")
-                            with open(output_filename_ps, "rb") as fp_ps: 
-                                st.download_button("Download Edited Packing Slip", fp_ps, os.path.basename(output_filename_ps), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="dl_edited_ps")
-                        else: st.error("Failed to generate packing slip with edits.")
-                        st.session_state.show_packing_slip_editor = False
-                        st.rerun()
-
-                elif not machines_data_db:
-                    st.warning("No machines identified for this client. Process their quote first or upload PDF below.")
-                    pdf_for_export_processing = st.file_uploader("Upload Quote PDF to process for export documents:", type="pdf", key=f"export_pdf_direct_upload_{client_data.get('id')}")
-                    if pdf_for_export_processing and st.button("Process Uploaded PDF for Export", key=f"process_export_direct_pdf_{client_data.get('id')}"):
-                        from app import quick_extract_and_catalog
-                        with st.spinner("Processing PDF for export..."):
-                            qec_result = quick_extract_and_catalog(pdf_for_export_processing)
-                            if qec_result:
-                                st.success(f"PDF processed and cataloged for quote {qec_result.get('quote_ref')}. Please re-select client to see machines.")
-                                st.rerun()
-                            else: st.error("Failed to process uploaded PDF for export.")
-            else: st.error(f"Could not load client data for ID: {selected_id}")
-        except ValueError:
-             st.error("Invalid client selection string.")
-        except Exception as e:
-            st.error(f"Error in Export Documents: {e}"); traceback.print_exc()
-    else:
-        st.info("Select a client to generate export documents.")
 
 def show_crm_management_page():
     st.title("📒 CRM Management")
@@ -414,7 +339,7 @@ def show_crm_management_page():
                 st.session_state.confirming_delete_client_id = None
             client_to_display_and_edit = st.session_state.selected_client_for_detail_edit
             if client_to_display_and_edit:
-                client_tab1, client_tab2, client_tab3, client_tab4 = st.tabs(["📋 Client Details", "💲 Priced Items", "📄 Export Docs (Client)", "📤 Upload PDF (Client)"])
+                client_tab1, client_tab2, client_tab3 = st.tabs(["📋 Client Details", "💲 Priced Items", "📤 Upload PDF (Client)"])
                 with client_tab1:
                     with client_detail_editor_placeholder.container():
                         st.markdown("**Edit Client Details:**")
@@ -466,10 +391,7 @@ def show_crm_management_page():
                             if changes_applied > 0: st.success(f"{changes_applied} item(s) updated!"); load_crm_data(); st.rerun()
                             else: st.info("No changes to save in priced items.")
                     else: st.info("No priced items for this quote.")
-                with client_tab3:
-                    st.subheader("📄 Generate Export Documents (Client Focus)")
-                    show_export_documents()
-                with client_tab4: 
+                with client_tab3: 
                     st.subheader(f"📤 Upload PDF to {client_to_display_and_edit.get('customer_name', '')}")
                     quote_ref_for_upload = client_to_display_and_edit.get('quote_ref')
                     uploaded_pdf_client = st.file_uploader("Choose PDF for this client", type="pdf", key=f"client_pdf_upload_{quote_ref_for_upload}")
@@ -503,61 +425,72 @@ def show_crm_management_page():
     else: st.info("No client records found.")
 
 def show_chat_page():
-    st.title("💬 Chat with Quote")
+    st.title("💬 Chat Interface")
     
-    chat_context = st.session_state.get("chat_context")
-    # Retrieve the action_profile that was set when entering the chat page
-    # This profile is essential for returning to the action hub correctly.
-    action_profile_for_chat = st.session_state.get("action_profile") 
-
-    if not chat_context or not action_profile_for_chat:
-        st.warning("No quote context available for chat or initiating profile missing.")
-        st.info("Please try selecting the quote and the 'Chat with Quote' action again from the Client Dashboard or Welcome Page.")
-        if st.button("Return to Welcome Page"):
-            st.session_state.current_page = "Welcome"
-            st.session_state.chat_context = None
-            st.session_state.action_profile = None # Clear this too
-            st.session_state.quote_chat_history = []
-            st.session_state.profile_extraction_step = None # Ensure welcome page starts fresh if context is lost
-            st.session_state.confirmed_profile = None
+    # Check if we have a specific chat context
+    if "chat_context" in st.session_state and st.session_state.chat_context:
+        chat_context = st.session_state.chat_context
+        context_client = chat_context.get("client_info", {})
+        
+        # Display context information
+        with st.container(border=True):
+            st.markdown("### Current Chat Context")
+            if context_client:
+                st.markdown(f"**Client:** {context_client.get('client_name', 'Unknown')}")
+                st.markdown(f"**Quote:** {context_client.get('quote_ref', 'Unknown')}")
+            else:
+                st.markdown("No specific client context.")
+    else:
+        # No context
+        st.info("Please try selecting the quote and the 'Chat with Quote' action again from the Client Dashboard.")
+        if st.button("Return to Client Dashboard"):
+            st.session_state.current_page = "Client Dashboard"
             st.rerun()
         return
     
-    client_info = chat_context.get("client_info", {})
-    if client_info: st.markdown(f"**Client:** {client_info.get('client_name', 'N/A')} - **Quote:** {client_info.get('quote_ref', 'N/A')}")
-    st.markdown("### Ask about this quote")
-    if "quote_chat_history" not in st.session_state: st.session_state.quote_chat_history = []
-    for message in st.session_state.quote_chat_history: 
-        with st.chat_message(message["role"]): st.write(message["content"])
-    if prompt := st.chat_input("Your question..."):
-        st.session_state.quote_chat_history.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.write(prompt)
-        with st.spinner("Thinking..."):
-            try:
-                full_pdf_text = st.session_state.chat_context.get("full_pdf_text", "")
-                # Assuming answer_pdf_question is available from llm_handler
-                from src.utils.llm_handler import answer_pdf_question 
-                response = answer_pdf_question(prompt, [], full_pdf_text, {})
-                st.session_state.quote_chat_history.append({"role": "assistant", "content": response})
-                with st.chat_message("assistant"): st.write(response)
-            except Exception as e: st.error(f"Error in chat: {e}"); traceback.print_exc()
-    st.markdown("---")
-    if st.button("Return to Action Selection", key="chat_return_actions"):
-        # Use the action_profile_for_chat that was stored when entering the chat page
-        if action_profile_for_chat:
-            st.session_state.confirmed_profile = action_profile_for_chat 
-            st.session_state.profile_extraction_step = "action_selection"
-            st.session_state.current_page = "Welcome" # Action hub is on Welcome
-        else:
-            # Fallback if action_profile_for_chat was somehow lost, though the check at the start should prevent this.
-            st.session_state.current_page = "Welcome"
-            st.session_state.profile_extraction_step = None 
-            st.session_state.confirmed_profile = None
-        
-        # Always clear chat-specific states when leaving the chat page this way
-        st.session_state.chat_context = None
+    # Reset button
+    if st.button("🔄 New Chat"):
         st.session_state.quote_chat_history = []
-        st.session_state.action_profile = None # Clear the specific action_profile for chat too
+        st.rerun()
+    
+    # Chat message container
+    if "quote_chat_history" not in st.session_state:
+        st.session_state.quote_chat_history = []
+    
+    # Display chat history
+    for msg in st.session_state.quote_chat_history:
+        role = msg.get("role", "assistant")
+        with st.chat_message(role):
+            st.markdown(msg.get("content", ""))
+    
+    # Chat input
+    user_input = st.chat_input("Ask a question about the quote...")
+    if user_input:
+        # Add user message to chat history
+        st.session_state.quote_chat_history.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        
+        # Process query
+        with st.spinner("Thinking..."):
+            from app import process_chat_query, get_current_context
+            context_type, context_data = get_current_context()
+            ai_response = process_chat_query(user_input, context_type, context_data)
+        
+        # Add AI response to chat history
+        st.session_state.quote_chat_history.append({"role": "assistant", "content": ai_response})
+        with st.chat_message("assistant"):
+            st.markdown(ai_response)
+    
+    # Return button
+    if st.button("⬅️ Back to Client Dashboard"):
+        st.session_state.current_page = "Client Dashboard"
+        if st.session_state.profile_extraction_step == "action_selection":
+            # Action hub is on Client Dashboard
+            pass
+        else:
+            st.session_state.chat_context = None
+            st.session_state.quote_chat_history = []
         st.rerun()
 
 def render_chat_ui(): 

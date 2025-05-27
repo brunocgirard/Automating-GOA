@@ -9,7 +9,7 @@ import shutil
 # Import from new modules
 from src.ui.ui_pages import (
     show_welcome_page, show_client_dashboard_page, show_quote_processing, 
-    show_export_documents, show_crm_management_page, show_chat_page, render_chat_ui
+    show_crm_management_page, show_chat_page, render_chat_ui
 )
 from src.workflows.profile_workflow import (
     extract_client_profile, confirm_client_profile, show_action_selection, 
@@ -28,17 +28,13 @@ from src.utils.crm_utils import (
     load_machines_for_quote, save_machine_template_data, load_machine_template_data, 
     save_document_content, load_document_content
 )
-from src.generators.document_generators import generate_packing_slip_data, generate_commercial_invoice_data, generate_certificate_of_origin_data
 
 # Define Template File Constants
 TEMPLATE_FILE = os.path.join("templates", "template.docx")
-TEMPLATE_PACKING_SLIP = os.path.join("templates", "Packing Slip.docx")
-TEMPLATE_COMMERCIAL_INVOICE = os.path.join("templates", "Commercial Invoice.docx")
-TEMPLATE_CERTIFICATE_OF_ORIGIN = os.path.join("templates", "CERTIFICATION OF ORIGIN_NAFTA.docx")
 
 # --- App State Initialization ---
 def initialize_session_state(is_new_processing_run=False):
-    if "current_page" not in st.session_state: st.session_state.current_page = "Welcome"
+    if "current_page" not in st.session_state: st.session_state.current_page = "Client Dashboard"
     if "current_client_profile" not in st.session_state: st.session_state.current_client_profile = None
     if "chat_history" not in st.session_state: st.session_state.chat_history = []
     if "profile_extraction_step" not in st.session_state: st.session_state.profile_extraction_step = None
@@ -104,13 +100,6 @@ def initialize_session_state(is_new_processing_run=False):
     if 'selected_client_for_detail_edit' not in st.session_state: st.session_state.selected_client_for_detail_edit = None 
     if 'edited_client_details_df' not in st.session_state: st.session_state.edited_client_details_df = pd.DataFrame()
     if 'confirming_delete_client_id' not in st.session_state: st.session_state.confirming_delete_client_id = None
-    if 'interactive_packing_slip_data' not in st.session_state: st.session_state.interactive_packing_slip_data = {}
-    if 'packing_slip_template_contexts' not in st.session_state: st.session_state.packing_slip_template_contexts = {}
-    if 'show_packing_slip_editor' not in st.session_state: st.session_state.show_packing_slip_editor = False
-    if 'current_packing_slip_client_data' not in st.session_state: st.session_state.current_packing_slip_client_data = None
-    if 'current_packing_slip_selected_machines' not in st.session_state: st.session_state.current_packing_slip_selected_machines = []
-    if 'current_packing_slip_include_common' not in st.session_state: st.session_state.current_packing_slip_include_common = True
-    if 'current_packing_slip_template_path' not in st.session_state: st.session_state.current_packing_slip_template_path = ""
 
 # --- Helper Functions ---
 def group_items_by_confirmed_machines(all_items, main_machine_indices, common_option_indices):
@@ -150,34 +139,6 @@ def calculate_common_items_price(common_items):
         item_price = item.get("item_price_numeric", 0)
         if item_price is not None: total_price += item_price
     return total_price
-
-def generate_export_document(document_type, selected_machines, include_common_items, template_file_path, client_data):
-    try:
-        common_items = []
-        if include_common_items and "identified_machines_data" in st.session_state:
-            common_items = st.session_state.identified_machines_data.get("common_items", [])
-        
-        all_items_for_doc = []
-        for machine in selected_machines:
-            if machine.get("main_item"): all_items_for_doc.append(machine.get("main_item"))
-            all_items_for_doc.extend(machine.get("add_ons", []))
-        if include_common_items: all_items_for_doc.extend(common_items)
-
-        machine_names_str = "_".join([m.get("machine_name", "").replace(" ", "") for m in selected_machines])
-        output_filename = f"{document_type}_{machine_names_str[:30]}_{st.session_state.run_key}.docx"
-
-        doc_data_payload = {}
-        if document_type == "packing_slip":
-            doc_data_payload = generate_packing_slip_data(client_data, all_items_for_doc)
-        elif document_type == "commercial_invoice":
-            doc_data_payload = generate_commercial_invoice_data(client_data, all_items_for_doc)
-        elif document_type == "certificate_of_origin":
-            doc_data_payload = generate_certificate_of_origin_data(client_data, all_items_for_doc)
-        else: raise ValueError(f"Unknown document type: {document_type}")
-        
-        fill_word_document_from_llm_data(template_file_path, doc_data_payload, output_filename)
-        return output_filename
-    except Exception as e: st.error(f"Error generating {document_type}: {e}"); traceback.print_exc(); return None
 
 def quick_extract_and_catalog(uploaded_pdf_file):
     temp_pdf_path = None
@@ -325,6 +286,8 @@ def load_previous_document(client_id):
         st.session_state.processing_done = True
         st.session_state.machine_confirmation_done = True
         st.session_state.common_options_confirmation_done = True
+        st.session_state.processing_step = 3  # Skip directly to machine processing step
+        
         if not st.session_state.template_contexts and os.path.exists(TEMPLATE_FILE):
             st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
         return True
@@ -362,28 +325,37 @@ def main():
     if st.session_state.error_message: st.error(st.session_state.error_message); st.session_state.error_message = ""
 
     st.sidebar.title("Navigation")
-    page_options = ["Welcome", "Client Dashboard", "Quote Processing", "Export Documents", "CRM Management", "Chat"]
+    page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Chat"]
+    
+    # Set default page to Client Dashboard
+    if st.session_state.current_page == "Welcome":
+        st.session_state.current_page = "Client Dashboard"
+    
     default_page_index = 0
-    try: default_page_index = page_options.index(st.session_state.current_page)
-    except ValueError: st.session_state.current_page = "Welcome" 
+    try: 
+        default_page_index = page_options.index(st.session_state.current_page)
+    except ValueError: 
+        st.session_state.current_page = "Client Dashboard"
     
     selected_page = st.sidebar.radio("Go to", page_options, index=default_page_index, key="nav_radio")
     if selected_page != st.session_state.current_page:
         st.session_state.current_page = selected_page
         if selected_page == "Quote Processing": st.session_state.processing_step = 0
-        if selected_page not in ["Welcome", "Client Dashboard"] and st.session_state.get("profile_extraction_step") is not None:
-             if not (st.session_state.current_page == "Client Dashboard" and st.session_state.get("confirmed_profile")):
+        if selected_page not in ["Client Dashboard"] and st.session_state.get("profile_extraction_step") is not None:
+            if not (st.session_state.current_page == "Client Dashboard" and st.session_state.get("confirmed_profile")):
                 st.session_state.profile_extraction_step = None; st.session_state.confirmed_profile = None; st.session_state.extracted_profile = None
         st.rerun()
 
     render_chat_ui()
 
-    if st.session_state.current_page == "Welcome": show_welcome_page()
-    elif st.session_state.current_page == "Client Dashboard": show_client_dashboard_page()
-    elif st.session_state.current_page == "Quote Processing": show_quote_processing()
-    elif st.session_state.current_page == "Export Documents": show_export_documents()
-    elif st.session_state.current_page == "CRM Management": show_crm_management_page()
-    elif st.session_state.current_page == "Chat": show_chat_page()
+    if st.session_state.current_page == "Client Dashboard": 
+        show_client_dashboard_page()
+    elif st.session_state.current_page == "Quote Processing": 
+        show_quote_processing()
+    elif st.session_state.current_page == "CRM Management": 
+        show_crm_management_page()
+    elif st.session_state.current_page == "Chat": 
+        show_chat_page()
 
 if __name__ == "__main__":
     main()

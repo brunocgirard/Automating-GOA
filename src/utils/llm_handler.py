@@ -8,6 +8,37 @@ import traceback # For more detailed error logging
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
 
+def check_model_usage():
+    """
+    Sends a minimal test request to check which model is actually being used.
+    This can help verify if you're using the model you think you are.
+    """
+    global GENERATIVE_MODEL
+    if GENERATIVE_MODEL is None:
+        if not configure_gemini_client():
+            print("Error: Could not configure Gemini client to check model usage.")
+            return
+    
+    try:
+        # Send a minimal request to check model usage
+        print("\n--- Checking Actual Model Usage ---")
+        print("Sending test request to Gemini API...")
+        
+        # Get model info
+        model_info = GENERATIVE_MODEL._model_name
+        print(f"Model being used according to client: {model_info}")
+        
+        # Send a minimal request
+        response = GENERATIVE_MODEL.generate_content("Say 'hello'")
+        print(f"Response received successfully. Characters: {len(response.text)}")
+        
+        print("✅ Verification complete. If you're still being charged for Gemini 2.5 Pro,")
+        print("   check your Google Cloud Console to see all usage under your API key.")
+        print("   You may need to create a new API key if you can't identify the source.")
+    except Exception as e:
+        print(f"Error checking model usage: {e}")
+        traceback.print_exc()
+
 def configure_gemini_client():
     """
     Loads the API key from .env and configures the Gemini client.
@@ -24,9 +55,18 @@ def configure_gemini_client():
             print("Error: GOOGLE_API_KEY not found in .env file or environment variables.")
             return False
         
+        # Choose model - 1.5 Flash is much cheaper than 2.5 Pro
+        model_name = 'gemini-1.5-flash-latest'
+        print(f"Initializing Gemini with model: {model_name}")
+        
         genai.configure(api_key=api_key)
-        GENERATIVE_MODEL = genai.GenerativeModel('gemini-1.5-flash-latest') # Or your preferred Gemini model
-        print("Gemini client configured successfully.")
+        GENERATIVE_MODEL = genai.GenerativeModel(model_name)
+        
+        # Print model details to verify
+        print(f"Gemini client configured successfully with model: {model_name}")
+        print("IMPORTANT: If you're being billed for Gemini 2.5 Pro, check your Google Cloud billing")
+        print("           and make sure no other applications are using your API key.")
+        
         return True
     except Exception as e:
         print(f"Error configuring Gemini client: {e}")
@@ -561,6 +601,10 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
 
 # Example Usage:
 if __name__ == '__main__':
+    # First run the model check to verify which model we're using
+    check_model_usage()
+    
+    print("\n--- Running additional tests if needed ---")
     if configure_gemini_client():
         mock_selected_descs_init = [
             "Monoblock Model: FC 11 including 10 inch HMI and B&R PLC, with automatic bottle sorting.",
