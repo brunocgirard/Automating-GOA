@@ -404,6 +404,14 @@ def get_current_context():
     if st.session_state.current_page == "Welcome": return ("general", None)
     elif st.session_state.current_page == "Quote Processing" and st.session_state.full_pdf_text:
         return ("quote", {"full_pdf_text": st.session_state.full_pdf_text, "selected_pdf_descs": st.session_state.selected_pdf_descs, "template_contexts": st.session_state.template_contexts})
+    elif st.session_state.current_page == "Chat" and "chat_context" in st.session_state and st.session_state.chat_context:
+        # Add context handling for Chat page
+        chat_ctx = st.session_state.chat_context
+        return ("quote", {
+            "full_pdf_text": chat_ctx.get("full_pdf_text", ""),
+            "selected_pdf_descs": [], # Could be empty as we're focusing on full text search
+            "template_contexts": {}   # Not needed for simple PDF chat
+        })
     elif st.session_state.selected_client_for_detail_edit:
         return ("client", st.session_state.selected_client_for_detail_edit)
     elif st.session_state.current_page == "CRM Management": return ("crm", None)
@@ -412,7 +420,43 @@ def get_current_context():
 def process_chat_query(query, context_type, context_data=None):
     if not query: return "Please enter a question."
     if context_type == "quote" and context_data:
-        return answer_pdf_question(query, context_data.get("selected_pdf_descs", []), context_data.get("full_pdf_text", ""), context_data.get("template_contexts", {}))
+        # For chat page context, let's try to enrich the context with selected PDF descriptions
+        # from the action_profile if available
+        selected_pdf_descs = context_data.get("selected_pdf_descs", [])
+        
+        # If we don't have any selected descriptions but we have action_profile, get them from there
+        if not selected_pdf_descs and "action_profile" in st.session_state and st.session_state.action_profile:
+            profile_data = st.session_state.action_profile
+            
+            # Get machine descriptions
+            machines = profile_data.get("machines_data", {}).get("machines", [])
+            if machines:
+                for machine in machines:
+                    main_item = machine.get("main_item", {})
+                    if main_item and "description" in main_item:
+                        selected_pdf_descs.append(f"Machine {machine.get('machine_name', 'Unknown')}: {main_item.get('description', '')}")
+                    
+                    # Add first few add-ons for context
+                    add_ons = machine.get("add_ons", [])
+                    if add_ons:
+                        for i, addon in enumerate(add_ons[:3]):
+                            if "description" in addon:
+                                selected_pdf_descs.append(f"Add-on for {machine.get('machine_name', 'Unknown')}: {addon.get('description', '')}")
+            
+            # Get line item descriptions if we still don't have enough context
+            if len(selected_pdf_descs) < 5:
+                line_items = profile_data.get("line_items", [])
+                for item in line_items[:10]:
+                    if "description" in item and item.get("description") not in selected_pdf_descs:
+                        selected_pdf_descs.append(item.get("description", ""))
+        
+        # Call answer_pdf_question with the enriched context
+        return answer_pdf_question(
+            query, 
+            selected_pdf_descs, 
+            context_data.get("full_pdf_text", ""), 
+            context_data.get("template_contexts", {})
+        )
     elif context_type == "client" and context_data:
         quote_ref = context_data.get('quote_ref')
         if quote_ref:

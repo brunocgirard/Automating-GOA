@@ -432,14 +432,54 @@ def show_chat_page():
         chat_context = st.session_state.chat_context
         context_client = chat_context.get("client_info", {})
         
+        # Get PDF size for warning
+        full_pdf_text = chat_context.get("full_pdf_text", "")
+        pdf_size_kb = len(full_pdf_text) / 1024
+        
         # Display context information
         with st.container(border=True):
-            st.markdown("### Current Chat Context")
-            if context_client:
-                st.markdown(f"**Client:** {context_client.get('client_name', 'Unknown')}")
-                st.markdown(f"**Quote:** {context_client.get('quote_ref', 'Unknown')}")
-            else:
-                st.markdown("No specific client context.")
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown("### Current Chat Context")
+                if context_client:
+                    st.markdown(f"**Client:** {context_client.get('client_name', 'Unknown')}")
+                    st.markdown(f"**Quote:** {context_client.get('quote_ref', 'Unknown')}")
+                else:
+                    st.markdown("No specific client context.")
+            with col2:
+                # Display PDF size warning if applicable
+                if pdf_size_kb > 100:
+                    st.warning(f"PDF Size: {pdf_size_kb:.1f} KB")
+                    st.markdown("*Large PDFs may cause slower responses*")
+                else:
+                    st.info(f"PDF Size: {pdf_size_kb:.1f} KB")
+        
+        # Show selected items from profile if available
+        if "action_profile" in st.session_state and st.session_state.action_profile:
+            profile_data = st.session_state.action_profile
+            
+            # Show machines if available
+            machines = profile_data.get("machines_data", {}).get("machines", [])
+            if machines:
+                with st.expander("Available Machines (You can ask about these)", expanded=True):
+                    for i, machine in enumerate(machines):
+                        machine_name = machine.get("machine_name", "Unknown Machine")
+                        st.markdown(f"**Machine {i+1}:** {machine_name}")
+                        main_item = machine.get("main_item", {})
+                        if main_item and "description" in main_item:
+                            st.markdown(f"*Main Item:* {main_item.get('description', '')[:100]}...")
+            
+            # Show selected items if available
+            line_items = profile_data.get("line_items", [])
+            if line_items:
+                with st.expander("Selected Items (You can ask about these)", expanded=False):
+                    for i, item in enumerate(line_items[:10]):  # Limit to first 10 items
+                        if "description" in item:
+                            desc = item.get("description", "")
+                            first_line = desc.split('\n')[0] if '\n' in desc else desc
+                            st.markdown(f"- {first_line}")
+                    if len(line_items) > 10:
+                        st.caption(f"... and {len(line_items) - 10} more items")
     else:
         # No context
         st.info("Please try selecting the quote and the 'Chat with Quote' action again from the Client Dashboard.")
@@ -449,9 +489,14 @@ def show_chat_page():
         return
     
     # Reset button
-    if st.button("🔄 New Chat"):
-        st.session_state.quote_chat_history = []
-        st.rerun()
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("🔄 New Chat"):
+            st.session_state.quote_chat_history = []
+            st.rerun()
+    with col2:
+        if pdf_size_kb > 200:
+            st.warning("⚠️ This is a very large PDF. Chat processing may be slow and could time out.")
     
     # Chat message container
     if "quote_chat_history" not in st.session_state:
@@ -463,24 +508,61 @@ def show_chat_page():
         with st.chat_message(role):
             st.markdown(msg.get("content", ""))
     
+    # Processing indicator for ongoing queries
+    if "chat_processing" not in st.session_state:
+        st.session_state.chat_processing = False
+    
     # Chat input
-    user_input = st.chat_input("Ask a question about the quote...")
-    if user_input:
+    user_input = st.chat_input("Ask a question about the quote...", disabled=st.session_state.chat_processing)
+    if user_input and not st.session_state.chat_processing:
         # Add user message to chat history
         st.session_state.quote_chat_history.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
         
-        # Process query
-        with st.spinner("Thinking..."):
-            from app import process_chat_query, get_current_context
-            context_type, context_data = get_current_context()
-            ai_response = process_chat_query(user_input, context_type, context_data)
-        
-        # Add AI response to chat history
-        st.session_state.quote_chat_history.append({"role": "assistant", "content": ai_response})
+        # Set processing flag to avoid multiple queries
+        st.session_state.chat_processing = True
+        st.rerun()
+    
+    # Process the query (after rerun if needed)
+    if st.session_state.chat_processing and st.session_state.quote_chat_history and st.session_state.quote_chat_history[-1]["role"] == "user":
         with st.chat_message("assistant"):
-            st.markdown(ai_response)
+            with st.status("Analyzing document...", expanded=True) as status:
+                try:
+                    status.update(label="Retrieving relevant document sections...")
+                    
+                    from app import process_chat_query, get_current_context
+                    context_type, context_data = get_current_context()
+                    
+                    status.update(label="Generating response...")
+                    ai_response = process_chat_query(st.session_state.quote_chat_history[-1]["content"], context_type, context_data)
+                    
+                    # Success - update status
+                    status.update(label="✅ Response ready", state="complete")
+                    
+                    # Add response to history
+                    st.session_state.quote_chat_history.append({"role": "assistant", "content": ai_response})
+                    
+                    # Display the response
+                    st.markdown(ai_response)
+                    
+                except Exception as e:
+                    # Handle errors in processing
+                    error_message = f"Sorry, I encountered an error processing your query: {str(e)}"
+                    st.error(error_message)
+                    
+                    # Add error to chat history
+                    st.session_state.quote_chat_history.append({"role": "assistant", "content": error_message})
+                    
+                    # Update status to show error
+                    status.update(label="❌ Error in processing", state="error")
+                    
+                finally:
+                    # Clear processing flag
+                    st.session_state.chat_processing = False
+                    
+        # Rerun one more time to refresh the UI with the complete response
+        st.rerun()
     
     # Return button
     if st.button("⬅️ Back to Client Dashboard"):
@@ -491,27 +573,94 @@ def show_chat_page():
         else:
             st.session_state.chat_context = None
             st.session_state.quote_chat_history = []
+            st.session_state.chat_processing = False
         st.rerun()
 
 def render_chat_ui(): 
     with st.sidebar.expander("💬 Chat Assistant", expanded=False):
         from app import get_current_context, process_chat_query 
         context_type, context_data = get_current_context()
-        if context_type == "quote": st.markdown("**Context:** Quote processing")
-        elif context_type == "client" and context_data: st.markdown(f"**Context:** Client {context_data.get('customer_name', '')}")
-        elif context_type == "crm": st.markdown("**Context:** CRM management")
-        else: st.markdown("**Context:** General assistance")
-        user_query = st.text_input("Ask a question:", key="sidebar_chat_query")
-        if st.button("Send", key="send_chat_query_sidebar"):
+        
+        # Show context information
+        if context_type == "quote": 
+            st.markdown("**Context:** Quote processing")
+            # Display PDF size for context
+            if context_data and "full_pdf_text" in context_data:
+                pdf_size_kb = len(context_data["full_pdf_text"]) / 1024
+                if pdf_size_kb > 100:
+                    st.caption(f"PDF Size: {pdf_size_kb:.1f}KB (large)")
+        elif context_type == "client" and context_data: 
+            st.markdown(f"**Context:** Client {context_data.get('customer_name', '')}")
+        elif context_type == "crm": 
+            st.markdown("**Context:** CRM management")
+        else: 
+            st.markdown("**Context:** General assistance")
+        
+        # Initialize processing state if not present
+        if "sidebar_chat_processing" not in st.session_state:
+            st.session_state.sidebar_chat_processing = False
+            
+        # Chat input
+        user_query = st.text_input(
+            "Ask a question:", 
+            key="sidebar_chat_query",
+            disabled=st.session_state.sidebar_chat_processing
+        )
+        
+        # Process button
+        if st.button("Send", key="send_chat_query_sidebar", disabled=st.session_state.sidebar_chat_processing):
             if user_query:
+                # Add query to history
                 st.session_state.chat_history.append({"role": "user", "content": user_query})
-                response = process_chat_query(user_query, context_type, context_data)
-                st.session_state.chat_history.append({"role": "assistant", "content": response})
-                st.session_state.sidebar_chat_query = ""; st.rerun()
+                
+                # Set processing flag
+                st.session_state.sidebar_chat_processing = True
+                
+                # Trigger rerun to show processing state
+                st.rerun()
+        
+        # Process the query (after rerun)
+        if st.session_state.sidebar_chat_processing and st.session_state.chat_history and st.session_state.chat_history[-1]["role"] == "user":
+            with st.status("Processing...", expanded=True) as status:
+                try:
+                    # Get the last query from history
+                    last_query = st.session_state.chat_history[-1]["content"]
+                    
+                    # Process the query
+                    response = process_chat_query(last_query, context_type, context_data)
+                    
+                    # Add response to history
+                    st.session_state.chat_history.append({"role": "assistant", "content": response})
+                    
+                    # Clear input
+                    st.session_state.sidebar_chat_query = ""
+                    
+                    # Update status
+                    status.update(label="✅ Done", state="complete")
+                    
+                except Exception as e:
+                    # Handle errors
+                    error_msg = f"Error: {str(e)}"
+                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
+                    status.update(label="❌ Error", state="error")
+                
+                finally:
+                    # Clear processing flag
+                    st.session_state.sidebar_chat_processing = False
+                
+                # Rerun to refresh UI
+                st.rerun()
+        
+        # Display chat history
         if st.session_state.chat_history:
-            st.markdown("### Chat History (Sidebar)")
+            st.markdown("### Chat History")
             max_display = min(5, len(st.session_state.chat_history))
             for msg in st.session_state.chat_history[-max_display:]:
-                if msg["role"] == "user": st.markdown(f"**You:** {msg['content']}")
-                else: st.markdown(f"**Assistant:** {msg['content']}")
-            if st.button("Clear History", key="clear_chat_sidebar"): st.session_state.chat_history = []; st.rerun() 
+                if msg["role"] == "user": 
+                    st.markdown(f"**You:** {msg['content']}")
+                else: 
+                    st.markdown(f"**Assistant:** {msg['content']}")
+            
+            if st.button("Clear History", key="clear_chat_sidebar"): 
+                st.session_state.chat_history = []
+                st.rerun() 

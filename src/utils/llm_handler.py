@@ -388,15 +388,19 @@ def answer_pdf_question(user_question: str,
         if not configure_gemini_client():
             return "Error: LLM client not configured. Please check API key."
 
+    # Performance tracking
+    import time
+    start_time = time.time()
+
     # Implement retrieval-augmented prompting for long PDFs
-    def chunk_pdf_text(text, chunk_size=1000, overlap=200):
+    def chunk_pdf_text(text, chunk_size=800, overlap=150, max_chunks=50):
         """Split text into overlapping chunks for better context preservation."""
         chunks = []
         if not text or len(text) <= chunk_size:
             return [text] if text else []
             
         start = 0
-        while start < len(text):
+        while start < len(text) and len(chunks) < max_chunks:
             end = min(start + chunk_size, len(text))
             # Try to find a sensible break point (newline or period)
             if end < len(text):
@@ -411,6 +415,7 @@ def answer_pdf_question(user_question: str,
             chunks.append(text[start:end])
             start = end - overlap  # Create overlap with previous chunk
         
+        print(f"Created {len(chunks)} chunks from {len(text)} characters of text")
         return chunks
     
     def score_chunk_relevance(query, chunk):
@@ -421,8 +426,11 @@ def answer_pdf_question(user_question: str,
         query_terms = query.lower().split()
         # Remove common words
         stopwords = {'the', 'and', 'is', 'of', 'in', 'to', 'a', 'for', 'with', 'on', 'what', 'how', 'why', 'can', 'does', 'do'}
-        query_terms = [term for term in query_terms if term not in stopwords]
+        query_terms = [term for term in query_terms if term not in stopwords and len(term) > 2]
         
+        if not query_terms:
+            return 0  # No meaningful terms to match
+            
         score = 0
         chunk_lower = chunk.lower()
         
@@ -442,10 +450,20 @@ def answer_pdf_question(user_question: str,
         return score / (len(chunk) / 100) if chunk else 0
     
     # Process the PDF text
-    if len(full_pdf_text) > 10000:
+    if len(full_pdf_text) > 8000:
         print(f"PDF text is long ({len(full_pdf_text)} chars). Using retrieval-augmented prompting.")
-        chunks = chunk_pdf_text(full_pdf_text)
+        
+        # Chunking phase
+        chunk_time_start = time.time()
+        chunks = chunk_pdf_text(full_pdf_text, max_chunks=40)  # Limit to 40 chunks maximum
+        chunk_time = time.time() - chunk_time_start
+        print(f"Chunking completed in {chunk_time:.2f} seconds")
+        
+        # Scoring phase
+        scoring_time_start = time.time()
         scored_chunks = [(chunk, score_chunk_relevance(user_question, chunk)) for chunk in chunks]
+        scoring_time = time.time() - scoring_time_start
+        print(f"Scoring completed in {scoring_time:.2f} seconds")
         
         # Sort chunks by relevance score in descending order
         scored_chunks.sort(key=lambda x: x[1], reverse=True)
@@ -453,23 +471,29 @@ def answer_pdf_question(user_question: str,
         # Select the top relevant chunks (up to a token limit)
         top_chunks = []
         total_chars = 0
-        max_chars = 10000  # Stay within safe token limits
+        max_chars = 8000  # Reduced token limit for better performance
+        max_top_chunks = 10  # Limit the number of top chunks
         
         for chunk, score in scored_chunks:
-            if score > 0 and total_chars + len(chunk) <= max_chars:
+            if score > 0 and total_chars + len(chunk) <= max_chars and len(top_chunks) < max_top_chunks:
                 top_chunks.append(chunk)
                 total_chars += len(chunk)
+                print(f"Added chunk with score {score:.2f}, length {len(chunk)}")
                 
         # Always include the beginning of the document (first chunk) for context
         if chunks and chunks[0] not in top_chunks and total_chars + len(chunks[0]) <= max_chars:
             top_chunks.insert(0, chunks[0])
+            print(f"Added first chunk for context, length {len(chunks[0])}")
             
         # Create a context summary with metadata
         relevant_text = "\n\n==== CHUNK BREAK ====\n\n".join(top_chunks)
         context_note = f"[PDF document chunked for retrieval. Showing {len(top_chunks)} most relevant chunks out of {len(chunks)} total.]"
+        
+        print(f"Final content for LLM: {len(relevant_text)} characters")
     else:
         relevant_text = full_pdf_text
         context_note = "[Full PDF text included - document is within token limits]"
+        print(f"Using full PDF text: {len(relevant_text)} characters")
 
     prompt_parts = [
         "You are an AI assistant designed to answer questions about a technical equipment PDF quote.",
@@ -497,10 +521,13 @@ def answer_pdf_question(user_question: str,
         prompt_parts.append("\n3. TEMPLATE FIELDS (Context for potential questions referring to template field names - Placeholder Key: Description from template):")
         placeholder_list_for_prompt = []
         for key, context in template_placeholder_contexts.items():
-            placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
+            # Limit the number of template fields to include to avoid token limits
+            if len(placeholder_list_for_prompt) < 50:  # Only include up to 50 fields
+                placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
         if not placeholder_list_for_prompt:
             prompt_parts.append("  (No template fields context provided.)")
         else:
+            prompt_parts.append(f"  (Showing {len(placeholder_list_for_prompt)} template fields)")
             for item_for_prompt in placeholder_list_for_prompt:
                 prompt_parts.append(item_for_prompt)
 
@@ -513,6 +540,7 @@ def answer_pdf_question(user_question: str,
     # print("------------------------")
 
     try:
+        print(f"RAG processing completed in {time.time() - start_time:.2f} seconds")
         print("Sending Q&A prompt to Gemini API...")
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -520,11 +548,18 @@ def answer_pdf_question(user_question: str,
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
+        
+        llm_start_time = time.time()
         response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
+        print(f"LLM response received in {time.time() - llm_start_time:.2f} seconds")
         
         # print("\n----- LLM Q&A RAW RESPONSE -----") # Uncomment for debugging
         # print(response.text)
         # print("----------------------------")
+        
+        total_time = time.time() - start_time
+        print(f"Total answer_pdf_question processing time: {total_time:.2f} seconds")
+        
         return response.text.strip()
     
     except Exception as e:
