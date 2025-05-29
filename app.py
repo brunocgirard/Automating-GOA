@@ -219,11 +219,28 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
             # Try to extract the schema
             st.write("Extracting template schema...")
             try:
-                st.session_state.template_contexts = extract_placeholder_schema(template_file_path)
+                # Use the enhanced outline-based context extraction if full_fields_outline.md exists
+                outline_path = "full_fields_outline.md"
+                if os.path.exists(outline_path):
+                    st.write(f"Using enhanced context extraction with outline file: {outline_path}")
+                    st.session_state.template_contexts = extract_placeholder_context_hierarchical(
+                        template_file_path, 
+                        enhance_with_outline=True,
+                        outline_path=outline_path
+                    )
+                    
+                    if st.session_state.template_contexts:
+                        st.success(f"Successfully extracted and enhanced {len(st.session_state.template_contexts)} field contexts using outline file")
+                    else:
+                        st.warning("Enhanced context extraction failed, trying schema format")
+                        st.session_state.template_contexts = extract_placeholder_schema(template_file_path)
+                else:
+                    st.info("Outline file not found, using standard schema extraction")
+                    st.session_state.template_contexts = extract_placeholder_schema(template_file_path)
                 
                 # Add diagnostic information
                 using_schema_format = isinstance(next(iter(st.session_state.template_contexts.values()), ""), dict)
-                st.write(f"Using {'schema' if using_schema_format else 'legacy'} format with {len(st.session_state.template_contexts)} fields")
+                st.write(f"Using {'schema' if using_schema_format else 'hierarchical'} format with {len(st.session_state.template_contexts)} fields")
                 
                 # If schema extraction fails, try legacy format
                 if not st.session_state.template_contexts:
@@ -379,11 +396,24 @@ def load_previous_document(client_id):
         # Always regenerate the template contexts when loading an existing document
         if os.path.exists(TEMPLATE_FILE):
             try:
-                # First try with the new schema format
-                st.session_state.template_contexts = extract_placeholder_schema(TEMPLATE_FILE)
-                
-                # Add debug message
-                st.info(f"Template schema loaded with {len(st.session_state.template_contexts)} fields. Using new format: {isinstance(next(iter(st.session_state.template_contexts.values()), ''), dict)}")
+                # Try using the enhanced outline-based extraction first
+                outline_path = "full_fields_outline.md"
+                if os.path.exists(outline_path):
+                    st.info(f"Using enhanced context extraction with outline file: {outline_path}")
+                    st.session_state.template_contexts = extract_placeholder_context_hierarchical(
+                        TEMPLATE_FILE, 
+                        enhance_with_outline=True,
+                        outline_path=outline_path
+                    )
+                    
+                    # Add debug message
+                    st.info(f"Enhanced template contexts loaded with {len(st.session_state.template_contexts)} fields")
+                else:
+                    # If outline file not available, use standard schema extraction
+                    st.session_state.template_contexts = extract_placeholder_schema(TEMPLATE_FILE)
+                    
+                    # Add debug message
+                    st.info(f"Template schema loaded with {len(st.session_state.template_contexts)} fields. Using new format: {isinstance(next(iter(st.session_state.template_contexts.values()), ''), dict)}")
                 
                 # If no fields were found or another issue occurred, try the legacy format
                 if not st.session_state.template_contexts:

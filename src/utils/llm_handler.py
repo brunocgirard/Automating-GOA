@@ -74,13 +74,232 @@ def configure_gemini_client():
         GENERATIVE_MODEL = None
         return False
 
-# Renamed and updated to handle all field types
+def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dict[str, Dict]) -> Dict[str, str]:
+    """
+    Applies domain-specific rules to correct and improve LLM-generated field values.
+    
+    Args:
+        field_data: Dictionary of field names to values from LLM
+        template_schema: Schema information about the fields
+        
+    Returns:
+        Corrected and improved field data
+    """
+    print("Applying post-processing rules to LLM output...")
+    corrected_data = field_data.copy()
+    
+    # Quick early return if empty data
+    if not corrected_data:
+        return corrected_data
+    
+    # Create lookup maps for field types to avoid repetitive checks
+    checkbox_fields = set()
+    text_fields = set()
+    
+    # Pre-identify checkbox fields for faster processing
+    for field_name in corrected_data.keys():
+        # Determine if this is a checkbox field
+        is_checkbox = False
+        if field_name.endswith('_check'):
+            is_checkbox = True
+            checkbox_fields.add(field_name)
+        elif field_name in template_schema and isinstance(template_schema[field_name], dict):
+            is_checkbox = template_schema[field_name].get('type') == 'boolean'
+            if is_checkbox:
+                checkbox_fields.add(field_name)
+        
+        if not is_checkbox:
+            text_fields.add(field_name)
+    
+    # Rule 1: Ensure all checkbox fields have correct YES/NO values (normalize casing)
+    for field_name in checkbox_fields:
+        value = corrected_data[field_name]
+        if isinstance(value, str) and value.upper() in ["YES", "NO"]:
+            corrected_data[field_name] = value.upper()
+        else:
+            # Default to NO for invalid values
+            print(f"Correcting invalid checkbox value '{value}' to 'NO' for {field_name}")
+            corrected_data[field_name] = "NO"
+    
+    # Extract field groups that we need for specific rules
+    # This avoids repeated searches through all fields
+    hmi_size_fields = [f for f in checkbox_fields if '_hmi_' in f.lower() and 'size' in f.lower()]
+    alt_hmi_size_fields = [f for f in checkbox_fields 
+                          if ('hmi' in f.lower() or 'touch' in f.lower() or 'screen' in f.lower()) 
+                          and any(s in f.lower() for s in ['15', '10', '5.7', '5_7', '15inch', '10inch'])]
+    plc_type_fields = [f for f in checkbox_fields if 'plc_' in f.lower()]
+    beacon_fields = [f for f in checkbox_fields if any(term in f.lower() for term in ['beacon', 'light', 'signal'])]
+    
+    # Rule 2: HMI size constraints - only one HMI size should be YES
+    if hmi_size_fields:
+        yes_hmi_sizes = [f for f in hmi_size_fields if corrected_data[f] == "YES"]
+        if len(yes_hmi_sizes) > 1:
+            print(f"Multiple HMI sizes selected ({yes_hmi_sizes}), keeping only the largest/first")
+            # Prioritize based on size (larger screens are usually more expensive/premium)
+            size_priority = {"15": 1, "10": 2, "5.7": 3, "5_7": 3}
+            
+            # Find the highest priority (lowest number) size
+            best_field = yes_hmi_sizes[0]
+            best_priority = 99
+            
+            for field in yes_hmi_sizes:
+                for size, priority in size_priority.items():
+                    if size in field and priority < best_priority:
+                        best_priority = priority
+                        best_field = field
+            
+            # Set only the best one to YES, others to NO
+            for field in hmi_size_fields:
+                corrected_data[field] = "YES" if field == best_field else "NO"
+    
+    # Also look for alternative HMI size field patterns
+    if alt_hmi_size_fields and alt_hmi_size_fields != hmi_size_fields:  # Skip if same as already processed
+        yes_alt_sizes = [f for f in alt_hmi_size_fields if corrected_data[f] == "YES"]
+        if len(yes_alt_sizes) > 1:
+            print(f"Multiple alternative HMI sizes selected ({yes_alt_sizes}), keeping only the largest")
+            # Determine the largest size
+            size_indicators = {"15": 15, "15inch": 15, "10": 10, "10inch": 10, "5.7": 5.7, "5_7": 5.7}
+            best_field = yes_alt_sizes[0]
+            best_size = 0
+            
+            for field in yes_alt_sizes:
+                for indicator, size in size_indicators.items():
+                    if indicator in field.lower() and size > best_size:
+                        best_size = size
+                        best_field = field
+            
+            # Set only the best one to YES, others to NO
+            for field in alt_hmi_size_fields:
+                corrected_data[field] = "YES" if field == best_field else "NO"
+    
+    # Rule 3: PLC type constraints - only one PLC type should be YES
+    if plc_type_fields:
+        yes_plc_types = [f for f in plc_type_fields if corrected_data[f] == "YES"]
+        if len(yes_plc_types) > 1:
+            print(f"Multiple PLC types selected ({yes_plc_types}), keeping only one")
+            # Keep only the first one as YES
+            for i, field in enumerate(plc_type_fields):
+                corrected_data[field] = "YES" if field == yes_plc_types[0] else "NO"
+    
+    # Rule 4-6: Format utility specifications
+    # Process these rules together for better performance
+    has_voltage = 'voltage' in corrected_data
+    has_hz = 'hz' in corrected_data
+    has_psi = 'psi' in corrected_data
+    
+    if has_voltage or has_hz or has_psi:
+        # Rule 4: Standardize voltage format
+        if has_voltage:
+            voltage_value = corrected_data['voltage']
+            if voltage_value:
+                # Detect if it's likely a voltage range
+                if '-' not in voltage_value and '/' not in voltage_value:
+                    try:
+                        # If it's a single number, try to determine common range
+                        voltage_num = int(''.join(c for c in voltage_value if c.isdigit()))
+                        if voltage_num > 100 and voltage_num < 130:
+                            corrected_data['voltage'] = "110-120V"
+                        elif voltage_num > 200 and voltage_num < 250:
+                            corrected_data['voltage'] = "208-240V"
+                        elif voltage_num > 380 and voltage_num < 420:
+                            corrected_data['voltage'] = "380-400V"
+                        elif voltage_num > 460 and voltage_num < 490:
+                            corrected_data['voltage'] = "460-480V"
+                    except (ValueError, TypeError):
+                        # Keep original if conversion fails
+                        pass
+                
+                # Ensure V suffix if missing
+                if voltage_value and not voltage_value.upper().endswith('V') and any(c.isdigit() for c in voltage_value):
+                    corrected_data['voltage'] = voltage_value + 'V'
+        
+        # Rule 5: Ensure frequency has Hz suffix
+        if has_hz:
+            hz_value = corrected_data['hz']
+            if hz_value and hz_value.isdigit():
+                corrected_data['hz'] = hz_value + ' Hz'
+        
+        # Rule 6: PSI format standardization
+        if has_psi:
+            psi_value = corrected_data['psi']
+            if psi_value and not 'psi' in psi_value.lower() and any(c.isdigit() for c in psi_value):
+                corrected_data['psi'] = psi_value + ' PSI'
+    
+    # Rule 7: If 'tri-color beacon' is mentioned anywhere, enable all three color beacons
+    if beacon_fields:
+        # Check if any field mentions multi-color beacon
+        has_multicolor = False
+        for field in beacon_fields:
+            if corrected_data[field] == "YES" and any(term in field.lower() for term in ['tri', 'three', 'multi']):
+                has_multicolor = True
+                break
+        
+        # Find individual color beacon fields
+        color_beacon_fields = ['beacon_red_check', 'beacon_amber_check', 'beacon_green_check', 'beacon_yellow_check']
+        color_beacon_fields = [f for f in color_beacon_fields if f in corrected_data]
+        
+        if color_beacon_fields:
+            # If at least one beacon is set to YES, check if others should be too
+            yes_beacon_count = sum(1 for f in color_beacon_fields if corrected_data[f] == "YES")
+            if yes_beacon_count >= 2 or has_multicolor:
+                # If multiple colors are already YES or we detected a multi-color beacon reference,
+                # set all standard colors to YES
+                print("Setting all standard beacon colors to YES based on multi-color beacon detection")
+                for field in color_beacon_fields:
+                    corrected_data[field] = "YES"
+    
+    # Rule 8: Production speed formatting
+    if 'production_speed' in corrected_data:
+        speed = corrected_data['production_speed']
+        if speed:
+            # Try to ensure speed has units
+            if all(not c.isalpha() for c in speed) and any(c.isdigit() for c in speed):
+                # No letters but has numbers - add units
+                if any('bottle' in field_name.lower() for field_name in corrected_data.keys()):
+                    corrected_data['production_speed'] = speed + ' bottles per minute'
+                else:
+                    corrected_data['production_speed'] = speed + ' units per minute'
+    
+    # Rule 9: Cross-field validation - if filling system is selected, ensure appropriate filling type
+    filling_system_field = next((f for f in checkbox_fields if 'filling_system' in f.lower() and corrected_data[f] == "YES"), None)
+    if filling_system_field:
+        filling_type_fields = [f for f in checkbox_fields if any(typ in f.lower() for typ in ['volumetric', 'peristaltic', 'time_pressure', 'mass_flow'])]
+        if filling_type_fields and not any(corrected_data.get(f) == "YES" for f in filling_type_fields):
+            # Default to volumetric if available (most common)
+            volumetric_field = next((f for f in filling_type_fields if 'volumetric' in f.lower()), None)
+            if volumetric_field:
+                print(f"Setting {volumetric_field} to YES as default filling type")
+                corrected_data[volumetric_field] = "YES"
+    
+    # Rule 10: Explosion proof consistency
+    if 'explosion_proof_check' in corrected_data and corrected_data['explosion_proof_check'] == "YES":
+        print("Explosion proof selected - ensuring consistent related fields")
+        # In explosion proof environments, typically pneumatic components are used instead of electric
+        pneumatic_fields = [f for f in checkbox_fields if 'pneumatic' in f.lower()]
+        for field in pneumatic_fields:
+            corrected_data[field] = "YES"  # Set pneumatic options to YES
+            
+        # Disable certain electric components that would be replaced in explosion proof environments
+        electric_fields_to_disable = [
+            f for f in checkbox_fields 
+            if any(term in f.lower() for term in ['electric', 'servo', 'motor']) 
+            and 'explosion' not in f.lower()
+        ]
+        for field in electric_fields_to_disable:
+            if corrected_data[field] == "YES":
+                print(f"Setting {field} to NO due to explosion proof environment")
+                corrected_data[field] = "NO"
+    
+    return corrected_data
+
 def get_all_fields_via_llm(selected_pdf_descriptions: List[str], 
                              template_placeholder_contexts: Dict[str, str],
                              full_pdf_text: str) -> Dict[str, str]:
     """
     Constructs a comprehensive prompt for the LLM to fill all template fields
     (checkboxes and text fields) based on selected PDF items and full PDF text.
+    
+    The function now better handles enhanced context from the outline file.
     """
     global GENERATIVE_MODEL
     if GENERATIVE_MODEL is None:
@@ -167,15 +386,53 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
         # Add section-aware instructions
         prompt_parts = add_section_aware_instructions(template_placeholder_contexts, prompt_parts)
     else:
-        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (Placeholder Key: Description from template):")
-        placeholder_list_for_prompt = []
+        # For hierarchical context format, organize by section/subsection structure
+        # This better handles the enhanced context from the outline file
+        
+        # Extract sections from context values
+        sections = {}
         for key, context in template_placeholder_contexts.items():
-            placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
-        if not placeholder_list_for_prompt:
-            prompt_parts.append("  (No template fields provided to evaluate.)")
-            return {}
-        for item_for_prompt in placeholder_list_for_prompt:
-            prompt_parts.append(item_for_prompt)
+            # Split context into parts (assuming section - subsection - description format)
+            parts = context.split(" - ")
+            section = parts[0] if parts else "General"
+            
+            if section not in sections:
+                sections[section] = {}
+            
+            # Get subsection if available
+            subsection = parts[1] if len(parts) > 1 else "General"
+            if subsection not in sections[section]:
+                sections[section][subsection] = []
+                
+            # Add field to the appropriate subsection
+            sections[section][subsection].append((key, context))
+        
+        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section and subsection):")
+        
+        for section, subsections in sorted(sections.items()):
+            prompt_parts.append(f"\n## {section} SECTION:")
+            
+            for subsection, fields in sorted(subsections.items()):
+                if subsection != "General":
+                    prompt_parts.append(f"\n### {subsection} Subsection:")
+                
+                # Split fields into checkboxes and text fields
+                checkbox_fields = [(k, c) for k, c in fields if k.endswith('_check')]
+                text_fields = [(k, c) for k, c in fields if not k.endswith('_check')]
+                
+                if text_fields:
+                    prompt_parts.append("TEXT FIELDS:")
+                    for key, context in text_fields:
+                        # Extract just the field description part
+                        description = context.split(" - ")[-1] if " - " in context else context
+                        prompt_parts.append(f"  - '{key}': {description}")
+                
+                if checkbox_fields:
+                    prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):")
+                    for key, context in checkbox_fields:
+                        # Extract just the field description part
+                        description = context.split(" - ")[-1] if " - " in context else context
+                        prompt_parts.append(f"  - '{key}': {description}")
 
     prompt_parts.append("\nYOUR TASK & RESPONSE FORMAT:")
     prompt_parts.append("Carefully analyze all provided information.")
@@ -183,11 +440,22 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
     prompt_parts.append("  - If the field key ends with '_check' (a checkbox): Determine if it is confirmed as selected. Value must be \"YES\" or \"NO\". Prioritize SELECTED PDF ITEMS for these.")
     prompt_parts.append("  - If the field key does NOT end with '_check' (a text field): Extract the specific information from the FULL PDF TEXT using the field description as a guide. If the information cannot be found, the value should be an empty string (\"\").")
     prompt_parts.append("  - SPECIFIC INSTRUCTION for 'production_speed': Prioritize speed specifications mentioned *within the description of the primary selected machine* (e.g., a Monoblock) over general 'Projected Speed' sections if they differ. Look for phrases like 'up to X bottles/units per minute'.")
+    prompt_parts.append("  - NOTE: 'Projected Speed' and 'Production Speed' refer to the same information - the rate at which the machine processes bottles/units, typically expressed in units per minute.")
     prompt_parts.append("Pay attention to bundled features within SELECTED PDF ITEMS. For example, if 'Monoblock Model ABC' description says 'Including: Feature X, Feature Y', then template fields for Feature X and Feature Y (if they are _check fields) should be YES.")
     prompt_parts.append("If a PDF item is general (e.g., 'Three (X 3) colours status beacon light') and the template has specific sub-features (e.g., 'Status Beacon Light: Red', 'Status Beacon Light: Yellow', 'Status Beacon Light: Green'), mark ALL corresponding specific sub-feature placeholders as YES.")
     prompt_parts.append("Be accurate and conservative. For checkboxes, if unsure, default to \"NO\". If an entire category of options (e.g., 'Street Fighter Tablet Counter') is NOT MENTIONED AT ALL in the PDF text or selected items, all its related checkboxes should be \"NO\".")
     prompt_parts.append("For text fields, if not found, use an empty string.")
     prompt_parts.append("Respond with a single, valid JSON object. The keys in the JSON MUST be ALL the TEMPLATE PLACEHOLDER KEYS listed above, and the values must be their extracted text or \"YES\"/\"NO\".")
+    
+    # Add context about General Order Acknowledgement structure to help with understanding
+    prompt_parts.append("\nADDITIONAL CONTEXT ABOUT THE GENERAL ORDER ACKNOWLEDGEMENT (GOA) FORM:")
+    prompt_parts.append("The GOA form is used in the packaging manufacturing industry to capture all specifications for a machine build.")
+    prompt_parts.append("1. It starts with basic customer and project information (Proj #, Customer name, Machine type).")
+    prompt_parts.append("2. It includes utility specifications (voltage, conformity certifications, country of destination).")
+    prompt_parts.append("3. Material specifications define what components contact the product (metal parts usually SS304/316).")
+    prompt_parts.append("4. Control & Programming sections define the automation system (PLC type, HMI size, etc.).")
+    prompt_parts.append("5. Different sections cover specific functional modules (Filling System, Capping, Labeling, etc.).")
+    prompt_parts.append("Pay close attention to the hierarchical structure of fields when determining YES/NO values for checkboxes.")
     
     # Add example JSON response format
     prompt_parts.append("\nEXAMPLE JSON RESPONSE FORMAT:")
@@ -264,8 +532,10 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
     except Exception as e:
         print(f"Error communicating with Gemini API or processing response: {e}")
         traceback.print_exc()
-
-    return llm_response_data
+    
+    # Apply post-processing rules to improve the data
+    corrected_data = apply_post_processing_rules(llm_response_data, template_placeholder_contexts)
+    return corrected_data
 
 def get_llm_chat_update(current_data: Dict[str, str], 
                         user_instruction: str, 
@@ -372,7 +642,10 @@ def get_llm_chat_update(current_data: Dict[str, str],
     except Exception as e:
         print(f"Error in get_llm_chat_update: {e}")
         traceback.print_exc()
-    return updated_data
+    
+    # Apply post-processing rules to improve the data
+    corrected_data = apply_post_processing_rules(updated_data, template_placeholder_contexts)
+    return corrected_data
 
 def answer_pdf_question(user_question: str, 
                         selected_pdf_descriptions: List[str], 
@@ -899,6 +1172,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
         prompt_parts.append("For each TEMPLATE FIELD:")
         prompt_parts.append("  - If the field key ends with '_check' (a checkbox): Determine if it is confirmed as selected for THIS SPECIFIC MACHINE. Look for mentions of the term or its synonyms. Value must be \"YES\" or \"NO\".")
         prompt_parts.append("  - If the field key does NOT end with '_check' (a text field): Extract the specific information relevant to THIS MACHINE.")
+        prompt_parts.append("  - SPECIFIC INSTRUCTION for 'production_speed': Look for both 'Production Speed' and 'Projected Speed' terms - they refer to the same information. Extract the rate at which the machine processes products, typically expressed in units per minute.")
         prompt_parts.append("Be accurate and conservative. For checkboxes, if unsure, default to \"NO\".")
         prompt_parts.append("For text fields, if not found, use an empty string.")
         prompt_parts.append("IMPORTANT: You MUST include ALL the template fields in your response, even if empty.")
@@ -1003,7 +1277,10 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
             else:
                 break
     
-    return llm_response_data
+    # Apply post-processing rules to improve the data
+    corrected_data = apply_post_processing_rules(llm_response_data, template_placeholder_contexts)
+    
+    return corrected_data
 
 # Example Usage:
 if __name__ == '__main__':
