@@ -89,6 +89,21 @@ def init_db(db_path: str = DB_PATH):
         )
         """)
         
+        # Create goa_modifications table to track changes made to GOA templates after kickoff meetings
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS goa_modifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            machine_template_id INTEGER NOT NULL,  -- Links to machine_templates table
+            field_key TEXT NOT NULL,              -- The field/placeholder key that was modified
+            original_value TEXT,                  -- Original value from LLM or previous modification
+            modified_value TEXT NOT NULL,         -- New value after modification
+            modification_reason TEXT,             -- Reason for the change (e.g., "Client request", "Kickoff meeting")
+            modified_by TEXT,                     -- Who made the change
+            modification_date TEXT NOT NULL,      -- When the modification was made
+            FOREIGN KEY (machine_template_id) REFERENCES machine_templates (id) ON DELETE CASCADE
+        )
+        """)
+        
         print(f"Database '{db_path}' initialized with all required tables.")
         conn.commit()
     except sqlite3.Error as e:
@@ -536,43 +551,107 @@ def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str 
     Returns:
         bool: True if successful, False otherwise
     """
-    if not client_quote_ref or not machines_data:
-        print("Error: Missing quote reference or machines data.")
+    if not client_quote_ref:
+        print("Error: Missing quote reference for save_machines_data.")
+        return False
+        
+    if not machines_data:
+        print("Error: Missing machines data for save_machines_data.")
+        return False
+    
+    # Validate machines_data structure
+    if "machines" not in machines_data:
+        print("Error: No 'machines' key in machines_data.")
+        print(f"Available keys: {list(machines_data.keys())}")
+        return False
+        
+    # Make sure we have at least one machine
+    if not machines_data.get("machines"):
+        print("Error: Empty machines list in machines_data.")
         return False
         
     conn = None
     try:
+        # First check if the client exists
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # First, delete any existing machines for this quote
+        cursor.execute("SELECT id FROM clients WHERE quote_ref = ?", (client_quote_ref,))
+        client_exists = cursor.fetchone()
+        
+        if not client_exists:
+            # Create a basic client record if it doesn't exist
+            print(f"Client with quote_ref {client_quote_ref} does not exist. Creating basic record.")
+            processing_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Get a machine name for the client record if possible
+            machine_name = ""
+            if machines_data.get("machines") and len(machines_data["machines"]) > 0:
+                machine_name = machines_data["machines"][0].get("machine_name", "")
+                
+            cursor.execute("""
+            INSERT INTO clients (quote_ref, customer_name, machine_model, processing_date)
+            VALUES (?, ?, ?, ?)
+            """, (client_quote_ref, "", machine_name, processing_ts))
+            conn.commit()
+        
+        # Delete any existing machines for this quote
         cursor.execute("DELETE FROM machines WHERE client_quote_ref = ?", (client_quote_ref,))
         
         # Prepare machines for insertion
         machines_to_insert = []
         processing_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # Process and validate each machine
         for machine in machines_data.get("machines", []):
+            # Ensure machine_name exists and is not empty
+            if not machine.get("machine_name"):
+                # Try to generate a name if missing
+                if machine.get("main_item") and machine["main_item"].get("description"):
+                    desc = machine["main_item"]["description"]
+                    # Use first line of description as machine name
+                    machine["machine_name"] = desc.split('\n')[0] if '\n' in desc else desc
+                else:
+                    # Use a default name with timestamp
+                    machine["machine_name"] = f"Unknown Machine {len(machines_to_insert) + 1}"
+                print(f"Generated machine name: {machine['machine_name']}")
+            
+            # Make sure machine has client_quote_ref
+            machine_copy = machine.copy()
+            machine_copy["client_quote_ref"] = client_quote_ref
+            
             # Add common items to each machine for storage
-            machine_with_common = machine.copy()
+            machine_with_common = machine_copy.copy()
             machine_with_common["common_items"] = machines_data.get("common_items", [])
             
-            machines_to_insert.append((
-                client_quote_ref,
-                machine.get("machine_name", "Unknown Machine"),
-                json.dumps(machine_with_common),
-                processing_ts
-            ))
+            # Convert machine to JSON and validate
+            try:
+                machine_json = json.dumps(machine_with_common)
+                machines_to_insert.append((
+                    client_quote_ref,
+                    machine_copy.get("machine_name", "Unknown Machine"),
+                    machine_json,
+                    processing_ts
+                ))
+            except (TypeError, ValueError) as e:
+                print(f"Error serializing machine to JSON: {e}")
+                print(f"Problem machine: {machine_copy.get('machine_name', 'Unknown')}")
+                # Continue with other machines
+                continue
         
         if machines_to_insert:
-            cursor.executemany("""
-            INSERT INTO machines (client_quote_ref, machine_name, machine_data_json, processing_date)
-            VALUES (?, ?, ?, ?)
-            """, machines_to_insert)
-            
-            conn.commit()
-            print(f"Saved {len(machines_to_insert)} machines for quote: {client_quote_ref}")
-            return True
+            try:
+                cursor.executemany("""
+                INSERT INTO machines (client_quote_ref, machine_name, machine_data_json, processing_date)
+                VALUES (?, ?, ?, ?)
+                """, machines_to_insert)
+                
+                conn.commit()
+                print(f"Saved {len(machines_to_insert)} machines for quote: {client_quote_ref}")
+                return True
+            except sqlite3.Error as e:
+                print(f"SQLite error while inserting machines: {e}")
+                return False
         else:
             print(f"No machines to save for quote: {client_quote_ref}")
             return False
@@ -873,6 +952,386 @@ def delete_document_content(quote_ref: str, db_path: str = DB_PATH) -> bool:
     except sqlite3.Error as e:
         print(f"Database error deleting document content: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
+
+# --- Functions for GOA modifications tracking ---
+
+def save_goa_modification(
+    machine_template_id: int, 
+    field_key: str, 
+    original_value: str, 
+    modified_value: str,
+    modification_reason: str = "",
+    modified_by: str = "",
+    db_path: str = DB_PATH
+) -> bool:
+    """
+    Saves a modification made to a GOA template field.
+    
+    Args:
+        machine_template_id: ID of the machine template being modified
+        field_key: The field/placeholder key that was modified
+        original_value: Original value before modification
+        modified_value: New value after modification
+        modification_reason: Optional reason for the change
+        modified_by: Optional name of who made the change
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if not machine_template_id or not field_key or not modified_value:
+        print("Error: Missing required parameters for save_goa_modification.")
+        return False
+        
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Check if the machine template exists
+        cursor.execute("SELECT id FROM machine_templates WHERE id = ?", (machine_template_id,))
+        if not cursor.fetchone():
+            print(f"Error: Machine template with ID {machine_template_id} not found.")
+            return False
+            
+        # Check if a modification for this field already exists
+        cursor.execute("""
+        SELECT id FROM goa_modifications 
+        WHERE machine_template_id = ? AND field_key = ?
+        """, (machine_template_id, field_key))
+        
+        existing_modification = cursor.fetchone()
+        modification_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        if existing_modification:
+            # Update existing modification
+            cursor.execute("""
+            UPDATE goa_modifications
+            SET original_value = ?,
+                modified_value = ?,
+                modification_reason = ?,
+                modified_by = ?,
+                modification_date = ?
+            WHERE id = ?
+            """, (
+                original_value,
+                modified_value,
+                modification_reason,
+                modified_by,
+                modification_date,
+                existing_modification[0]
+            ))
+        else:
+            # Insert new modification
+            cursor.execute("""
+            INSERT INTO goa_modifications
+            (machine_template_id, field_key, original_value, modified_value, 
+             modification_reason, modified_by, modification_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                machine_template_id,
+                field_key,
+                original_value,
+                modified_value,
+                modification_reason,
+                modified_by,
+                modification_date
+            ))
+            
+        conn.commit()
+        print(f"Saved GOA modification for field '{field_key}' on machine template ID: {machine_template_id}")
+        
+        # Update the template_data_json in machine_templates to reflect this change
+        cursor.execute("SELECT template_data_json FROM machine_templates WHERE id = ?", (machine_template_id,))
+        template_data_row = cursor.fetchone()
+        if template_data_row:
+            try:
+                template_data = json.loads(template_data_row[0])
+                if field_key in template_data:
+                    template_data[field_key] = modified_value
+                    cursor.execute("""
+                    UPDATE machine_templates 
+                    SET template_data_json = ?, processing_date = ? 
+                    WHERE id = ?
+                    """, (json.dumps(template_data), modification_date, machine_template_id))
+                    conn.commit()
+                    print(f"Updated template data for machine template ID: {machine_template_id}")
+            except json.JSONDecodeError:
+                print(f"Error parsing JSON for machine template ID {machine_template_id}")
+        
+        return True
+            
+    except sqlite3.Error as e:
+        print(f"Database error in save_goa_modification: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error in save_goa_modification: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def load_goa_modifications(machine_template_id: int, db_path: str = DB_PATH) -> List[Dict]:
+    """
+    Loads all modifications for a specific machine template.
+    
+    Args:
+        machine_template_id: ID of the machine template
+        
+    Returns:
+        List of dictionaries containing modification data
+    """
+    conn = None
+    modifications = []
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        SELECT id, field_key, original_value, modified_value, 
+               modification_reason, modified_by, modification_date
+        FROM goa_modifications
+        WHERE machine_template_id = ?
+        ORDER BY modification_date DESC
+        """, (machine_template_id,))
+        
+        rows = cursor.fetchall()
+        for row in rows:
+            modifications.append(dict(row))
+                
+        return modifications
+    except sqlite3.Error as e:
+        print(f"Database error loading GOA modifications for template {machine_template_id}: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def load_machine_templates_with_modifications(machine_id: int, db_path: str = DB_PATH) -> Dict:
+    """
+    Loads machine template data along with any modifications for a specific machine.
+    
+    Args:
+        machine_id: ID of the machine
+        
+    Returns:
+        Dictionary containing template data and modifications
+    """
+    conn = None
+    result = {"templates": [], "has_modifications": False}
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Get all templates for this machine
+        cursor.execute("""
+        SELECT id, template_type, template_data_json, generated_file_path, processing_date
+        FROM machine_templates
+        WHERE machine_id = ?
+        ORDER BY processing_date DESC
+        """, (machine_id,))
+        
+        template_rows = cursor.fetchall()
+        for template_row in template_rows:
+            template_dict = dict(template_row)
+            template_id = template_dict["id"]
+            
+            # Get modifications for this template
+            cursor.execute("""
+            SELECT id, field_key, original_value, modified_value, 
+                   modification_reason, modified_by, modification_date
+            FROM goa_modifications
+            WHERE machine_template_id = ?
+            ORDER BY field_key
+            """, (template_id,))
+            
+            modification_rows = cursor.fetchall()
+            modifications = [dict(row) for row in modification_rows]
+            
+            # Parse template data
+            try:
+                template_dict["template_data"] = json.loads(template_dict["template_data_json"])
+            except json.JSONDecodeError:
+                template_dict["template_data"] = {}
+                print(f"Error parsing JSON for template ID {template_id}")
+            
+            template_dict["modifications"] = modifications
+            if modifications:
+                result["has_modifications"] = True
+                
+            result["templates"].append(template_dict)
+                
+        return result
+    except sqlite3.Error as e:
+        print(f"Database error loading templates with modifications for machine {machine_id}: {e}")
+        return result
+    finally:
+        if conn:
+            conn.close()
+
+def update_template_after_modifications(machine_template_id: int, db_path: str = DB_PATH) -> bool:
+    """
+    Updates the template_data_json in machine_templates to reflect all modifications.
+    Used to consolidate changes after multiple modifications.
+    
+    Args:
+        machine_template_id: ID of the machine template
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Get the template data
+        cursor.execute("SELECT template_data_json FROM machine_templates WHERE id = ?", (machine_template_id,))
+        template_data_row = cursor.fetchone()
+        if not template_data_row:
+            print(f"Error: Machine template with ID {machine_template_id} not found.")
+            return False
+            
+        try:
+            template_data = json.loads(template_data_row[0])
+        except json.JSONDecodeError:
+            print(f"Error parsing JSON for machine template ID {machine_template_id}")
+            return False
+            
+        # Get all modifications for this template
+        cursor.execute("""
+        SELECT field_key, modified_value FROM goa_modifications
+        WHERE machine_template_id = ?
+        """, (machine_template_id,))
+        
+        modifications = cursor.fetchall()
+        if not modifications:
+            print(f"No modifications found for machine template ID {machine_template_id}")
+            return True  # Not an error, just no modifications to apply
+            
+        # Apply all modifications to the template data
+        for field_key, modified_value in modifications:
+            if field_key in template_data:
+                template_data[field_key] = modified_value
+                
+        # Update the template data
+        processing_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+        UPDATE machine_templates 
+        SET template_data_json = ?, processing_date = ? 
+        WHERE id = ?
+        """, (json.dumps(template_data), processing_date, machine_template_id))
+        
+        conn.commit()
+        print(f"Updated template data for machine template ID: {machine_template_id}")
+        return True
+        
+    except sqlite3.Error as e:
+        print(f"Database error updating template after modifications: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error updating template after modifications: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def find_machines_by_name(machine_name: str, db_path: str = DB_PATH) -> List[Dict]:
+    """
+    Finds machines by name across all quotes.
+    This is useful when looking for machines that might have been processed in different quotes.
+    
+    Args:
+        machine_name: The name of the machine to search for
+        
+    Returns:
+        List of dictionaries containing machine data
+    """
+    conn = None
+    machines = []
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Use LIKE for partial matching with wildcards
+        search_pattern = f"%{machine_name}%"
+        
+        cursor.execute("""
+        SELECT m.id, m.machine_name, m.machine_data_json, m.client_quote_ref, m.processing_date, 
+               c.customer_name, c.id as client_id
+        FROM machines m
+        LEFT JOIN clients c ON m.client_quote_ref = c.quote_ref
+        WHERE m.machine_name LIKE ?
+        ORDER BY m.processing_date DESC
+        """, (search_pattern,))
+        
+        rows = cursor.fetchall()
+        for row in rows:
+            machine_dict = dict(row)
+            try:
+                # Parse the JSON string back to a dictionary
+                machine_dict["machine_data"] = json.loads(machine_dict["machine_data_json"])
+                # Keep the original JSON string in case it's needed
+                machines.append(machine_dict)
+            except json.JSONDecodeError:
+                print(f"Error parsing JSON for machine ID {row['id']}")
+                
+        return machines
+    except sqlite3.Error as e:
+        print(f"Database error finding machines by name '{machine_name}': {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def load_all_processed_machines(db_path: str = DB_PATH) -> List[Dict]:
+    """
+    Loads all machines that have processed templates (GOA, etc.).
+    This is useful when looking for machines that have template data.
+    
+    Args:
+        db_path: Path to the database file
+        
+    Returns:
+        List of dictionaries containing machine data with template info
+    """
+    conn = None
+    machines = []
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Find machines that have at least one template
+        cursor.execute("""
+        SELECT m.id, m.machine_name, m.client_quote_ref, m.processing_date, 
+               c.customer_name, c.id as client_id,
+               COUNT(mt.id) as template_count
+        FROM machines m
+        LEFT JOIN clients c ON m.client_quote_ref = c.quote_ref
+        INNER JOIN machine_templates mt ON m.id = mt.machine_id
+        GROUP BY m.id
+        ORDER BY c.customer_name, m.machine_name
+        """)
+        
+        rows = cursor.fetchall()
+        for row in rows:
+            machine_dict = dict(row)
+            machines.append(machine_dict)
+                
+        return machines
+    except sqlite3.Error as e:
+        print(f"Database error loading all processed machines: {e}")
+        return []
     finally:
         if conn:
             conn.close()

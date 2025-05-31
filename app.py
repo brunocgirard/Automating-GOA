@@ -2,9 +2,11 @@ import streamlit as st
 import os
 import json
 import pandas as pd
+import re
 from typing import Dict, List, Optional, Any
 import traceback
 import shutil
+from datetime import datetime
 
 # Import from new modules
 from src.ui.ui_pages import (
@@ -26,7 +28,9 @@ from src.utils.crm_utils import (
     update_client_record, save_priced_items, load_priced_items_for_quote, 
     update_single_priced_item, delete_client_record, save_machines_data, 
     load_machines_for_quote, save_machine_template_data, load_machine_template_data, 
-    save_document_content, load_document_content
+    save_document_content, load_document_content, save_goa_modification,
+    load_goa_modifications, load_machine_templates_with_modifications, 
+    update_template_after_modifications, find_machines_by_name, load_all_processed_machines
 )
 
 # Define Template File Constants
@@ -140,7 +144,7 @@ def calculate_common_items_price(common_items):
         if item_price is not None: total_price += item_price
     return total_price
 
-def quick_extract_and_catalog(uploaded_pdf_file):
+def quick_extract_and_catalog(uploaded_pdf_file, existing_client_id=None):
     temp_pdf_path = None
     try:
         temp_pdf_path = os.path.join(".", uploaded_pdf_file.name)
@@ -149,23 +153,40 @@ def quick_extract_and_catalog(uploaded_pdf_file):
         items = extract_line_item_details(temp_pdf_path)
         full_text = extract_full_pdf_text(temp_pdf_path)
         if not items: st.warning("No items extracted."); return None
+        
+        # Generate a quote reference from the filename
         quote_ref = uploaded_pdf_file.name.split('.')[0]
+        
+        # Initialize client info
         client_info = {"quote_ref": quote_ref, "customer_name": "", "machine_model": "", "country_destination": "", "sold_to_address": "", "ship_to_address": "", "telephone": "", "customer_contact_person": "", "customer_po": ""}
+        
+        # If existing client ID is provided, get their info and update only the quote_ref
+        if existing_client_id:
+            existing_client = get_client_by_id(existing_client_id)
+            if existing_client:
+                # Create a new quote record linked to the existing client
+                linked_quote_ref = f"{existing_client['quote_ref']}_{quote_ref}"
+                client_info = existing_client.copy()
+                client_info["quote_ref"] = linked_quote_ref
+                progress_placeholder.info(f"Linking to existing client: {existing_client['customer_name']}")
+            else:
+                progress_placeholder.warning(f"Existing client ID {existing_client_id} not found. Creating new client.")
+        
         if save_client_info(client_info):
-            progress_placeholder.info(f"Client record for {quote_ref} created.")
-            if save_priced_items(quote_ref, items): progress_placeholder.info(f"Saved {len(items)} items.")
-            else: st.warning(f"Failed to save priced items for {quote_ref}.")
-            if full_text and save_document_content(quote_ref, full_text, uploaded_pdf_file.name): progress_placeholder.info("Doc content saved.")
+            progress_placeholder.info(f"Client record for {client_info['quote_ref']} created.")
+            if save_priced_items(client_info['quote_ref'], items): progress_placeholder.info(f"Saved {len(items)} items.")
+            else: st.warning(f"Failed to save priced items for {client_info['quote_ref']}.")
+            if full_text and save_document_content(client_info['quote_ref'], full_text, uploaded_pdf_file.name): progress_placeholder.info("Doc content saved.")
             else: st.warning("Failed to save doc content.")
             
             machine_data = identify_machines_from_items(items)
-            if save_machines_data(quote_ref, machine_data): progress_placeholder.info("Machine grouping saved.")
+            if save_machines_data(client_info['quote_ref'], machine_data): progress_placeholder.info("Machine grouping saved.")
             else: st.warning("Failed to save machine grouping.")
 
             progress_placeholder.success("Cataloging Complete!")
             load_crm_data()
-            return {"quote_ref": quote_ref, "items": items}
-        else: st.error(f"Failed to create client record for {quote_ref}."); return None
+            return {"quote_ref": client_info['quote_ref'], "items": items}
+        else: st.error(f"Failed to create client record for {client_info['quote_ref']}."); return None
     except Exception as e: st.error(f"Quick extract error: {e}"); traceback.print_exc(); return None
     finally: 
         if temp_pdf_path and os.path.exists(temp_pdf_path): os.remove(temp_pdf_path)
@@ -288,7 +309,22 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
                 return False
             
             status_bar.update(label="Saving GOA data to CRM...")
+            
+            # Create client info - check if we should use an existing client
+            existing_client_id = st.session_state.get("selected_existing_client_id", None)
             client_info_payload = {"quote_ref": uploaded_pdf_file.name.split('.')[0], "customer_name": "", "machine_model": "", "country_destination": "", "sold_to_address": "", "ship_to_address": "", "telephone": "", "customer_contact_person": "", "customer_po": ""}
+            
+            if existing_client_id:
+                existing_client = get_client_by_id(existing_client_id)
+                if existing_client:
+                    # Create a linked quote reference that combines the existing client and this quote
+                    linked_quote_ref = f"{existing_client['quote_ref']}_{client_info_payload['quote_ref']}"
+                    client_info_payload = existing_client.copy()
+                    client_info_payload["quote_ref"] = linked_quote_ref
+                    st.write(f"Linking to existing client: {existing_client['customer_name']}")
+                else:
+                    st.warning(f"Existing client ID {existing_client_id} not found. Creating new client.")
+            
             if save_client_info(client_info_payload):
                 st.write(f"Client info for GOA '{client_info_payload['quote_ref']}' saved.")
                 if st.session_state.selected_pdf_items_structured and save_priced_items(client_info_payload['quote_ref'], st.session_state.selected_pdf_items_structured): st.write("Priced items for GOA saved.")
@@ -306,6 +342,12 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
 def process_machine_specific_data(machine_data, template_file_path):
     try:
         if not configure_gemini_client(): st.session_state.error_message = "LLM client config failed."; return False
+        
+        # Debug machine data
+        st.info(f"Processing machine: {machine_data.get('machine_name', 'Unknown')}")
+        if "id" in machine_data:
+            st.info(f"Machine already has ID: {machine_data['id']}")
+        
         common_items = machine_data.get("common_items", [])
         if not common_items and st.session_state.identified_machines_data:
              common_items = st.session_state.identified_machines_data.get("common_items", [])
@@ -334,7 +376,11 @@ def process_machine_specific_data(machine_data, template_file_path):
             
             machine_filled_data = get_machine_specific_fields_via_llm(machine_data, common_items, st.session_state.template_contexts, st.session_state.full_pdf_text)
             st.session_state.machine_specific_filled_data = machine_filled_data
-            machine_specific_output_path = f"output_{machine_data.get('machine_name', 'machine').replace(' ', '_')}_GOA.docx"
+            # Clean machine name for file naming
+            machine_name = machine_data.get('machine_name', 'machine')
+            clean_name = machine_name.replace(' ', '_')
+            clean_name = clean_name.replace('"', '_')
+            machine_specific_output_path = f"output_{clean_name}_GOA.docx"
             
             # Check that we have data before filling
             if not machine_filled_data:
@@ -355,10 +401,129 @@ def process_machine_specific_data(machine_data, template_file_path):
                 return False
                 
             st.session_state.machine_docx_path = machine_specific_output_path
+            
+            # Save machine template data to database
+            # Make sure we have a machine ID - check for "id" in machine_data
+            machine_id = None
             if "id" in machine_data:
-                save_machine_template_data(machine_data["id"], "GOA", machine_filled_data, machine_specific_output_path)
+                machine_id = machine_data["id"]
+                st.success(f"Using existing machine ID: {machine_id}")
+            else:
+                # We need to find or create a machine record in the database
+                # First, determine the quote_ref
+                quote_ref = None
+                
+                # Try several methods to get the quote_ref
+                if "client_quote_ref" in machine_data:
+                    quote_ref = machine_data["client_quote_ref"]
+                    st.info(f"Found quote_ref in machine_data: {quote_ref}")
+                elif st.session_state.items_for_confirmation and len(st.session_state.items_for_confirmation) > 0:
+                    quote_ref = st.session_state.items_for_confirmation[0].get("client_quote_ref", "")
+                    if quote_ref:
+                        st.info(f"Found quote_ref in items_for_confirmation: {quote_ref}")
+                
+                # If still not found, try to extract from file info
+                if not quote_ref:
+                    # Try to extract from the file name if available
+                    if hasattr(st.session_state, "pdf_filename") and st.session_state.pdf_filename:
+                        match = re.search(r'([A-Za-z0-9-]+)\.pdf', st.session_state.pdf_filename)
+                        if match:
+                            quote_ref = match.group(1)
+                            st.info(f"Extracted quote_ref from filename: {quote_ref}")
+                    
+                    # If still no quote_ref, use machine name as fallback
+                    if not quote_ref:
+                        machine_name = machine_data.get("machine_name", "")
+                        if machine_name:
+                            # Sanitize machine name to use as quote_ref
+                            quote_ref = re.sub(r'[^A-Za-z0-9-]', '_', machine_name)
+                            st.warning(f"Using machine name as quote_ref fallback: {quote_ref}")
+                        else:
+                            quote_ref = f"unknown_quote_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            st.warning(f"Using generated quote_ref fallback: {quote_ref}")
+                
+                # Ensure we have a valid quote_ref
+                if not quote_ref:
+                    st.error("Could not determine quote_ref. Cannot save machine data.")
+                    return False
+                
+                st.info(f"Using quote_ref: {quote_ref}")
+                
+                # Check if we already have this machine in the database
+                
+                # First check if a machine with this name already exists in any quote
+                machine_name = machine_data.get("machine_name", "")
+                matching_machines = find_machines_by_name(machine_name)
+                
+                if matching_machines:
+                    st.success(f"Found {len(matching_machines)} existing machine(s) with name '{machine_name}'")
+                    # Use the first matching machine
+                    machine_id = matching_machines[0]["id"]
+                    st.success(f"Using existing machine ID: {machine_id}")
+                else:
+                    # Ensure the client record exists first
+                    client_info = {"quote_ref": quote_ref, "customer_name": "", "machine_model": machine_data.get("machine_name", "")}
+                    st.info(f"Ensuring client record exists for quote_ref: {quote_ref}")
+                    save_client_info(client_info)
+                    
+                    # Now check for existing machines in this quote
+                    machines_from_db = load_machines_for_quote(quote_ref)
+                    
+                    # Look for a matching machine name
+                    matching_machine = next((m for m in machines_from_db if m["machine_name"] == machine_name), None)
+                    
+                    if matching_machine:
+                        machine_id = matching_machine["id"]
+                        st.success(f"Found existing machine ID: {machine_id}")
+                    else:
+                        # Need to create a new machine record
+                        st.info(f"Creating new machine record for {machine_name} with quote_ref: {quote_ref}")
+                        
+                        # Make sure machine_data has client_quote_ref
+                        machine_data_copy = machine_data.copy()
+                        machine_data_copy["client_quote_ref"] = quote_ref
+                        
+                        machine_group = {"machines": [machine_data_copy], "common_items": common_items}
+                        
+                        if save_machines_data(quote_ref, machine_group):
+                            # Get the newly created machine ID
+                            machines_from_db = load_machines_for_quote(quote_ref)
+                            matching_machine = next((m for m in machines_from_db if m["machine_name"] == machine_name), None)
+                            if matching_machine:
+                                machine_id = matching_machine["id"]
+                                st.success(f"Created new machine with ID: {machine_id}")
+                            else:
+                                st.warning("Created machine record but couldn't retrieve its ID")
+                                # Additional debugging
+                                st.info(f"Machines in DB after creation: {len(machines_from_db)}")
+                                for m in machines_from_db:
+                                    st.info(f"- Machine: {m['machine_name']} (ID: {m['id']})")
+                        else:
+                            st.error(f"Failed to save machine data to database for quote_ref: {quote_ref}")
+                            # Additional error details
+                            st.info(f"Machine data: {machine_data_copy}")
+                            st.info(f"Common items: {len(common_items)} items")
+            
+            # Now save the template data
+            if machine_id:
+                from src.utils.crm_utils import save_machine_template_data
+                st.info(f"Saving template data for machine ID: {machine_id}")
+                if save_machine_template_data(machine_id, "GOA", machine_filled_data, machine_specific_output_path):
+                    st.success(f"Saved GOA template data for machine ID: {machine_id}")
+                    
+                    # Store the machine ID in the session for future use
+                    st.session_state.selected_machine_id = machine_id
+                else:
+                    st.warning("Failed to save template data to database")
+            else:
+                st.error("No machine ID available, template data not saved to database")
+                
             return True
-    except Exception as e: st.session_state.error_message = f"Machine GOA processing error: {e}"; traceback.print_exc(); return False
+    except Exception as e: 
+        st.session_state.error_message = f"Machine GOA processing error: {e}"
+        traceback.print_exc()
+        st.error(f"Detailed error: {traceback.format_exc()}")
+        return False
 
 def load_crm_data(): st.session_state.all_crm_clients = load_all_clients(); st.session_state.crm_data_loaded = True
 
@@ -424,6 +589,27 @@ def load_previous_document(client_id):
                 # Fall back to legacy format
                 st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
                 st.info(f"Using legacy format: {len(st.session_state.template_contexts)} fields found")
+                
+            # Load template context from a previously processed GOA if available
+            try:
+                if machines_data_from_db:
+                    for machine_record in machines_data_from_db:
+                        machine_id = machine_record.get("id")
+                        if machine_id:
+                            # Get templates for this machine
+                            from src.utils.crm_utils import load_machine_templates_with_modifications
+                            templates_data = load_machine_templates_with_modifications(machine_id)
+                            
+                            # Find a GOA template
+                            goa_template = next((t for t in templates_data.get("templates", []) 
+                                               if t.get("template_type", "").lower() == "goa"), None)
+                            
+                            if goa_template and "template_data" in goa_template:
+                                st.success(f"Found existing GOA template for machine: {machine_record.get('machine_name')}")
+                                break
+            except Exception as e:
+                st.warning(f"Error loading template context from previous GOA: {e}")
+                
         else:
             st.error(f"Template file {TEMPLATE_FILE} not found")
         

@@ -3,6 +3,413 @@ from typing import List, Set, Dict, Optional
 from docx import Document
 import os # Added for __main__ example
 
+# Define explicit placeholder mappings
+explicit_placeholder_mappings = {
+    # Euro Guarding specific mappings
+    "eg_none_check": "Euro Guarding - None",
+    "eg_pmtg_check": "Euro Guarding - Panel material - Tempered glass",
+    "eg_pnl_check": "Euro Guarding - Panel material - Lexan",
+    "eg_stkw_check": "Euro Guarding - Switch type - Key switch",
+    "eg_stm_check": "Euro Guarding - Switch type - Magnetic",
+    "eg_sto_check": "Euro Guarding - Switch type - Other",
+    "eg_tcnone_check": "Euro Guarding - Top cover - None",
+    "eg_tcyes_check": "Euro Guarding - Top cover - Yes",
+    "eg_rc_check": "Euro Guarding - Reject cover",
+    "eg_rcnone_check": "Euro Guarding - Reject cover - None",
+    
+    # Coding and Inspection System Specifications mappings
+    "ci_chs_check": "Coding and Inspection System Specifications - Coder - hot stamp",
+    "ci_ci15_check": "Coding and Inspection System Specifications - Videojet - ink jet vj 1520",
+    "ci_cl_check": "Coding and Inspection System Specifications - Coder - laser",
+    "ci_cnone_check": "Coding and Inspection System Specifications - Coder - none",
+    "ci_ctj_check": "Coding and Inspection System Specifications - Coder - thermal ink jet",
+    "ci_lfe_check": "Coding and Inspection System Specifications - Laser - fume extraction",
+    "ci_lfm": "Coding and Inspection System Specifications - Laser - fume extraction model",
+    "ci_lo_check": "Coding and Inspection System Specifications - Laser - other",
+    "ci_lv_check": "Coding and Inspection System Specifications - Laser - videojet",
+    "ci_lvm": "Coding and Inspection System Specifications - Laser - videojet model",
+    "ci_p2d_check": "Coding and Inspection System Specifications - Print - 2d",
+    "ci_pbc_check": "Coding and Inspection System Specifications - Print - bar code",
+    "ci_pep_check": "Coding and Inspection System Specifications - Print - exp. date",
+    "ci_pl_check": "Coding and Inspection System Specifications - Print - lot",
+    "ci_pnone_check": "Coding and Inspection System Specifications - Print - none",
+    "ci_po_check": "Coding and Inspection System Specifications - Print - other",
+    "ci_ppo_check": "Coding and Inspection System Specifications - Print - package on",
+    "ci_v33_check": "Coding and Inspection System Specifications - Videojet - laser 3330",
+    "ci_v85_check": "Coding and Inspection System Specifications - Videojet - 8520",
+    "ci_vb_check": "Coding and Inspection System Specifications - Vision - barcode",
+    "ci_vc_check": "Coding and Inspection System Specifications - Vision - cognex",
+    "ci_vcom": "Coding and Inspection System Specifications - Vision - comment",
+    "ci_vd651_check": "Coding and Inspection System Specifications - Videojet - dataflex 6530 (107wx75l)",
+    "ci_vd65_check": "Coding and Inspection System Specifications - Videojet -dataflex 6530 (53wx75l)",
+    "ci_vdxsx": "Coding and Inspection System Specifications - Videojet - for dx (rh) for sx (lh)",
+    "ci_vnone_check": "Coding and Inspection System Specifications - Vision - none",
+    "ci_vo_check": "Coding and Inspection System Specifications - Vision - other",
+    "ci_vocr_check": "Coding and Inspection System Specifications - Vision - ocr",
+    "ci_vocv_check": "Coding and Inspection System Specifications - Vision - ocv",
+    "ci_vos_check": "Coding and Inspection System Specifications - Vision - orientation/ skew",
+    "ci_vow_check": "Coding and Inspection System Specifications - Vision - on web",
+    "ci_vp_check": "Coding and Inspection System Specifications - Vision - presence",
+    "ci_vqty": "Coding and Inspection System Specifications - Vision - qty",
+    "ci_vpo_check": "Coding and Inspection System Specifications - Vision - position/ placement",
+    "ci_vtq_check": "Coding and Inspection System Specifications - Vision - torque",
+    "ci_ctt_check": "Coding and Inspection System Specifications - Coder - thermal transfer",
+    "ci_vob_check": "Coding and Inspection System Specifications - Vision - on bottle",
+    
+    # Warranty & Install & Spares mappings
+    "sk_1yr_check": "Warranty & Install & Spares - Spare kit - 1yr",
+    "sk_2yr_check": "Warranty & Install & Spares - Spare kit - 2yr",
+    "sk_none_check": "Warranty & Install & Spares - Spare kit - none",
+    "stpc_none_check": "Warranty & Install & Spares - Start-up commissioning - none",
+    "stpc_yes": "Warranty & Install & Spares - Start-up commissioning - yes – # of days",
+    "wi_war1_check": "Warranty & Install & Spares - Warranty - 1yr",
+    "wi_war2_check": "Warranty & Install & Spares - Warranty - 2yr",
+    "wrts_y_check": "Warranty & Install & Spares - Remote tech service - yes",
+    "wrts_none_check": "Warranty & Install & Spares - Remote tech service - none",
+    
+    # Packaging & Transport mappings
+    "pt_pbc_check": "Packaging & Transport - Packaging by - capmatic",
+    "pt_pbcu_check": "Packaging & Transport - Packaging by - customer / not incl.",
+    "pt_ptc_check": "Packaging & Transport - Packaging type - crate",
+    "pt_pts_check": "Packaging & Transport - Packaging type - skid",
+    "pt_ptsw_check": "Packaging & Transport - Packaging type -  sea worthy",
+    "pt_tcc_check": "Packaging & Transport - Transport charges - capmatic",
+    "pt_tccu_check": "Packaging & Transport - Transport charges - customer",
+    
+    # Validation Documents mappings
+    "vd_d_check": "Validation Documents - dq",
+    "vd_f_check": "Validation Documents - vd_f_check",
+    "vd_fd_check": "Validation Documents - fs/ds",
+    "vd_h_check": "Validation Documents - hds/sds",
+    "vd_i_check": "Validation Documents - iq/oq",
+    "vd_s_check": "Validation Documents - sat",
+    
+    # Labeling System Specifications mappings
+    "ls_a3p_check": "Labeling System Specifications - Application sys - 3-panel",
+    "ls_a4p_check": "Labeling System Specifications - Application sys - 4-panel",
+    "ls_a5p_check": "Labeling System Specifications - Application sys - 5-panel",
+    "ls_abqty": "Labeling System Specifications - Application sys - belts qty",
+    "ls_acl_check": "Labeling System Specifications - Application sys - case label",
+    "ls_ap_check": "Labeling System Specifications - Application sys - prism",
+    "ls_atl_check": "Labeling System Specifications - Arm type - \"l\" shaped",
+    "ls_ats_check": "Labeling System Specifications - Arm type - standard",
+    "ls_awa_check": "Labeling System Specifications - Application sys - wrap around",
+    "ls_awb_check": "Labeling System Specifications - Application sys - wipe front & back",
+    "ls_awp_check": "Labeling System Specifications - Application sys - wrap around in puck",
+    "ls_ee_check": "Labeling System Specifications - eagle eye plus sensor (clr label)",
+    "ls_lhdx_check": "Labeling System Specifications - Label head orientation - dx right side",
+    "ls_lhl100_check": "Labeling System Specifications - Label hd model - ls100",
+    "ls_lhl200_check": "Labeling System Specifications - Label hd model - ls200",
+    "ls_lhsx_check": "Labeling System Specifications - Label head orientation - sx left side",
+    "ls_ll_check": "Labeling System Specifications - low label sensor",
+    "ls_none_check": "Labeling System Specifications - none",
+    "ls_sd300_check": "Labeling System Specifications - Support reel dia - 300 mm",
+    "ls_sd380_check": "Labeling System Specifications - Support reel dia - 380 mm",
+    "ls_swb_check": "Labeling System Specifications - Separator wheel - belt",
+    "ls_swnone_check": "Labeling System Specifications - Separator wheel - none",
+    "ls_sws_check": "Labeling System Specifications - Separator wheel - starwheel",
+    "ls_sww_check": "Labeling System Specifications - Separator wheel - wheel",
+    "ls_thd_check": "Labeling System Specifications - top hold down",
+    "ls_thdba_check": "Labeling System Specifications - bottle aligner",
+    "ls_thdtf_check": "Labeling System Specifications - twin feedscrew",
+    "ls_tl_check": "Labeling System Specifications - Type - linear (inline)",
+    "ls_tr_check": "Labeling System Specifications - Type - rotary",
+    
+    # BeltStar System Specifications mappings
+    "bs_cpac_check": "BeltStar System Specifications - Cap Placement - AC",
+    "bs_cpbo_check": "BeltStar System Specifications - Cap Placement - Belts – on the fly",
+    "bs_cpnone_check": "BeltStar System Specifications - Cap Placement - None",
+    "bs_csds_check": "BeltStar System Specifications - Cap Sorting - Docking Station",
+    "bs_cse_check": "BeltStar System Specifications - Cap Sorting - Elevator",
+    "bs_manone_check": "BeltStar System Specifications - Motorized Adj. - None",
+    "bs_may_check": "BeltStar System Specifications - Motorized Adj. - Yes",
+    "bs_none_check": "BeltStar System Specifications - None",
+    "bs_tadb_check": "BeltStar System Specifications - Torque - AC motor DC Brake",
+    "bs_tam_check": "BeltStar System Specifications - Torque - Air motor",
+    "bs_tb_check": "BeltStar System Specifications - Torque - Belts",
+    "bs_tf_check": "BeltStar System Specifications - Torque - Feedback",
+    "bs_tht_check": "BeltStar System Specifications - Torque - HMI Adj. Torque",
+    "bs_tmc_check": "BeltStar System Specifications - Torque - Magnet clutch",
+    "bs_ts_check": "BeltStar System Specifications - Torque - Servo",
+    "bs_tcb": "BeltStar System Specifications - Torque - Copy of bottle",
+    "bs_tcn": "BeltStar System Specifications - Torque - copy of neck",
+    "bs_ttr": "BeltStar System Specifications - Torque - Torque Range (in-lbs)",
+    
+    # Capping System Specifications mappings
+    "cs_cdc_check": "Capping System Specifications - Centering device - cone",
+    "cs_cdn_check": "Capping System Specifications - Centering device - neck",
+    "cs_cdnone_check": "Capping System Specifications - Centering device - none",
+    "cs_cdt_check": "Capping System Specifications - Centering device - tube",
+    "cs_cpof_check": "Capping System Specifications - Cap placement - on the fly",
+    "cs_cppp_check": "Capping System Specifications - Cap placement - pick & place",
+    "cs_cppt_check": "Capping System Specifications - Cap placement - push through",
+    "cs_cpqty": "Capping System Specifications - Cap placement - qty",
+    "cs_cpr_check": "Capping System Specifications - Cap placement - rotary",
+    "cs_cpra_check": "Capping System Specifications - Cap placement - Rotation - air",
+    "cs_cprs_check": "Capping System Specifications - Cap placement - Rotation - servo",
+    "cs_cpsd_check": "Capping System Specifications - Cap placement - servo up down",
+    "cs_cpsi_check": "Capping System Specifications - Cap placement - servo index",
+    "cs_csac_check": "Capping System Specifications - Cap sorting - acoustic cover",
+    "cs_csc_check": "Capping System Specifications - Cap sorting - centrifugal",
+    "cs_csds_check": "Capping System Specifications - Cap sorting - docking station",
+    "cs_csm_check": "Capping System Specifications - Cap Sorting - Mechanical",
+    "cs_csvb_check": "Capping System Specifications - Cap sorting - vibratory bowl (xmm)",
+    "cs_none_check": "Capping System Specifications - none",
+    "cs_tam_check": "Capping System Specifications - Torque - air motor",
+    "cs_tat_check": "Capping System Specifications - Torque - appl. torque system tool (30 or 44)",
+    "cs_tcn": "Capping System Specifications - Torque - copy of neck",
+    "cs_tf_check": "Capping System Specifications - Torque - feedback",
+    "cs_tmc_check": "Capping System Specifications - Torque - magnet clutch",
+    "cs_tqty": "Capping System Specifications - Torque - qty",
+    "cs_ts_check": "Capping System Specifications - Torque - servo",
+    "cs_tsc_check": "Capping System Specifications - Torque - servo calibration sys.",
+    "cs_ttr": "Capping System Specifications - Torque - torque range (in-lbs)",
+    "cs_bfc": "Capping System Specifications - Bulk feeder - capacity (ft3)",
+    "cs_bfc_check": "Capping System Specifications - Bulk feeder - cover",
+    "cs_bfeg_check": "Capping System Specifications- Bulk feeder - elevator (giraffe)",
+    "cs_bfnone_check": "Capping System Specifications- Bulk feeder - none",
+    "cs_bfpv_check": "Capping System Specifications- Bulk feeder - pedestal vibratory",
+    "cs_cse_check": "Capping System Specifications - Cap sorting elevator",
+    "cs_tac_check": "Capping System Specifications - Tube aligner - cone",
+    "cs_tagd_check": "Capping System Specifications - Tube aligner - grip & dive",
+    "cs_tanone_check": "Capping System Specifications - Tube aligner - none",
+    "cs_tcb": "Capping System Specifications - Torque - copy of bottle",
+    
+    # Plugging System Specifications mappings
+    "ps_none_check": "Plugging System Specifications - none",
+    "ps_plm_check": "Plugging System Specifications - Plug Placement - Mechanical",
+    "ps_psm_check": "Plugging System Specifications - Plug Sorting - Mechanical",
+    "ps_bfc": "Plugging System Specifications - Bulk feeder - capacity (ft3)",
+    "ps_bfe_check": "Plugging System Specifications - Bulk feeder - electric",
+    "ps_bfeg_check": "Plugging System Specifications - Bulk feeder - elevator (giraffe)",
+    "ps_bfnone_check": "Plugging System Specifications - Bulk feeder - none",
+    "ps_bfp_check": "Plugging System Specifications - Bulk feeder - pneumatic",
+    "ps_bfpv_check": "Plugging System Specifications - Bulk feeder - pedestal vibratory",
+    "ps_plpp_check": "Plugging System Specifications - Plug placement - pick & place",
+    "ps_plpt_check": "Plugging System Specifications - Plug placement - push through",
+    "ps_plqty": "Plugging System Specifications - Plug placement - qty",
+    "ps_plr_check": "Plugging System Specifications - Plug placement - rotary",
+    "ps_plv_check": "Plugging System Specifications - Plug placement - vacuum",
+    "ps_psac_check": "Plugging System Specifications - Plug sorting acoustic cover",
+    "ps_psc_check": "Plugging System Specifications - Plug sorting - centrifugal",
+    "ps_psds_check": "Plugging System Specifications - Plug sorting - docking station",
+    "ps_psnone_check": "Plugging System Specifications - Plug sorting - none",
+    "ps_psvb_check": "Plugging System Specifications - Plug sorting - vibratory bowl (?mm)",
+    "ps_pse_check": "Plugging System Specifications - Plug sorting - elevator",
+    
+    # Cottoner mappings
+    "c_cn_check": "Cottoner - Cotton Bin - No",
+    "c_cy_check": "Cottoner - Cotton Bin - Yes",
+    "c_none_check": "Cottoner - None",
+    "c_sp_check": "Cottoner - Sensing - Presence",
+    "c_sh_check": "Cottoner - Sensing - High",
+
+    # Desiccant mappings
+    "d_bf_pv_check": "Desiccant - Bulk feeder - pedestal vibratory",
+    "d_bfc_check": "Desiccant - Bulk feeder - cover",
+    "d_bfe_check": "Desiccant - Bulk feeder - elevator",
+    "d_bfi_check": "Desiccant - Bulk feeder - internal",
+    "d_none_check": "Desiccant - none",
+    "d_tc_check": "Desiccant - Type - cannister",
+    "d_trp_check": "Desiccant - Type - roll / pouch",
+
+    # Gas Purge mappings
+    "gp_laf_check": "Gas Purge - Location/Type - after fill",
+    "gp_latf_check": "Gas Purge - Location/Type - at fill st.",
+    "gp_lbf_check": "Gas Purge - Location/Type - before fill st",
+    "gp_lqty": "Gas Purge - Location/Type - qty",
+    "gp_lt_check": "Gas Purge - Location/Type - tunnel",
+    "gp_none_check": "Gas Purge - none",
+    "gp_ta_check": "Gas Purge - Type - argon",
+    "gp_tn_check": "Gas Purge - Type - nitrogen",
+
+    # Liquid Filling System Specifications mappings
+    "lf_cnone_check": "Liquid Filling System Specifications - Cleaning - none",
+    "lf_cns": "Liquid Filling System Specifications - Cleaning - no. of stations",
+    "lf_coc_check": "Liquid Filling System Specifications - Cleaning - ionization cleaning",
+    "lf_ctg_check": "Liquid Filling System Specifications - Cleaning - touch & go (c.i.p. man. sys)",
+    "lf_cvac_check": "Liquid Filling System Specifications - Cleaning - vacuum air cleaning",
+    "lf_gsds_check": "Liquid Filling System Specifications - Gutter system - drip style",
+    "lf_gsnone_check": "Liquid Filling System Specifications - Gutter system - none",
+    "lf_gsp_check": "Liquid Filling System Specifications - Gutter system - prime/purge/rinse",
+    "lf_nb1/2_check": "Liquid Filling System Specifications - Nozzle body size - 1/2\"",
+    "lf_nb1/4_check": "Liquid Filling System Specifications - Nozzle body size - 1/4\"",
+    "lf_nb10_check": "Liquid Filling System Specifications - Nozzle body size - 10mm",
+    "lf_nb12_check": "Liquid Filling System Specifications - Nozzle body size - 12mm",
+    "lf_nb1_check": "Liquid Filling System Specifications - Nozzle body size - 1\"",
+    "lf_nb3/8_check": "Liquid Filling System Specifications - Nozzle body size - 3/8\"",
+    "lf_nb5/8_check": "Liquid Filling System Specifications - Nozzle body size - 5/8\"",
+    "lf_nb6_check": "Liquid Filling System Specifications - Nozzle body size - 6 mm",
+    "lf_nb8_check": "Liquid Filling System Specifications - Nozzle body size - 8mm",
+    "lf_nb3/4_check": "Liquid Filling System Specifications - Nozzle body type - 3/4\"",
+    "lf_nson_check": "Liquid Filling System Specifications - offset nozzle bar",
+    "lf_ntd_check": "Liquid Filling System Specifications - Nozzle type - double wall nitro & fill",
+    "lf_ntdq": "Liquid Filling System Specifications - Nozzle type - double wall nitro & fill - qty",
+    "lf_nti_check": "Liquid Filling System Specifications - Nozzle type - ibso",
+    "lf_ntiq": "Liquid Filling System Specifications - Nozzle type - ibso - qty",
+    "lf_nto_check": "Liquid Filling System Specifications - Nozzle type - obso",
+    "lf_ntoq": "Liquid Filling System Specifications - Nozzle type - obso - qty",
+    "lf_nts_check": "Liquid Filling System Specifications - Nozzle type - straight",
+    "lf_ntsq": "Liquid Filling System Specifications - Nozzle type - straight - qty",
+    "lf_ntsv_check": "Liquid Filling System Specifications - Nozzle type - straight with check valve",
+    "lf_ntsvq": "Liquid Filling System Specifications - Nozzle type - straight with check valve - qty",
+    "lf_ocw_check": "Liquid Filling System Specifications - Options - check weighing (tare in/out)",
+    "lf_onc": "Liquid Filling System Specifications - Options - no. of cells",
+    "lf_p1000": "Liquid Filling System Specifications - Pump - 1000cc (qty)",
+    "lf_p100": "Liquid Filling System Specifications - Pump - 100cc (qty)",
+    "lf_p10": "Liquid Filling System Specifications - Pump - 10cc (qty)",
+    "lf_p250": "Liquid Filling System Specifications - Pump - 250cc (qty)",
+    "lf_p500": "Liquid Filling System Specifications - Pump - 500cc (qty)",
+    "lf_p50": "Liquid Filling System Specifications - Pump - 50cc (qty)",
+    "lf_p850": "Liquid Filling System Specifications - Pump - 850cc (qty)",
+    "lf_phc_check": "Liquid Filling System Specifications - Pump - hard chrome",
+    "lf_pmm": "Liquid Filling System Specifications - Pump - mass meter (qty)",
+    "lf_pnone_check": "Liquid Filling System Specifications - Pump - none",
+    "lf_pother": "Liquid Filling System Specifications - Pump - Other",
+    "lf_ptl_check": "Liquid Filling System Specifications - Pump type - liquid/semi",
+    "lf_ptp_check": "Liquid Filling System Specifications - Pump type - pneumatic",
+    "lf_pts_check": "Liquid Filling System Specifications - Pump type - servo (qty)",
+    "lf_ptsb_check": "Liquid Filling System Specifications - Pump type - servo bottom-up fill",
+    "lf_ptsh_check": "Liquid Filling System Specifications - Pump type - steel heart (peristaltic)",
+    "lf_ptv_check": "Liquid Filling System Specifications - Pump type - volumetric",
+    "lf_ptvi_check": "Liquid Filling System Specifications - Pump type - viscous",
+    "lf_ptpd_check": "Liquid Filling System Specifications - Pump type - positive displacement",
+    "lf_vta_check": "Liquid Filling System Specifications - Valve type - air pilot",
+    "lf_vtbw_check": "Liquid Filling System Specifications - Valve type - ball weight",
+    "lf_vtnone_check": "Liquid Filling System Specifications - Valve type - none",
+    "lf_vtr_check": "Liquid Filling System Specifications - Valve type - rotary",
+    "lf_cdc_check": "Liquid Filling System Specifications - Centering device - cone",
+    "lf_cdn_check": "Liquid Filling System Specifications - Centering device - neck",
+    "lf_cdnone_check": "Liquid Filling System Specifications - Centering device - none",
+    "lf_th100_check": "Liquid Filling System Specifications - Tank - 100l",
+    "lf_th18_check": "Liquid Filling System Specifications - Tank - 18l",
+    "lf_th60_check": "Liquid Filling System Specifications - Tank - 60l",
+    "lf_tha_check": "Liquid Filling System Specifications - Tank - agitator",
+    "lf_thchz": "Liquid Filling System Specifications - Tank - customer hose size (id) or tri-clamp",
+    "lf_the_check": "Liquid Filling System Specifications - Tank - electropolished",
+    "lf_thh_check": "Liquid Filling System Specifications - Tank - hopper",
+    "lf_thitp_check": "Liquid Filling System Specifications - Tank - incl. transfer pump",
+    "lf_thj_check": "Liquid Filling System Specifications - Tank - jacketed",
+    "lf_thnone_check": "Liquid Filling System Specifications - Tank - none",
+    "lf_tho": "Liquid Filling System Specifications - Tank - other",
+    "lf_thsb_check": "Liquid Filling System Specifications - Tank - spray ball",
+    "lf_tht_check": "Liquid Filling System Specifications - Tank - tank",
+
+    # Street Fighter Tablet Counter mappings
+    "sf_100_check": "Street Fighter Tablet Counter - Street fighter - 100",
+    "sf_1_check": "Street Fighter Tablet Counter - Street fighter - 1",
+    "sf_2_check": "Street Fighter Tablet Counter - Street fighter - 2",
+    "sf_lf100_check": "Street Fighter Tablet Counter - Lift fighter - 100l",
+    "sf_lf_check": "Street Fighter Tablet Counter - Lift fighter - sf_lf_check",
+    "sf_lfi_check": "Street Fighter Tablet Counter - Lift fighter - interlocked",
+    "sf_lfic_check": "Street Fighter Tablet Counter - Lift fighter - int. dust collection",
+    "sf_lflc_check": "Street Fighter Tablet Counter - Lift fighter - load cells",
+    "sf_lfna_check": "Street Fighter Tablet Counter - Lift fighter - no air",
+    "sf_lftah_check": "Street Fighter Tablet Counter - Lift fighter - twin axis hmi",
+    "sf_nf1_check": "Street Fighter Tablet Counter - No. of funnels - 1",
+    "sf_nf2_check": "Street Fighter Tablet Counter - No. of funnels - 2",
+    "sf_nf5_check": "Street Fighter Tablet Counter - No. of funnels - 5",
+    "sf_none_check": "Street Fighter Tablet Counter - None",
+    "sf_cs_check": "Street Fighter Tablet Counter - Cleaning stn",
+    "sf_de_check": "Street Fighter Tablet Counter - Hopper - dust ext.",
+    "sf_h10_check": "Street Fighter Tablet Counter - Hopper - 10l",
+    "sf_h60_check": "Street Fighter Tablet Counter - Hopper - 60l",
+
+    # Reject / Inspection System mappings
+    "rj_bc_check": "Reject / Inspection System - Inspect for - bar code",
+    "rj_ch_check": "Reject / Inspection System - Reject method - chute",
+    "rj_comm": "Reject / Inspection System - comments",
+    "rj_cp_check": "Reject / Inspection System - Inspect for - cap prs.",
+    "rj_hc_check": "Reject / Inspection System - Inspect for - skewed cap",
+    "rj_hs_check": "Reject / Inspection System - Reject method - high speed",
+    "rj_lk_check": "Reject / Inspection System - Reject method - lockable",
+    "rj_lp_check": "Reject / Inspection System - Inspect for - label prs",
+    "rj_lpo_check": "Reject / Inspection System - Inspect for - label position",
+    "rj_lr_check": "Reject / Inspection System - Reject method - linear",
+    "rj_nf_check": "Reject / Inspection System - Inspect for - no foil",
+    "rj_op_check": "Reject / Inspection System - Inspect for - overcap prs",
+    "rj_or_check": "Reject / Inspection System - Inspect for - ocr",
+    "rj_ov_check": "Reject / Inspection System - Inspect for - ocv",
+    "rj_pp_check": "Reject / Inspection System - Inspect for - pintle prs",
+    "rj_sl_check": "Reject / Inspection System - Reject method - starwheel",
+    "rj_sp_check": "Reject / Inspection System - Inspect for - stem prs",
+    "rj_tk_check": "Reject / Inspection System - Reject method - track",
+    "rj_tq_check": "Reject / Inspection System - Inspect for - torque",
+    "rj_ty_check": "Reject / Inspection System - Reject method - tray",
+    "rj_con_check": "Conveyor Specifications - Reject method - conveyor",
+
+    # Turn Tables mappings
+    "tb_39_check": "Turn Tables - 39\"",
+    "tb_48_check": "Turn Tables - 48\"",
+    "tb_60_check": "Turn Tables - 60\"",
+    "tb_buf_check": "Turn Tables - buffer",
+    "tb_iwot_check": "Turn Tables - infeed w/o tray",
+    "tb_iwt_check": "Turn Tables - infeed table w/tray",
+    "tb_or_check": "Turn Tables - orientor",
+    "tb_owot_check": "Turn Tables - outfeed w/o tray",
+    "tb_owt_check": "Turn Tables - outfeed table w/tray",
+
+    # Control & Programming Specifications mappings
+    "batch_at_check": "Control & Programming Specifications - Batch / Data Report - Audit Trail",
+    "batch_none_check": "Control & Programming Specifications - Batch / Data Report - None",
+    "batch_sht_check": "Control & Programming Specifications - Batch / Data Report - Summary Header with Tracking",
+    "batch_yes15_check": "Control & Programming Specifications - Batch / Data Report - Yes (requires 15\" HMI)",
+    "blt_audible_check": "Control & Programming Specifications - Beacon Light Tower - Audible",
+    "blt_green_check": "Control & Programming Specifications - Beacon Light Tower - Green",
+    "blt_none_check": "Control & Programming Specifications - Beacon Light Tower - None",
+    "blt_red_check": "Control & Programming Specifications - Beacon Light Tower - Red",
+    "blt_yellow_check": "Control & Programming Specifications - Beacon Light Tower - Yellow",
+    "cpp_1axis_check": "Control & Programming Specifications - Control Panel Post - 1 Axis",
+    "cpp_2axis_check": "Control & Programming Specifications - Control Panel Post - 2 Axis",
+    "cpp_3axis_check": "Control & Programming Specifications - Control Panel Post - 3 Axis",
+    "cpp_fixed_check": "Control & Programming Specifications - Control Panel Post - Fixed (STD for Explosive Environment)",
+    "cps_ep_check": "Control & Programming Specifications - Explosion proof",
+    "cps_none_check": "Control & Programming Specifications - Explosion proof - none",
+    "etr_10hmi_check": "Control & Programming Specifications - Electronic torque readout - Size - 10\"",
+    "etr_none_check": "Control & Programming Specifications - Electronic torque readout - none",
+    "hmi_allenb_check": "Control & Programming Specifications - HMI - Allen Bradley",
+    "hmi_b&r_check": "Control & Programming Specifications - HMI - B & R",
+    "hmi_pc_check": "Control & Programming Specifications - HMI - PC Upgrade",
+    "hmi_pv10_check": "Control & Programming Specifications - HMI - Allen Bradley - Size - 10\"",
+    "hmi_pv7_check": "Control & Programming Specifications - HMI - Allen Bradley - Size - 7\"",
+    "hmi_size10_check": "Control & Programming Specifications - HMI - B & R - Size - 10\"",
+    "hmi_size15_check": "Control & Programming Specifications - HMI - PC upgrade - Size - 15\"",
+    "hmi_size5.7_check": "Control & Programming Specifications - HMI - B & R - Size - 5.7\" n/a for vision",
+    "lan_e_check": "Control & Programming Specifications - HMI - Language - English",
+    "lan_f_check": "Control & Programming Specifications - HMI - Language - French",
+    "plc_allenb_check": "Control & Programming Specifications - PLC - Allen Bradley",
+    "plc_b&r_check": "Control & Programming Specifications - PLC - B & R",
+    "plc_compactl_check": "Control & Programming Specifications - PLC - CompactLogix",
+    "plc_controll_check": "Control & Programming Specifications - PLC - ControlLogix",
+    "rts_co_check": "Control & Programming Specifications - connection only",
+    "rts_none_check": "Control & Programming Specifications - none",
+    "rts_secomea_check": "Control & Programming Specifications - remote technical service (secomea)",
+
+    # Change Part Quantities and Construction Materials mappings
+    "plug_ss304_check": "Plugging System Specifications - ss 304",
+    "plug_ss316_check": "Plugging System Specifications - ss 316",
+
+    # Order Identification and Basic Information mappings
+    "customer": "Basic Information - Customer",
+    "direction": "Basic Information - Direction",
+    "machine": "Basic Information - Machine",
+    "production_speed": "Order Identification - Production speed",
+    "quote": "Order Identification - Quote",
+
+    # Utility Specifications mappings
+    "amps": "Utility Specifications - AMPS",
+    "ce_c1d2_check": "Utility Specifications - Certification - Class1 Div 2",
+    "ce_csa_check": "Utility Specifications - Certification - CSA",
+    "ce_expl_check": "Utility Specifications - Certification - Explosion",
+    "cfm": "Utility Specifications - CFM",
+    "conformity_csa_check": "Utility Specifications - csa",
+    "country": "Utility Specifications - country",
+    "hz": "Utility Specifications - Hz",
+    "phases": "Utility Specifications - phases",
+    "psi": "Utility Specifications - PSI",
+    "voltage": "Utility Specifications - Voltage"
+}
+
 def extract_placeholders(template_path: str) -> List[str]:
     """Reads the template and extracts all unique, cleaned placeholder keys."""
     print(f"Extracting placeholders from: {template_path}")
@@ -65,12 +472,36 @@ def is_likely_section_header(paragraph) -> bool:
 
 def extract_placeholder_context_hierarchical(template_path: str, 
                                             enhance_with_outline: bool = True,
-                                            outline_path: str = "full_fields_outline.md") -> Dict[str, str]:
+                                            outline_path: str = "full_fields_outline.md",
+                                            check_if_all_mapped: bool = True) -> Dict[str, str]:
     """
     Parses the template to extract placeholders and attempts to build hierarchical context
     by identifying section headers. Optionally enhances with outline file.
+    
+    Args:
+        template_path: Path to the Word document template
+        enhance_with_outline: Whether to enhance context with outline file
+        outline_path: Path to the outline file
+        check_if_all_mapped: If True, checks if all placeholders are already in explicit_placeholder_mappings
+                             and skips extraction if they are
     """
     print(f"Extracting hierarchical placeholder context from: {template_path}")
+    
+    # Optimization: Check if all placeholders are already explicitly mapped
+    if check_if_all_mapped:
+        all_placeholders = extract_placeholders(template_path)
+        if all_placeholders:
+            all_mapped = all(ph in explicit_placeholder_mappings for ph in all_placeholders)
+            
+            if all_mapped:
+                print(f"All {len(all_placeholders)} placeholders are explicitly mapped. Skipping extraction.")
+                return {ph: explicit_placeholder_mappings[ph] for ph in all_placeholders}
+            else:
+                unmapped = [ph for ph in all_placeholders if ph not in explicit_placeholder_mappings]
+                print(f"Found {len(unmapped)} unmapped placeholders out of {len(all_placeholders)}. Proceeding with extraction.")
+                if len(unmapped) <= 10:  # Only show the unmapped placeholders if there are few of them
+                    print(f"Unmapped placeholders: {', '.join(unmapped)}")
+    
     context_map: Dict[str, str] = {}
     try:
         doc = Document(template_path)
@@ -691,13 +1122,200 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outlin
         with open(outline_path, 'r', encoding='utf-8') as f:
             outline_lines = f.readlines()
             
+        # Build section mapping for common section names to standardized section names
+        section_mapping = {
+            # Control & Programming
+            "control": "Control & Programming Specifications",
+            "programming": "Control & Programming Specifications",
+            "plc": "Control & Programming Specifications",
+            "hmi": "Control & Programming Specifications",
+            "batch": "Control & Programming Specifications",
+            "beacon": "Control & Programming Specifications",
+            "panel": "Control & Programming Specifications",
+            "remote": "Control & Programming Specifications",
+            "e-stop": "Control & Programming Specifications",
+            "explosion proof": "Control & Programming Specifications",
+            
+            # Utility
+            "utility": "Utility Specifications",
+            "voltage": "Utility Specifications",
+            "certification": "Utility Specifications",
+            "conformity": "Utility Specifications",
+            "hz": "Utility Specifications",
+            "psi": "Utility Specifications",
+            "amps": "Utility Specifications",
+            "destination": "Utility Specifications",
+            
+            # Bottle Handling
+            "bottle handling": "Bottle Handling System Specifications",
+            "bottle": "Bottle Handling System Specifications",
+            "vial": "Bottle Handling System Specifications",
+            "puck": "Bottle Handling System Specifications",
+            "container": "Bottle Handling System Specifications",
+            "turn table": "Bottle Handling System Specifications",
+            "index": "Bottle Handling System Specifications",
+            "motion": "Bottle Handling System Specifications",
+            "infeed": "Bottle Handling System Specifications",
+            "outfeed": "Bottle Handling System Specifications",
+            "transfer": "Bottle Handling System Specifications",
+            "feeding": "Bottle Handling System Specifications",
+            "elevator": "Bottle Handling System Specifications",
+            "tube": "Bottle Handling System Specifications",
+            "turn": "Bottle Handling System Specifications",
+            "bulk": "Bottle Handling System Specifications",
+            
+            # Reject/Inspection
+            "reject": "Reject / Inspection System",
+            "inspection": "Reject / Inspection System",
+            "verification": "Reject / Inspection System",
+            
+            # Liquid Filling
+            "liquid filling": "Liquid Filling System Specifications",
+            "filling": "Liquid Filling System Specifications",
+            "pump": "Liquid Filling System Specifications",
+            "nozzle": "Liquid Filling System Specifications",
+            "volume": "Liquid Filling System Specifications",
+            "valve": "Liquid Filling System Specifications",
+            "tank": "Liquid Filling System Specifications",
+            "hopper": "Liquid Filling System Specifications",
+            "gutter": "Liquid Filling System Specifications",
+            "cleaning": "Liquid Filling System Specifications",
+            "weighing": "Liquid Filling System Specifications",
+            "location": "Liquid Filling System Specifications",
+            
+            # Material
+            "material": "Material Specifications",
+            "product contact": "Material Specifications",
+            "material certification": "Material Specifications",
+            "tooling": "Material Specifications",
+            
+            # Parts & Materials
+            "change part": "Change Part Quantities and Construction Materials",
+            "construction material": "Change Part Quantities and Construction Materials",
+            "seal": "Change Part Quantities and Construction Materials",
+            "tubing": "Change Part Quantities and Construction Materials",
+            "slat": "Change Part Quantities and Construction Materials",
+            
+            # Capping
+            "capping": "Capping System Specifications",
+            "cap": "Capping System Specifications",
+            "torque": "Capping System Specifications",
+            "placement": "Capping System Specifications",
+            "sorting": "Capping System Specifications",
+            "centering": "Capping System Specifications",
+            "bulk feeder": "Capping System Specifications",
+            
+            # BeltStar
+            "beltstar": "BeltStar System Specifications",
+            "belt star": "BeltStar System Specifications",
+            "belt driven": "BeltStar System Specifications",
+            
+            # Labeling
+            "labeling": "Labeling System Specifications",
+            "label": "Labeling System Specifications",
+            "reel": "Labeling System Specifications",
+            "application": "Labeling System Specifications",
+            "separator": "Labeling System Specifications",
+            
+            # Coding
+            "coding": "Coding and Inspection System Specifications",
+            "coder": "Coding and Inspection System Specifications",
+            "vision": "Coding and Inspection System Specifications",
+            "print": "Coding and Inspection System Specifications",
+            "ocr": "Coding and Inspection System Specifications",
+            "ocv": "Coding and Inspection System Specifications",
+            "barcode": "Coding and Inspection System Specifications",
+            "videojet": "Coding and Inspection System Specifications",
+            "laser": "Coding and Inspection System Specifications",
+            
+            # Induction
+            "induction": "Induction Specifications",
+            "enercon": "Induction Specifications",
+            "sealing": "Induction Specifications",
+            "tunnel": "Induction Specifications",
+            
+            # Shrink Sleeve
+            "shrink sleeve": "Shrink Sleeve Specifications",
+            "sleeve": "Shrink Sleeve Specifications",
+            "shrink tunnel": "Shrink Sleeve Specifications",
+            
+            # Conveyor
+            "conveyor": "Conveyor Specifications",
+            "transport": "Conveyor Specifications",
+            "chain": "Conveyor Specifications",
+            
+            # Others
+            "gas purge": "Gas Purge",
+            "nitrogen": "Gas Purge",
+            "desiccant": "Desiccant",
+            "cannister": "Desiccant",
+            "roll / pouch": "Desiccant",
+            "cottoner": "Cottoner",
+            "cotton": "Cottoner",
+            "plugging": "Plugging System Specifications",
+            "plug": "Plugging System Specifications",
+            "euro guarding": "Euro Guarding",
+            "guarding": "Euro Guarding",
+            "panel material": "Euro Guarding",
+            "validation": "Validation Documents",
+            "fat": "Validation Documents",
+            "sat": "Validation Documents",
+            "manual": "Manual Specifications",
+            "language": "Manual Specifications",
+            "warranty": "Warranty & Install & Spares",
+            "install": "Warranty & Install & Spares",
+            "spares": "Warranty & Install & Spares",
+            "commissioning": "Warranty & Install & Spares",
+            "packaging": "Packaging & Transport",
+            "transport": "Packaging & Transport",
+            "tablet counter": "Street Fighter Tablet Counter",
+            "street fighter": "Street Fighter Tablet Counter",
+            
+            # Missing sections found in analysis
+            "top hold down": "Labeling System Specifications",
+            "top_hold_down": "Labeling System Specifications",
+            "thd": "Labeling System Specifications",
+            "lift fighter": "Street Fighter Tablet Counter",
+            "lift_fighter": "Street Fighter Tablet Counter", 
+            "lf": "Street Fighter Tablet Counter",
+            "arm type": "Labeling System Specifications",
+            "arm_type": "Labeling System Specifications",
+            "switch type": "Euro Guarding",
+            "switch_type": "Euro Guarding",
+            "top cover": "Euro Guarding",
+            "top_cover": "Euro Guarding",
+            "no. of funnels": "Street Fighter Tablet Counter",
+            "no._of_funnels": "Street Fighter Tablet Counter",
+            "nf": "Street Fighter Tablet Counter",
+            "options": "Liquid Filling System Specifications",
+            
+            # Additional mappings for remaining placeholders
+            "type": "General",
+            "argon": "Gas Purge",
+            "linear": "Labeling System Specifications",
+            "inline": "Labeling System Specifications",
+            "rotary": "Labeling System Specifications",
+            "none": "General",
+            "unknown": "General",
+            "other": "General",
+            "found": "General"
+        }
+        
+        # Special case handling for truncated entries
+        truncated_mappings = {
+            "bulk": "Bottle Handling System Specifications",
+            "turn": "Bottle Handling System Specifications",
+            "location": "Liquid Filling System Specifications"
+        }
+        
         # Parse the outline structure
         outline_context = {}
+        section_hierarchy = {}  # Maps section names to their hierarchy for easier reference
         current_section = ""
         current_subsection = ""
         current_sub_subsection = ""
         
-        # Process the outline file
+        # First pass: Extract section hierarchy
         for line in outline_lines:
             line = line.strip()
             if not line:
@@ -708,107 +1326,331 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outlin
                 current_section = line[3:].strip()
                 current_subsection = ""
                 current_sub_subsection = ""
+                section_hierarchy[current_section.lower()] = {"name": current_section, "subsections": {}}
+                
+                # Add the main section to the outline context as well
+                section_key = current_section.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and')
+                outline_context[section_key] = current_section
             
             # Subsections (- headings with no indentation)
             elif line.startswith('- ') and not line.startswith('  - '):
                 # Extract the subsection name (remove any (text), (section), etc.)
                 subsection_text = line[2:].strip()
+                clean_subsection = subsection_text
                 if '(' in subsection_text:
-                    subsection_text = subsection_text.split('(')[0].strip()
-                current_subsection = subsection_text
+                    clean_subsection = subsection_text.split('(')[0].strip()
+                current_subsection = clean_subsection
                 current_sub_subsection = ""
+                
+                if current_section.lower() in section_hierarchy:
+                    section_hierarchy[current_section.lower()]["subsections"][current_subsection.lower()] = {
+                        "name": current_subsection,
+                        "items": {}
+                    }
                 
                 # Special case - create field entries for checkbox subsections
                 if '(checkbox)' in line:
-                    field_key = subsection_text.lower().replace(' ', '_').replace('/', '_').replace('-', '_')
+                    field_key = clean_subsection.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and')
                     field_key = field_key + "_check"
                     
-                    context_str = f"{current_section} - {field_key.replace('_check', '')}"
+                    context_str = f"{current_section} - {clean_subsection}"
                     outline_context[field_key] = context_str
+                
+                # Add all subsections, regardless of type
+                subsection_key = clean_subsection.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and')
+                outline_context[subsection_key] = f"{current_section} - {clean_subsection}"
             
             # Sub-subsections (indented items with checkbox)
-            elif line.startswith('  - ') and '(checkbox)' in line:
-                # This is a checkbox field
-                field_text = line[4:].strip()
-                if '(' in field_text:
-                    field_text = field_text.split('(')[0].strip()
-                
-                # Create field key
-                field_key = field_text.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and')
-                field_key = field_key + "_check"
-                
-                # Build context
-                if current_subsection:
-                    context_str = f"{current_section} - {current_subsection} - {field_text}"
-                else:
-                    context_str = f"{current_section} - {field_text}"
-                
-                outline_context[field_key] = context_str
-            
-            # Text fields (indented items without checkbox)
-            elif line.startswith('  - ') and '(text)' in line:
-                # This is a text field
-                field_text = line[4:].strip()
-                if '(' in field_text:
-                    field_text = field_text.split('(')[0].strip()
-                
-                # Create field key
-                field_key = field_text.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and')
-                
-                # Build context
-                if current_subsection:
-                    context_str = f"{current_section} - {current_subsection} - {field_text}"
-                else:
-                    context_str = f"{current_section} - {field_text}"
-                
-                outline_context[field_key] = context_str
-            
-            # Field with any type indicator
             elif line.startswith('  - '):
-                # Could be a field or subsection, treat as both for matching purposes
+                # This is a field (checkbox or text)
                 field_text = line[4:].strip()
+                clean_field = field_text
                 if '(' in field_text:
-                    field_text = field_text.split('(')[0].strip()
+                    clean_field = field_text.split('(')[0].strip()
                 
-                # First, treat as a subsection
-                current_sub_subsection = field_text
+                # Store in hierarchy
+                if current_section.lower() in section_hierarchy and current_subsection.lower() in section_hierarchy[current_section.lower()]["subsections"]:
+                    section_hierarchy[current_section.lower()]["subsections"][current_subsection.lower()]["items"][clean_field.lower()] = clean_field
                 
-                # Also treat as a potential field
-                field_key = field_text.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and')
+                # Create field key (for both checkbox and text fields)
+                field_key = clean_field.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and').replace('"', '').replace('\'', '')
                 
-                # Try both with and without _check suffix for better matching
-                context_str = ""
+                # Add _check suffix for checkbox fields
+                field_key_check = field_key + "_check"
+                
+                # Build context
                 if current_subsection:
-                    context_str = f"{current_section} - {current_subsection} - {field_text}"
+                    context_str = f"{current_section} - {current_subsection} - {clean_field}"
                 else:
-                    context_str = f"{current_section} - {field_text}"
+                    context_str = f"{current_section} - {clean_field}"
                 
-                outline_context[field_key] = context_str
+                if '(checkbox)' in line:
+                    outline_context[field_key_check] = context_str
+                    
+                    # Also add version without _check for reference
+                    outline_context[field_key] = context_str
+            
+                # For text fields
+                elif '(text)' in line or '(qty)' in line:
+                    # Build context
+                    if current_subsection:
+                        context_str = f"{current_section} - {current_subsection} - {clean_field}"
+                    else:
+                        context_str = f"{current_section} - {clean_field}"
+                    
+                    outline_context[field_key] = context_str
+                    
+                    # For any field that might be selectable, add a checkbox version too
+                    if not any(term in line.lower() for term in ["comments", "file name", "capacity", "model", "example", "actual value"]):
+                        outline_context[f"{field_key}_check"] = context_str
+                    
+            # For other types of fields (section, sub-section)
+            elif line and not line.startswith('#'):
+                # Skip this section if we're not in a valid section or if line is empty
+                if not current_section or not line.strip():
+                    continue
+                    
+                # For other types of entries, use the line text as field
+                other_field_text = line.strip()
+                clean_other_field = other_field_text
+                if '(' in other_field_text:
+                    clean_other_field = other_field_text.split('(')[0].strip()
                 
-                # Also add checkbox version if it's a feature that might be selectable
+                # Create field key
+                other_field_key = clean_other_field.lower().replace(' ', '_').replace('/', '_').replace('-', '_').replace('&', 'and').replace('"', '').replace('\'', '')
+                
+                # Build context
+                if current_subsection:
+                    context_str = f"{current_section} - {current_subsection} - {clean_other_field}"
+                else:
+                    context_str = f"{current_section} - {clean_other_field}"
+                
+                outline_context[other_field_key] = context_str
+                
+                # For fields that might be selectable
                 if not any(term in line.lower() for term in ["qty", "file name", "capacity", "model", "comments"]):
-                    outline_context[f"{field_key}_check"] = context_str
+                    outline_context[f"{other_field_key}_check"] = context_str
         
         print(f"Parsed {len(outline_context)} fields from outline file")
         
-        # Add specific well-known fields that might not be captured by the outline parsing
+        # Build a comprehensive mapping of placeholders based on the full_fields_outline.md
+        # EXPANDED: Add even more well-known fields based on the template content
         known_fields = {
+            # PLC types
             "plc_b&r_check": "Control & Programming Specifications - PLC - B & R",
+            "plc_bandr_check": "Control & Programming Specifications - PLC - B & R",
             "plc_allen_bradley_check": "Control & Programming Specifications - PLC - Allen Bradley",
+            "plc_allenb_check": "Control & Programming Specifications - PLC - Allen Bradley",
             "plc_compactlogix_check": "Control & Programming Specifications - PLC - CompactLogix",
+            "plc_compactl_check": "Control & Programming Specifications - PLC - CompactLogix",
             "plc_controllogix_check": "Control & Programming Specifications - PLC - ControlLogix",
-            "explosion_proof_check": "Control & Programming Specifications - Explosion proof",
+            "plc_controll_check": "Control & Programming Specifications - PLC - ControlLogix",
+            
+            # HMI sizes and types
             "hmi_10_check": "Control & Programming Specifications - HMI - Size - 10\"",
             "hmi_15_check": "Control & Programming Specifications - HMI - Size - 15\"",
             "hmi_5_7_check": "Control & Programming Specifications - HMI - Size - 5.7\" n/a for vision",
-            "cap_prs_check": "Reject / Inspection System - Reject Reasons - Cap Prs.",
+            "hmi_size10_check": "Control & Programming Specifications - HMI - Size - 10\"",
+            "hmi_size15_check": "Control & Programming Specifications - HMI - Size - 15\"",
+            "hmi_size5.7_check": "Control & Programming Specifications - HMI - Size - 5.7\" n/a for vision",
+            "etr_10hmi_check": "Control & Programming Specifications - HMI - Size - 10\"",
+            "hmi_pv10_check": "Control & Programming Specifications - HMI - Size - 10\"",
+            "hmi_pv7_check": "Control & Programming Specifications - HMI - Size - 7\"",
+            "hmi_allenb_check": "Control & Programming Specifications - HMI - Allen Bradley",
+            "hmi_b&r_check": "Control & Programming Specifications - HMI - B & R",
+            "hmi_pc_check": "Control & Programming Specifications - HMI - PC Upgrade",
+            "lan_e_check": "Control & Programming Specifications - HMI - Language - English",
+            "lan_f_check": "Control & Programming Specifications - HMI - Language - French",
+            
+            # Other control/programming specs
+            "explosion_proof_check": "Control & Programming Specifications - Explosion proof",
+            "cpp_1axis_check": "Control & Programming Specifications - Control Panel Post - 1 Axis",
+            "cpp_2axis_check": "Control & Programming Specifications - Control Panel Post - 2 Axis",
+            "cpp_3axis_check": "Control & Programming Specifications - Control Panel Post - 3 Axis",
+            "cpp_fixed_check": "Control & Programming Specifications - Control Panel Post - Fixed (STD for Explosive Environment)",
+            
+            # Batch reporting and data
+            "batch_none_check": "Control & Programming Specifications - Batch / Data Report - None",
+            "batch_yes15_check": "Control & Programming Specifications - Batch / Data Report - Yes (requires 15\" HMI)",
+            "batch_at_check": "Control & Programming Specifications - Batch / Data Report - Audit Trail",
+            "batch_sht_check": "Control & Programming Specifications - Batch / Data Report - Summary Header with Tracking",
+            
+            # Beacon lights
+            "blt_red_check": "Control & Programming Specifications - Beacon Light Tower - Red",
+            "blt_green_check": "Control & Programming Specifications - Beacon Light Tower - Green",
+            "blt_yellow_check": "Control & Programming Specifications - Beacon Light Tower - Yellow",
+            "blt_audible_check": "Control & Programming Specifications - Beacon Light Tower - Audible",
+            "blt_none_check": "Control & Programming Specifications - Beacon Light Tower - None",
+            
+            # Utility specifications
             "voltage": "Utility Specifications - Voltage",
             "hz": "Utility Specifications - Hz",
-            "psi": "Utility Specifications - PSI"
+            "psi": "Utility Specifications - PSI",
+            "amps": "Utility Specifications - AMPS", 
+            "cfm": "Utility Specifications - CFM",
+            "ce_csa_check": "Utility Specifications - Certification - CSA",
+            "ce_ce_check": "Utility Specifications - Certification - CE",
+            "ce_expl_check": "Utility Specifications - Certification - Explosion",
+            "ce_c1d2_check": "Utility Specifications - Certification - Class1 Div 2",
+            "ce_none_check": "Utility Specifications - Certification - None",
+            
+            # Reject/inspection system
+            "cap_prs_check": "Reject / Inspection System - Reject Reasons - Cap Prs.",
+            "rr_fillwt_check": "Reject / Inspection System - Reject Reasons - Fill WT / Count",
+            "rr_nocot_check": "Reject / Inspection System - Reject Reasons - No Cotton",
+            "rr_stempr_check": "Reject / Inspection System - Reject Reasons - Stem Prs.",
+            "rr_pintpr_check": "Reject / Inspection System - Reject Reasons - Pintle Prs.",
+            "rr_nocap_check": "Reject / Inspection System - Reject Reasons - Cap Prs.",
+            "rr_plugpr_check": "Reject / Inspection System - Reject Reasons - Plug Prs.",
+            "rr_hxthrd_check": "Reject / Inspection System - Reject Reasons - High/Cross THRD",
+            "rr_nofoil_check": "Reject / Inspection System - Reject Reasons - No Foil",
+            "rr_torque_check": "Reject / Inspection System - Reject Reasons - Torque",
+            "rr_ocv_check": "Reject / Inspection System - Reject Reasons - OCV",
+            "rr_ocr_check": "Reject / Inspection System - Reject Reasons - OCR",
+            "rr_barcode_check": "Reject / Inspection System - Reject Reasons - Bar Code",
+            "rr_labpos_check": "Reject / Inspection System - Reject Reasons - Label Position",
+            "rr_labprs_check": "Reject / Inspection System - Reject Reasons - Label Prs",
+            "rr_nodesc_check": "Reject / Inspection System - Reject Reasons - No Desiccant",
+            
+            # Material specifications
+            "cap_ss304_check": "Material Specifications - Cap - SS 304",
+            "cap_ss316_check": "Material Specifications - Cap - SS 316",
+            "cap_uins_check": "Material Specifications - Cap - Urethane Insert",
+            "bot_hdpe_check": "Material Specifications - Bottle - HDPE",
+            "bot_antist_check": "Material Specifications - Bottle - Antistatic",
+            
+            # Bottle handling
+            "bs_cpbo_check": "BeltStar System Specifications - Cap Placement - Belts – on the fly",
+            "bs_cpnone_check": "BeltStar System Specifications - Cap Placement - None",
+            "bs_cpac_check": "BeltStar System Specifications - Cap Placement - AC",
+            "bs_tam_check": "BeltStar System Specifications - Torque - Air motor",
+            "bs_tmc_check": "BeltStar System Specifications - Torque - Magnet clutch",
+            "bs_ts_check": "BeltStar System Specifications - Torque - Servo",
+            "bs_tb_check": "BeltStar System Specifications - Torque - Belts",
+            "bs_tadb_check": "BeltStar System Specifications - Torque - AC motor DC Brake",
+            "bs_tf_check": "BeltStar System Specifications - Torque - Feedback",
+            "bs_tht_check": "BeltStar System Specifications - Torque - HMI Adj. Torque",
+            "bs_csds_check": "BeltStar System Specifications - Cap Sorting - Docking Station",
+            "bs_cse_check": "BeltStar System Specifications - Cap Sorting - Elevator",
+            "bs_manone_check": "BeltStar System Specifications - Motorized Adj. - None",
+            "bs_may_check": "BeltStar System Specifications - Motorized Adj. - Yes",
+            
+            # Cottoner system
+            "c_none_check": "Cottoner - None",
+            "c_sp_check": "Cottoner - Sensing - Presence",
+            "c_cn_check": "Cottoner - Cotton Bin - No",
+            "c_cy_check": "Cottoner - Cotton Bin - Yes",
+            
+            # Validation and documentation
+            "val_fat_check": "Validation Documents - FAT",
+            "val_sat_check": "Validation Documents - SAT",
+            "val_dq_check": "Validation Documents - DQ",
+            "val_hds_check": "Validation Documents - HDS/SDS",
+            "val_fs_check": "Validation Documents - FS/DS",
+            "val_iq_check": "Validation Documents - IQ/OQ",
+            "val_e_check": "Validation Documents - English",
+            "val_f_check": "Validation Documents - French",
+            
+            # Guarding
+            "eg_pnl_check": "Euro Guarding - Panel material - Lexan",
+            "eg_pmtg_check": "Euro Guarding - Panel material - Tempered glass",
+            
+            # Capping system
+            "cs_csm_check": "Capping System Specifications - Cap Sorting - Mechanical",
+            
+            # Plugging system
+            "ps_plm_check": "Plugging System Specifications - Plug Placement - Mechanical",
+            "ps_psm_check": "Plugging System Specifications - Plug Sorting - Mechanical"
         }
         
+        # Add all known fields to the outline context
         for field, context in known_fields.items():
             outline_context[field] = context
+        
+        # Create normalized versions of context map keys for better matching
+        normalized_context_keys = {}
+        for key in context_map.keys():
+            # Create normalized versions
+            norm_key1 = key.lower()  # lowercase
+            norm_key2 = key.lower().replace('_', '')  # no underscores
+            norm_key3 = key.lower().replace('_check', '')  # without _check suffix
+            norm_key4 = key.lower().replace('_check', '').replace('_', '')  # clean
+            
+            # Additional normalizations for special cases
+            norm_key5 = re.sub(r'[^a-z0-9]', '', key.lower())  # alphanumeric only
+            norm_key6 = re.sub(r'[0-9]+"?', '', key.lower())  # remove numbers and inch marks
+            
+            normalized_context_keys[norm_key1] = key
+            normalized_context_keys[norm_key2] = key
+            normalized_context_keys[norm_key3] = key
+            normalized_context_keys[norm_key4] = key
+            normalized_context_keys[norm_key5] = key
+            normalized_context_keys[norm_key6] = key
+        
+        # Create normalized versions of outline keys for better matching
+        normalized_outline_keys = {}
+        for key, value in outline_context.items():
+            # Create multiple normalized versions for more robust matching
+            norm_key1 = key.lower().replace('_', '')  # No underscores
+            norm_key2 = key.lower()  # With underscores
+            norm_key3 = key.lower().replace('_check', '')  # Without _check suffix
+            norm_key4 = key.lower().replace('_check', '').replace('_', '')  # Without _check and no underscores
+            norm_key5 = re.sub(r'[^a-z0-9]', '', key.lower())  # alphanumeric only
+            norm_key6 = re.sub(r'[0-9]+"?', '', key.lower())  # remove numbers and inch marks
+            
+            normalized_outline_keys[norm_key1] = key
+            normalized_outline_keys[norm_key2] = key
+            normalized_outline_keys[norm_key3] = key
+            normalized_outline_keys[norm_key4] = key
+            normalized_outline_keys[norm_key5] = key
+            normalized_outline_keys[norm_key6] = key
+            
+            # Handle common abbreviations and expanded forms
+            if 'plc' in key.lower():
+                expanded = key.lower().replace('plc', 'programmable_logic_controller')
+                normalized_outline_keys[expanded] = key
+            if 'hmi' in key.lower():
+                expanded = key.lower().replace('hmi', 'human_machine_interface')
+                normalized_outline_keys[expanded] = key
+            if 'vfd' in key.lower():
+                expanded = key.lower().replace('vfd', 'variable_frequency_drive')
+                normalized_outline_keys[expanded] = key
+            if 'ss' in key.lower():
+                expanded = key.lower().replace('ss', 'stainless_steel')
+                normalized_outline_keys[expanded] = key
+            if 'qty' in key.lower():
+                expanded = key.lower().replace('qty', 'quantity')
+                normalized_outline_keys[expanded] = key
+            if 'temp' in key.lower():
+                expanded = key.lower().replace('temp', 'temperature')
+                normalized_outline_keys[expanded] = key
+                
+            # Add common alternative terms
+            if 'bottle' in key.lower():
+                alt = key.lower().replace('bottle', 'container')
+                normalized_outline_keys[alt] = key
+            if 'container' in key.lower():
+                alt = key.lower().replace('container', 'bottle')
+                normalized_outline_keys[alt] = key
+            if 'plug' in key.lower():
+                alt = key.lower().replace('plug', 'stopper')
+                normalized_outline_keys[alt] = key
+            if 'cap' in key.lower():
+                alt = key.lower().replace('cap', 'lid')
+                normalized_outline_keys[alt] = key
+            
+            # Handle size notation variations
+            size_patterns = [
+                (r'(\d+)_?inch', r'\1in'),
+                (r'(\d+)in', r'\1"'),
+                (r'(\d+)"', r'\1inch')
+            ]
+            for pattern, replacement in size_patterns:
+                if re.search(pattern, key.lower()):
+                    alt = re.sub(pattern, replacement, key.lower())
+                    normalized_outline_keys[alt] = key
+        
+        print(f"Created {len(normalized_outline_keys)} normalized outline keys")
         
         # Enhance the context map with outline information
         enhanced_context_map = context_map.copy()
@@ -817,20 +1659,21 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outlin
         # Print some debug info about existing keys (reduced verbosity)
         print(f"Original context map has {len(context_map)} keys")
         
-        # Create normalized versions of outline keys for better matching
-        normalized_outline_keys = {}
-        for key, value in outline_context.items():
-            # Create multiple normalized versions
-            norm_key1 = key.lower().replace('_', '')  # No underscores
-            norm_key2 = key.lower()  # With underscores
-            normalized_outline_keys[norm_key1] = key
-            normalized_outline_keys[norm_key2] = key
-        
-        print(f"Created {len(normalized_outline_keys)} normalized outline keys")
-        
-        # First, try direct key matches
+        # First pass: Try direct key matches and known fields
         for key in context_map.keys():
-            # Try direct match first
+            # First, check if this is a specific placeholder with predefined context
+            if key in explicit_placeholder_mappings:
+                enhanced_context_map[key] = explicit_placeholder_mappings[key]
+                enhanced_count += 1
+                continue
+                
+            # First, check if this is a known field with predefined context
+            if key in known_fields:
+                enhanced_context_map[key] = known_fields[key]
+                enhanced_count += 1
+                continue
+                
+            # Try direct match next
             if key in outline_context:
                 enhanced_context_map[key] = outline_context[key]
                 enhanced_count += 1
@@ -839,17 +1682,19 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outlin
             # Try normalized keys
             norm_key1 = key.lower().replace('_', '')
             norm_key2 = key.lower()
+            norm_key3 = key.lower().replace('_check', '')
+            norm_key4 = key.lower().replace('_check', '').replace('_', '')
             
-            if norm_key1 in normalized_outline_keys:
-                outline_key = normalized_outline_keys[norm_key1]
+            # Try each normalized version
+            for norm_key in [norm_key1, norm_key2, norm_key3, norm_key4]:
+                if norm_key in normalized_outline_keys:
+                    outline_key = normalized_outline_keys[norm_key]
                 enhanced_context_map[key] = outline_context[outline_key]
                 enhanced_count += 1
-                continue
-                
-            if norm_key2 in normalized_outline_keys and norm_key2 != norm_key1:
-                outline_key = normalized_outline_keys[norm_key2]
-                enhanced_context_map[key] = outline_context[outline_key]
-                enhanced_count += 1
+                break
+            
+            # If we enhanced the context, continue to next key
+            if enhanced_context_map[key] != context_map[key]:
                 continue
                 
             # Special case for PLC brands
@@ -862,8 +1707,12 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outlin
                     enhanced_context_map[key] = "Control & Programming Specifications - PLC - Allen Bradley"
                     enhanced_count += 1
                     continue
-                if 'compact' in key.lower() or 'logix' in key.lower():
+                if 'compact' in key.lower() or 'compactl' in key.lower():
                     enhanced_context_map[key] = "Control & Programming Specifications - PLC - CompactLogix"
+                    enhanced_count += 1
+                    continue
+                if 'control' in key.lower() or 'controll' in key.lower():
+                    enhanced_context_map[key] = "Control & Programming Specifications - PLC - ControlLogix"
                     enhanced_count += 1
                     continue
             
@@ -877,49 +1726,110 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outlin
                     enhanced_context_map[key] = "Control & Programming Specifications - HMI - Size - 15\""
                     enhanced_count += 1
                     continue
-                if '5.7' in key.lower() or '5_7' in key.lower():
+                if '5.7' in key.lower() or '5_7' in key.lower() or '57' in key.lower():
                     enhanced_context_map[key] = "Control & Programming Specifications - HMI - Size - 5.7\" n/a for vision"
                     enhanced_count += 1
                     continue
             
-            # Try fuzzy matching against outline keys
-            best_match = None
-            best_score = 0
-            
-            for outline_key, outline_value in outline_context.items():
-                # Check if this is a checkbox and the current key is a checkbox
-                if key.endswith('_check') and outline_key.endswith('_check'):
-                    # Remove _check for comparison
-                    key_base = key[:-6]
-                    outline_key_base = outline_key[:-6]
-                    
-                    # Simple word matching
-                    key_words = set(key_base.split('_'))
-                    outline_words = set(outline_key_base.split('_'))
-                    common_words = key_words.intersection(outline_words)
-                    
-                    if common_words:
-                        score = len(common_words) / max(len(key_words), len(outline_words))
-                        if score > best_score:
-                            best_score = score
-                            best_match = outline_key
+            # Try using the section mapping for remaining unmatched keys
+            if enhanced_context_map[key] == context_map[key]:  # Not enhanced yet
+                original_context = context_map[key].lower()
                 
-                # For non-checkbox fields
-                elif not key.endswith('_check') and not outline_key.endswith('_check'):
-                    # Simple word matching
-                    key_words = set(key.split('_'))
-                    outline_words = set(outline_key.split('_'))
-                    common_words = key_words.intersection(outline_words)
+                # Check for truncated context
+                for truncated_term, section in truncated_mappings.items():
+                    if original_context.startswith(truncated_term):
+                        # Use the full context but replace the section
+                        enhanced_context_map[key] = f"{section} - {context_map[key]}"
+                        enhanced_count += 1
+                        continue
+                
+                # If still not enhanced, look for section keywords
+                if enhanced_context_map[key] == context_map[key]:
+                    # Look for section keywords in the original context
+                    detected_section = None
+                    detected_subsection = None
+                    max_match_score = 0
                     
-                    if common_words:
-                        score = len(common_words) / max(len(key_words), len(outline_words))
-                        if score > best_score:
-                            best_score = score
-                            best_match = outline_key
-            
-            # If we found a good match (threshold of 0.5)
-            if best_match and best_score > 0.5:
-                enhanced_context_map[key] = outline_context[best_match]
+                    # First pass: try to find a direct section match
+                    for keyword, section in section_mapping.items():
+                        if keyword in original_context:
+                            # Basic match score - longer keyword matches are more specific
+                            match_score = len(keyword)
+                            if match_score > max_match_score:
+                                max_match_score = match_score
+                                detected_section = section
+                
+                if detected_section:
+                    # Look for subsection matches within this section
+                    if detected_section in section_hierarchy:
+                        section_data = section_hierarchy[detected_section.lower()]
+                        for subsection_key, subsection_data in section_data.get("subsections", {}).items():
+                            if subsection_key in original_context.lower():
+                                detected_subsection = subsection_data.get("name", "")
+                                break
+                    
+                    # Create an improved context using the detected section and subsection
+                    if detected_subsection:
+                        # Keep any additional context beyond the subsection
+                        parts = original_context.split(' - ')
+                        field_part = parts[-1] if len(parts) > 1 and parts[-1] not in detected_section.lower() and parts[-1] not in detected_subsection.lower() else key
+                        enhanced_context_map[key] = f"{detected_section} - {detected_subsection} - {field_part}"
+                    else:
+                        # Just use the section with the original field
+                        parts = original_context.split(' - ')
+                        field_part = parts[-1] if len(parts) > 1 and parts[-1] not in detected_section.lower() else key
+                        enhanced_context_map[key] = f"{detected_section} - {field_part}"
+                    enhanced_count += 1
+                
+                # Second pass: try extracting information from the key itself if not yet matched
+                if enhanced_context_map[key] == context_map[key]:  # Still not enhanced
+                    key_lower = key.lower()
+                    
+                    # Check for section indicators in the key
+                    for keyword, section in section_mapping.items():
+                        if keyword in key_lower:
+                            # Create an improved context based on the key
+                            enhanced_context_map[key] = f"{section} - {key}"
+                            enhanced_count += 1
+                            break
+                
+                # Third pass: check for known patterns in keys
+                if enhanced_context_map[key] == context_map[key]:  # Still not enhanced
+                    key_lower = key.lower()
+                    
+                    # PLC related fields
+                    if 'plc' in key_lower:
+                        enhanced_context_map[key] = "Control & Programming Specifications - PLC"
+                        enhanced_count += 1
+                    
+                    # HMI related fields
+                    elif 'hmi' in key_lower:
+                        enhanced_context_map[key] = "Control & Programming Specifications - HMI"
+                        enhanced_count += 1
+                    
+                    # Utility related fields
+                    elif any(term in key_lower for term in ['volt', 'hz', 'psi', 'amp', 'cfm']):
+                        enhanced_context_map[key] = "Utility Specifications"
+                        enhanced_count += 1
+                    
+                    # Bottle handling related fields
+                    elif any(term in key_lower for term in ['bottle', 'container', 'vial', 'puck']):
+                        enhanced_context_map[key] = "Bottle Handling System Specifications"
+                        enhanced_count += 1
+                    
+                    # Reject system related fields
+                    elif any(term in key_lower for term in ['reject', 'inspection', 'verification']):
+                        enhanced_context_map[key] = "Reject / Inspection System"
+                        enhanced_count += 1
+                    
+                    # Cap related fields
+                    elif any(term in key_lower for term in ['cap', 'torque', 'capping']):
+                        enhanced_context_map[key] = "Capping System Specifications"
+                        enhanced_count += 1
+                    
+                    # Filling related fields
+                    elif any(term in key_lower for term in ['fill', 'pump', 'nozzle']):
+                        enhanced_context_map[key] = "Liquid Filling System Specifications"
                 enhanced_count += 1
         
         # Print some statistics
