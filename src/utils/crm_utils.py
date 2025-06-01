@@ -1049,15 +1049,15 @@ def save_goa_modification(
         if template_data_row:
             try:
                 template_data = json.loads(template_data_row[0])
-                if field_key in template_data:
-                    template_data[field_key] = modified_value
-                    cursor.execute("""
-                    UPDATE machine_templates 
-                    SET template_data_json = ?, processing_date = ? 
-                    WHERE id = ?
-                    """, (json.dumps(template_data), modification_date, machine_template_id))
-                    conn.commit()
-                    print(f"Updated template data for machine template ID: {machine_template_id}")
+                # This will add the field if it's new, or update it if it exists.
+                template_data[field_key] = modified_value 
+                cursor.execute("""
+                UPDATE machine_templates 
+                SET template_data_json = ?, processing_date = ? 
+                WHERE id = ?
+                """, (json.dumps(template_data), modification_date, machine_template_id))
+                conn.commit()
+                print(f"Updated template data (added/modified field '{field_key}') for machine template ID: {machine_template_id}")
             except json.JSONDecodeError:
                 print(f"Error parsing JSON for machine template ID {machine_template_id}")
         
@@ -1156,10 +1156,15 @@ def load_machine_templates_with_modifications(machine_id: int, db_path: str = DB
             
             # Parse template data
             try:
-                template_dict["template_data"] = json.loads(template_dict["template_data_json"])
+                # Ensure template_data is always a dictionary, even if JSON is null/empty
+                template_json_str = template_dict.get("template_data_json")
+                if template_json_str:
+                    template_dict["template_data"] = json.loads(template_json_str)
+                else:
+                    template_dict["template_data"] = {} # Initialize as empty dict if no JSON
             except json.JSONDecodeError:
-                template_dict["template_data"] = {}
-                print(f"Error parsing JSON for template ID {template_id}")
+                template_dict["template_data"] = {} # Initialize as empty dict on error
+                print(f"Error parsing JSON for template ID {template_id}, initializing as empty.")
             
             template_dict["modifications"] = modifications
             if modifications:
@@ -1295,42 +1300,45 @@ def find_machines_by_name(machine_name: str, db_path: str = DB_PATH) -> List[Dic
 
 def load_all_processed_machines(db_path: str = DB_PATH) -> List[Dict]:
     """
-    Loads all machines that have processed templates (GOA, etc.).
-    This is useful when looking for machines that have template data.
+    Loads all machines that have been processed with templates,
+    including client information for better organization in the reports page.
     
-    Args:
-        db_path: Path to the database file
-        
     Returns:
-        List of dictionaries containing machine data with template info
+        List of dictionaries containing machine information and related client data
     """
     conn = None
-    machines = []
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Find machines that have at least one template
+        # Join machines, machine_templates, and clients tables to get all necessary data
         cursor.execute("""
-        SELECT m.id, m.machine_name, m.client_quote_ref, m.processing_date, 
-               c.customer_name, c.id as client_id,
-               COUNT(mt.id) as template_count
-        FROM machines m
-        LEFT JOIN clients c ON m.client_quote_ref = c.quote_ref
-        INNER JOIN machine_templates mt ON m.id = mt.machine_id
-        GROUP BY m.id
-        ORDER BY c.customer_name, m.machine_name
+        SELECT 
+            m.id, 
+            m.machine_name, 
+            m.client_quote_ref, 
+            c.id as client_id,
+            c.customer_name as client_name,
+            c.quote_ref,
+            mt.template_type,
+            mt.processing_date
+        FROM 
+            machines m
+        JOIN 
+            clients c ON m.client_quote_ref = c.quote_ref
+        JOIN 
+            machine_templates mt ON m.id = mt.machine_id
+        GROUP BY 
+            m.id
+        ORDER BY 
+            c.customer_name, m.machine_name
         """)
         
         rows = cursor.fetchall()
-        for row in rows:
-            machine_dict = dict(row)
-            machines.append(machine_dict)
-                
-        return machines
+        return [dict(row) for row in rows]
     except sqlite3.Error as e:
-        print(f"Database error loading all processed machines: {e}")
+        print(f"Error loading processed machines: {e}")
         return []
     finally:
         if conn:

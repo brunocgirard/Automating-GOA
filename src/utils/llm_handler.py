@@ -1035,6 +1035,9 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
                             key: ("NO" if key.endswith("_check") else "") 
                             for key in template_placeholder_contexts.keys()
                         }
+    # Ensure options_listing is initialized if present in contexts
+    if "options_listing" not in llm_response_data and "options_listing" in template_placeholder_contexts:
+        llm_response_data["options_listing"] = ""
     
     # Define a function to create the main prompt
     def build_main_prompt(include_validation_feedback=False, validation_errors=None):
@@ -1177,6 +1180,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
         prompt_parts.append("For text fields, if not found, use an empty string.")
         prompt_parts.append("IMPORTANT: You MUST include ALL the template fields in your response, even if empty.")
         prompt_parts.append("Respond with a single, valid JSON object. The keys in the JSON MUST be ALL the TEMPLATE PLACEHOLDER KEYS listed above.")
+        prompt_parts.append("  - For the field 'options_listing': After attempting to fill all other standard fields, review the 'MAIN MACHINE' description, 'ADD-ON ITEMS SPECIFIC TO THIS MACHINE', and 'COMMON ITEMS'. Identify any specific features, components, capabilities, or line items mentioned that were NOT captured by other standard fields. Compile these remaining, unmapped items as a bulleted list (e.g., using '*' or '-') and place this complete list into the 'options_listing' field. If all details seem to be covered by other fields, you can leave 'options_listing' blank or write 'All options covered by standard fields'.")
         
         # Add example JSON response format
         prompt_parts.append("\nEXAMPLE JSON RESPONSE FORMAT:")

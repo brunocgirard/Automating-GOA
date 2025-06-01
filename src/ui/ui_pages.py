@@ -6,6 +6,8 @@ from typing import Dict, List, Optional, Any
 import traceback
 import shutil
 from datetime import datetime
+import uuid
+import re
 
 # Import from other modules
 from src.workflows.profile_workflow import (
@@ -15,7 +17,7 @@ from src.workflows.profile_workflow import (
 
 # Import from utility modules
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
-from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical
+from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, explicit_placeholder_mappings, parse_full_fields_outline
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.crm_utils import (
@@ -339,665 +341,1246 @@ def generate_template_summary(template_data, template_contexts=None):
     
     return sections
 
-def show_template_summary(template_data, template_contexts=None):
+def show_template_items_table(template_data, template_contexts=None):
     """
-    Displays a hierarchical summary of selected items in the template.
+    Displays template items in a simple tabular format showing Item, Value, and Section Path,
+    grouped by section as shown in the screenshot, using explicit_placeholder_mappings from template_utils.py.
     
     Args:
         template_data: Dictionary of field keys to values from template
         template_contexts: Optional dictionary of field keys to their context/description
     """
-    sections = generate_template_summary(template_data, template_contexts)
+    from src.utils.template_utils import explicit_placeholder_mappings
     
-    if not sections:
+    if not template_data:
+        st.info("No items selected in this template.")
+        return
+    
+    # Group items by section based on explicit_placeholder_mappings
+    sections = {}
+    
+    for field_key, value in template_data.items():
+        # Skip empty values
+        if not value:
+            continue
+            
+        # Skip non-selected checkboxes
+        if field_key.endswith("_check") and value.upper() != "YES":
+            continue
+        
+        # Get section and subsection from explicit_placeholder_mappings if available
+        section = "Other Specifications"
+        subsection = ""
+        full_path = ""
+        
+        if field_key in explicit_placeholder_mappings:
+            mapping = explicit_placeholder_mappings[field_key]
+            full_path = mapping
+            
+            # Extract section and subsection from the mapping
+            if " - " in mapping:
+                parts = mapping.split(" - ")
+                section = parts[0].strip()
+                
+                # If there are multiple parts, everything between the first and last part is the subsection
+                if len(parts) > 2:
+                    subsection = " - ".join(parts[1:-1]).strip()
+                elif len(parts) == 2:
+                    subsection = ""  # No subsection in this case
+        
+        # Prepare a friendly name for the field
+        friendly_name = field_key
+        
+        # For checkbox fields, remove the _check suffix and format nicely
+        if field_key.endswith("_check"):
+            friendly_name = field_key[:-6].replace("_", " ").title()
+            
+        # If we have explicit mapping, use it for the friendly name
+        if field_key in explicit_placeholder_mappings:
+            mapping_parts = explicit_placeholder_mappings[field_key].split(" - ")
+            if len(mapping_parts) > 0:
+                # Use the last part as the friendly name
+                friendly_name = mapping_parts[-1]
+        # Or if we have context, use it to improve the friendly name
+        elif template_contexts and field_key in template_contexts:
+            context = template_contexts[field_key]
+            if isinstance(context, str) and context:
+                # Extract a short name from the context
+                lines = context.splitlines()
+                if lines:
+                    first_line = lines[0].strip()
+                    if first_line:
+                        friendly_name = first_line
+            elif isinstance(context, dict) and "title" in context:
+                friendly_name = context["title"]
+        
+        # Initialize section if not already in sections
+        if section not in sections:
+            sections[section] = []
+            
+        # Add to the appropriate section with full hierarchical information
+        sections[section].append({
+            "Item": friendly_name,
+            "Section Path": full_path,  # Full hierarchical path from mapping
+            "Value": value,
+            # Field Key removed as requested
+        })
+    
+    # Remove empty sections
+    sections = {k: v for k, v in sections.items() if v}
+    
+    # Display each section separately
+    for section_name, items in sections.items():
+        if items:
+            st.subheader(section_name)
+            df = pd.DataFrame(items)
+            # Add row numbers (starting from 0)
+            df.insert(0, '', range(len(df)))
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+def show_template_summary(template_data, template_contexts=None):
+    """
+    Displays a summary of selected items in the template.
+    
+    Args:
+        template_data: Dictionary of field keys to values from template
+        template_contexts: Optional dictionary of field keys to their context/description
+    """
+    if not template_data:
         st.info("No items selected in this template.")
         return
         
     st.markdown("### Template Summary")
     
-    # Display a combined view of all sections first for easy reference
-    st.markdown("#### All Selected Fields (Combined View)")
-    all_items = []
-    for section_name, items in sections.items():
-        for item in items:
-            all_items.append({
-                "Section": item["section"],
-                "Subsection": item["subsection"],
-                "Field": item["field"],
-                "Value": item["value"],
-                "Field Key": item["key"]
-            })
+    # Use the tabular display format with sections
+    show_template_items_table(template_data, template_contexts)
     
-    if all_items:
-        all_df = pd.DataFrame(all_items)
-        st.dataframe(all_df, use_container_width=True)
+    # Make the tabular view the default and only view
+    # The hierarchical view is removed since it's not working correctly
+    # and the simple tabular view matches the preferred layout in the screenshot
     
-    # Create a DataFrame for each section
-    for section_name, items in sections.items():
-        if items:
-            st.markdown(f"#### {section_name}")
-            
-            # Convert to DataFrame for better display
-            df_data = []
+    # If you want to re-enable the hierarchical view in the future,
+    # you can uncomment the code below and fix the toggle functionality
+    
+    '''
+    # Optional: Add a toggle to show the hierarchical view if needed
+    # Generate a unique key using UUID
+    import uuid
+    # Create a unique identifier from the first few keys in template_data and a random component
+    template_id = "-".join(list(template_data.keys())[:2]) if template_data else "empty"
+    toggle_key = f"hierarchical_view_{template_id}_{str(uuid.uuid4())[:8]}"
+    
+    if st.toggle("Show Detailed Hierarchical View", value=False, key=toggle_key):
+        sections = generate_template_summary(template_data, template_contexts)
+        
+        if not sections:
+            st.info("No items selected for hierarchical view.")
+            return
+        
+        # Display a combined view of all sections first for easy reference
+        st.markdown("#### All Selected Fields (Combined View)")
+        all_items = []
+        for section_name, items in sections.items():
             for item in items:
-                df_data.append({
+                all_items.append({
                     "Section": item["section"],
                     "Subsection": item["subsection"],
                     "Field": item["field"],
                     "Value": item["value"],
                     "Field Key": item["key"]
                 })
+        
+        if all_items:
+            all_df = pd.DataFrame(all_items)
+            st.dataframe(all_df, use_container_width=True)
+        
+        # Create a DataFrame for each section
+        for section_name, items in sections.items():
+            if items:
+                st.markdown(f"#### {section_name}")
                 
-            if df_data:
-                df = pd.DataFrame(df_data)
-                st.dataframe(df, use_container_width=True)
+                # Convert to DataFrame for better display
+                df_data = []
+                for item in items:
+                    df_data.append({
+                        "Section": item["section"],
+                        "Subsection": item["subsection"],
+                        "Field": item["field"],
+                        "Value": item["value"],
+                        "Field Key": item["key"]
+                    })
+                    
+                if df_data:
+                    df = pd.DataFrame(df_data)
+                    st.dataframe(df, use_container_width=True)
+    '''
 
-def show_goa_modifications_ui(machine_id: int):
+def generate_printable_report(template_data, machine_name="", template_type=""):
     """
-    Displays and manages GOA template modifications for a specific machine.
+    Generates a clean, printable HTML report of selected template items,
+    optimized for machine building teams with visual organization.
     
     Args:
-        machine_id: ID of the machine to show modifications for
+        template_data: Dictionary of field keys to values from template
+        machine_name: Name of the machine (optional)
+        template_type: Type of template (e.g., "GOA") (optional)
+        
+    Returns:
+        HTML string for the report
     """
-    from src.utils.crm_utils import (
-        load_machine_templates_with_modifications, save_goa_modification,
-        update_template_after_modifications
-    )
-    from src.utils.doc_filler import fill_word_document_from_llm_data
+    from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
+    import datetime
+    import os # For reading the outline file
+
+    # Define section priorities (can be refined or made dynamic based on outline order later)
+    # For now, we will rely on the order from the parsed outline if possible, or sort alphabetically.
+    # section_priorities = [
+    #     "General Information",
+    #     "Control & Programming Specifications",
+    #     "Mechanical Specifications", # This section isn't explicitly in the outline, might need mapping
+    #     "Electrical Specifications", # This section isn't explicitly in the outline, might need mapping
+    #     "Safety Features", # This section isn't explicitly in the outline, might need mapping
+    #     "Documentation & Validation",
+    #     "Other Specifications"
+    # ]
+
+    # Load and parse the full_fields_outline.md
+    outline_file_path = "full_fields_outline.md"
+    outline_structure = {}
+    if os.path.exists(outline_file_path):
+        with open(outline_file_path, 'r', encoding='utf-8') as f:
+            outline_content = f.read()
+        outline_structure = parse_full_fields_outline(outline_content)
+    else:
+        st.warning(f"Outline file not found: {outline_file_path}. Report structure may be less organized.")
+
+    # Building categories remain the same
+    building_categories = {
+        "components": ["parts", "component", "assembly", "material", "hardware", "seal", "tubing", "slats"],
+        "dimensions": ["dimension", "size", "width", "height", "length", "diameter", "qty", "quantities"],
+        "electrical": ["voltage", "power", "electrical", "circuit", "wiring", "hz", "amps"],
+        "programming": ["program", "software", "plc", "hmi", "interface", "control", "batch", "report"],
+        "safety": ["safety", "guard", "protection", "emergency", "secure", "e-stop"],
+        "utility": ["utility", "psi", "cfm", "conformity", "certification"],
+        "handling": ["bottle handling", "conveyor", "puck", "index", "motion", "reject", "turntable", "elevator"],
+        "processing": ["filling", "capping", "labeling", "coding", "induction", "torque", "purge", "desiccant", "cottoner", "plugging"],
+        "documentation": ["documentation", "validation", "manual", "fat", "sat", "dq", "iq", "oq"],
+        "general": ["general", "info", "order", "customer", "machine", "direction", "speed", "warranty", "install", "spares", "packaging", "transport"]
+    }
+
+    # --- Data Preparation --- 
+    # report_data will store { section_name: { "_direct_fields_": [], "_subsections_": { subsection_name: [] } } }
+    report_data_by_outline = {section_name: {"_direct_fields_": [], "_subsections_": {sub_name: [] for sub_name in details.get("_subsections_", [])}} 
+                              for section_name, details in outline_structure.items()}
     
-    st.subheader("🔄 GOA Template Modifications")
-    
-    # Display machine ID for debugging
-    st.info(f"Machine ID: {machine_id}")
-    
-    # Load all templates with modifications for this machine
-    templates_data = load_machine_templates_with_modifications(machine_id)
-    
-    if not templates_data["templates"]:
-        st.warning(f"No templates found for machine ID {machine_id}.")
-        st.info("You need to process a GOA template for this machine first.")
+    # If outline_structure is empty, initialize with a default section for all fields
+    if not report_data_by_outline:
+        report_data_by_outline["All Specifications"] = {"_direct_fields_": [], "_subsections_": {}}
+
+    unmapped_or_additional_fields = [] # Fields not fitting the outline or not in explicit_mappings
+
+    # Sort template_data for consistent processing
+    sorted_template_data_items = sorted(template_data.items(), key=lambda x: x[0])
+
+    for field_key, value in sorted_template_data_items:
+        if not value or (field_key.endswith("_check") and str(value).upper() != "YES"):
+            continue
+
+        field_info = {
+            "key": field_key,
+            "value": value,
+            "label": field_key, # Default label
+            "path": field_key,  # Default path
+            "category": "general" # Default category
+        }
+
+        # Determine building category
+        for cat, keywords in building_categories.items():
+            # Check against key, explicit mapping path, and eventual label
+            path_from_mapping = explicit_placeholder_mappings.get(field_key, field_key).lower()
+            if any(kw in field_key.lower() or kw in path_from_mapping for kw in keywords):
+                field_info["category"] = cat
+                break
         
-        # Add helpful instructions
-        st.markdown("""
-        ### How to Process a Machine for GOA:
-        1. Go to the "Machine Processing" tab
-        2. Select the machine you want to process
-        3. Click "Process Selected Machine for GOA"
+        mapped_section_name = None
+        mapped_subsection_name = None
+
+        if field_key in explicit_placeholder_mappings:
+            full_path_string = explicit_placeholder_mappings[field_key]
+            field_info["path"] = full_path_string
+            parts = [p.strip() for p in full_path_string.split(" - ")] 
+
+            if parts:
+                field_info["label"] = parts[-1] # Last part is usually the most specific label
+                potential_section = parts[0]
+                potential_subsection = None
+                if len(parts) > 2:
+                    potential_subsection = " - ".join(parts[1:-1])
+                elif len(parts) == 2: # Section - Field, no explicit subsection in mapping
+                    potential_subsection = None
+                
+                # Try to match this field to the outline structure
+                # First, check if potential_section matches a top-level outline section
+                # Case-insensitive matching for robustness
+                matched_outline_section_key = next((os_key for os_key in outline_structure 
+                                                    if os_key.lower() == potential_section.lower()), None)
+
+                if matched_outline_section_key:
+                    mapped_section_name = matched_outline_section_key # Use the casing from outline_structure
+                    # Now check for subsection match within this outline section
+                    if potential_subsection:
+                        available_subsections = outline_structure[mapped_section_name].get("_subsections_", [])
+                        matched_outline_subsection_key = next((sub_key for sub_key in available_subsections 
+                                                               if sub_key.lower() == potential_subsection.lower()), None)
+                        if matched_outline_subsection_key:
+                            mapped_subsection_name = matched_outline_subsection_key # Use casing from outline
+                else: # Section from mapping not found in outline, treat as unmapped/additional
+                    pass 
         
-        After processing the machine, you can return to this tab to modify the template.
-        """)
-        return
-    
-    # Display templates in tabs
-    template_names = [t["template_type"] for t in templates_data["templates"]]
-    if not template_names:
-        st.warning("No template types found in the loaded data.")
-        return
-        
-    template_tabs = st.tabs(template_names)
-    
-    for i, template in enumerate(templates_data["templates"]):
-        with template_tabs[i]:
-            template_id = template["id"]
-            template_type = template["template_type"]
-            
-            # Check if template data exists and is valid
-            if "template_data" not in template or not template["template_data"]:
-                st.error(f"Template data missing or invalid for template ID {template_id}")
-                continue
-                
-            template_data = template["template_data"]
-            modifications = template["modifications"]
-            
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"**Template ID:** {template_id}")
-                st.markdown(f"**Type:** {template_type}")
-                st.markdown(f"**Last Updated:** {template['processing_date']}")
-            with col2:
-                if template["generated_file_path"] and os.path.exists(template["generated_file_path"]):
-                    with open(template["generated_file_path"], "rb") as fp:
-                        st.download_button(
-                            "Download Document", 
-                            fp, 
-                            os.path.basename(template["generated_file_path"]), 
-                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
-                            key=f"dl_template_{template_id}"
-                        )
-                else:
-                    st.warning("Document file not found or path not specified")
-            
-            # Show template summary (hierarchical view of selected items)
-            try:
-                # Try to get template contexts from session state or elsewhere
-                template_contexts = None
-                if "template_contexts" in st.session_state:
-                    template_contexts = st.session_state.template_contexts
-                    
-                # Show the hierarchical summary
-                st.markdown("### Template Content Summary")
-                show_template_summary(template_data, template_contexts)
-            except Exception as e:
-                st.error(f"Error displaying template summary: {str(e)}")
-            
-            # Add a function to get hierarchical display for a field
-            def get_field_hierarchical_display(field_key):
-                """
-                Returns a formatted hierarchical display for a field based on template_contexts.
-                
-                Args:
-                    field_key: The field key to get hierarchical display for
-                
-                Returns:
-                    A dictionary with section, subsection, and field information
-                """
-                result = {
-                    "section": "Unknown Section",
-                    "subsection": "",
-                    "field": field_key,
-                    "display": field_key
-                }
-                
-                if "template_contexts" in st.session_state and field_key in st.session_state.template_contexts:
-                    context = st.session_state.template_contexts[field_key]
-                    context_parts = context.split(' - ')
-                    
-                    if len(context_parts) >= 1:
-                        result["section"] = context_parts[0]
-                    if len(context_parts) >= 2:
-                        result["subsection"] = context_parts[1]
-                    if len(context_parts) >= 3:
-                        result["field"] = context_parts[2]
-                    elif len(context_parts) == 2:
-                        result["field"] = context_parts[1]
-                    
-                    # Create a formatted display
-                    if result["subsection"]:
-                        result["display"] = f"{result['section']} → {result['subsection']} → {result['field']}"
-                    else:
-                        result["display"] = f"{result['section']} → {result['field']}"
-                    
-                return result
-            
-            # Display existing modifications
-            if modifications:
-                st.markdown("### Existing Modifications")
-                
-                # Create enhanced display data with hierarchical information
-                enhanced_mods_data = []
-                for mod in modifications:
-                    field_key = mod.get("field_key", "")
-                    hierarchy_info = get_field_hierarchical_display(field_key)
-                    
-                    enhanced_mod = {
-                        "field_key": field_key,
-                        "field_display": hierarchy_info["display"],
-                        "section": hierarchy_info["section"],
-                        "subsection": hierarchy_info["subsection"],
-                        "field": hierarchy_info["field"],
-                        "original_value": mod.get("original_value", ""),
-                        "modified_value": mod.get("modified_value", ""),
-                        "modification_reason": mod.get("modification_reason", ""),
-                        "modified_by": mod.get("modified_by", ""),
-                        "modification_date": mod.get("modification_date", "")
-                    }
-                    enhanced_mods_data.append(enhanced_mod)
-                
-                # Sort modifications by section, subsection and field
-                enhanced_mods_data.sort(key=lambda x: (x["section"], x["subsection"], x["field"]))
-                
-                # Group modifications by section for organized display
-                from itertools import groupby
-                grouped_mods = {}
-                for section, section_mods in groupby(enhanced_mods_data, key=lambda x: x["section"]):
-                    if section not in grouped_mods:
-                        grouped_mods[section] = list(section_mods)
-                    else:
-                        grouped_mods[section].extend(list(section_mods))
-                
-                # Display modifications by section in expandable containers
-                for section, section_mods in grouped_mods.items():
-                    with st.expander(f"Section: {section} ({len(section_mods)} modifications)", expanded=True):
-                        # Convert to dataframe for display
-                        df_data = []
-                        for mod in section_mods:
-                            display_row = {
-                                "Section": mod["section"],
-                                "Subsection": mod["subsection"],
-                                "Field": mod["field"],
-                                "Original Value": mod["original_value"],
-                                "Modified Value": mod["modified_value"],
-                                "Reason": mod["modification_reason"],
-                                "Modified By": mod["modified_by"],
-                                "Date": mod["modification_date"]
-                            }
-                            df_data.append(display_row)
-                        
-                        if df_data:
-                            df = pd.DataFrame(df_data)
-                            st.dataframe(df, use_container_width=True)
-                
-                # Also provide a traditional table view option
-                with st.expander("Show All Modifications (Table View)", expanded=False):
-                    mods_df = pd.DataFrame(modifications)
-                    # Format the dataframe for display
-                    display_cols = {
-                        "field_key": "Field Key",
-                        "original_value": "Original Value",
-                        "modified_value": "Modified Value",
-                        "modification_reason": "Reason",
-                        "modified_by": "Modified By",
-                        "modification_date": "Date"
-                    }
-                    mods_df = mods_df[[col for col in display_cols.keys() if col in mods_df.columns]]
-                    mods_df.columns = [display_cols[col] for col in mods_df.columns if col in display_cols]
-                    st.dataframe(mods_df, use_container_width=True)
+        # Place the field
+        if mapped_section_name and mapped_section_name in report_data_by_outline:
+            if mapped_subsection_name and mapped_subsection_name in report_data_by_outline[mapped_section_name]["_subsections_"]:
+                report_data_by_outline[mapped_section_name]["_subsections_"][mapped_subsection_name].append(field_info)
             else:
-                st.info("No modifications have been made to this template yet.")
+                # Add to direct fields of the section if no subsection match or no subsection in mapping
+                report_data_by_outline[mapped_section_name]["_direct_fields_"].append(field_info)
+        else:
+            # If no explicit mapping or section doesn't match outline, add to unmapped
+            # Or, if the outline is empty, all fields go to the default section's direct_fields
+            if not outline_structure and "All Specifications" in report_data_by_outline:
+                 report_data_by_outline["All Specifications"]["_direct_fields_"].append(field_info)
+            else:
+                unmapped_or_additional_fields.append(field_info)
+
+    # Sort fields within each section/subsection
+    for section_name, section_content in report_data_by_outline.items():
+        if "_direct_fields_" in section_content:
+            section_content["_direct_fields_"] = sorted(section_content["_direct_fields_"], key=lambda x: (x["category"], x["label"]))
+        if "_subsections_" in section_content:
+            for sub_name, fields_list in section_content["_subsections_"].items():
+                section_content["_subsections_"][sub_name] = sorted(fields_list, key=lambda x: (x["category"], x["label"]))
+    
+    sorted_unmapped_fields = sorted(unmapped_or_additional_fields, key=lambda x: (x["category"], x["path"]))
+
+    # --- HTML Generation --- 
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Machine Build Specification: {machine_name or 'N/A'}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; line-height: 1.4; }}
+            h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+            h2 {{ color: #2980b9; margin-top: 35px; border-bottom: 1px solid #bdc3c7; padding-bottom: 8px; page-break-before: auto; page-break-after: avoid;}}
+            h3 {{ color: #16a085; margin-top: 25px; font-size: 1.1em; background-color: #f0f9ff; padding: 8px; border-left: 4px solid #5dade2; page-break-after: avoid; }}
+            table {{ width: 100%; border-collapse: collapse; margin-bottom: 25px; box-shadow: 0 2px 3px rgba(0,0,0,0.1); page-break-inside: avoid; }}
+            th {{ background-color: #eaf2f8; text-align: left; padding: 10px 12px; border-bottom: 2px solid #aed6f1; font-weight: bold; }}
+            td {{ padding: 9px 12px; border-bottom: 1px solid #d6eaf8; }}
+            tr:nth-child(even) td {{ background-color: #f8f9f9; }}
+            /* tr:hover td {{ background-color: #e8f6fd; }} */
+            .report-header {{ margin-bottom: 30px; display: flex; align-items: center; justify-content: space-between; }}
+            .report-meta {{ color: #7f8c8d; font-size: 0.9em; margin-bottom: 5px; }}
+            .section-count, .subsection-count {{ color: #7f8c8d; font-size: 0.85em; margin-left: 10px; font-weight: normal; }}
             
-            # Add new modification
-            st.markdown("### Add New Modification")
-            with st.form(key=f"add_mod_form_{template_id}"):
-                # Get all field keys from template data
-                field_keys = list(template_data.keys())
-                field_keys.sort()
+            .specs-container {{ display: flex; flex-wrap: wrap; gap: 15px; margin: 15px 0; }}
+            .spec-box {{ border: 1px solid #d4e6f1; border-radius: 5px; padding: 12px; flex: 1 1 280px; background-color: #fdfefe; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+            .spec-box-title {{ font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #d4e6f1; padding-bottom: 6px; color: #2e86c1; font-size: 1em;}}
+            .spec-item {{ margin-bottom: 7px; font-size: 0.95em; }}
+            .spec-label {{ font-weight: bold; color: #566573; }}
+            .spec-value {{ color: #283747; margin-left: 5px; }}
+            
+            .toc {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 30px; border: 1px solid #e9ecef; }}
+            .toc ul {{ list-style-type: none; padding-left: 0; }}
+            .toc li a {{ text-decoration: none; color: #3498db; display: block; padding: 3px 0; }}
+            .toc li a:hover {{ text-decoration: underline; }}
+            .toc-section {{ font-weight: bold; margin-top: 8px; }}
+            .toc-subsection {{ padding-left: 20px; font-size: 0.95em; }}
+
+            .print-button {{ position: fixed; top: 20px; right: 20px; z-index: 1000; }}
+            @media print {{
+                body {{ font-size: 10pt; margin: 15mm; }}
+                h1, h2, h3 {{ page-break-after: avoid; }}
+                table, .specs-container, .spec-box {{ page-break-inside: avoid !important; }}
+                .no-print {{ display: none !important; }}
+                .print-header {{ display: block; text-align: center; margin-bottom: 20px; }}
+                .toc {{ display: none; }}
+                .report-header {{ justify-content: center; text-align: center; }}
+            }}
+            .build-summary {{ background-color: #fdfefe; padding: 15px; border-radius: 5px; margin-top: 20px; border: 1px solid #d4e6f1; }}
+            .key-specs {{ display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px; }}
+            .key-spec {{ flex: 1 1 200px; padding: 10px; background-color: #f8f9f9; border-radius: 5px; border: 1px solid #e0e0e0; }}
+            .key-spec-title {{ font-weight: bold; margin-bottom: 5px; color: #2980b9; }}
+        </style>
+    </head>
+    <body>
+        <div class="report-header">
+            <div>
+                <h1>Machine Build Specification</h1>
+                <div class="report-meta">Generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
+    """
+    
+    if machine_name: html += f'<div class="report-meta">Machine: {machine_name}</div>\n'
+    if template_type: html += f'<div class="report-meta">Template Type: {template_type}</div>\n'
+    
+    html += """
+            </div>
+            <div class="print-button no-print">
+                <button onclick="window.print()">Print Report</button>
+            </div>
+        </div>
+        
+        <div class="build-summary">
+            <h2>Build Summary</h2>
+    """
+    
+    # Key specifications summary (simplified - uses all fields for now, can be refined)
+    key_specs_summary = {
+        "Mechanical": [], "Electrical": [], "Control": [], "Safety": [], "Processing": [], "General": []
+    }
+    temp_all_fields_for_summary = []
+    for sec_data in report_data_by_outline.values():
+        temp_all_fields_for_summary.extend(sec_data.get("_direct_fields_", []))
+        for sub_fields in sec_data.get("_subsections_", {}).values():
+            temp_all_fields_for_summary.extend(sub_fields)
+    temp_all_fields_for_summary.extend(sorted_unmapped_fields)
+
+    for item in temp_all_fields_for_summary:
+        cat = item["category"]
+        if cat in ["components", "dimensions", "handling"]: target_cat = "Mechanical"
+        elif cat == "electrical": target_cat = "Electrical"
+        elif cat == "programming": target_cat = "Control"
+        elif cat == "safety": target_cat = "Safety"
+        elif cat == "processing": target_cat = "Processing"
+        else: target_cat = "General"
+        if len(key_specs_summary[target_cat]) < 5:  # Limit to 5 key specs per category
+            key_specs_summary[target_cat].append((item["label"], item["value"]))
+    
+    html += '<div class="key-specs">'
+    for spec_type, specs in key_specs_summary.items():
+        if specs:
+            html += f'''
+            <div class="key-spec">
+                <div class="key-spec-title">{spec_type}</div>
+                <ul>
+            '''
+            for spec_item, spec_value in specs:
+                html += f"<li><b>{spec_item}:</b> {spec_value}</li>\n"
+            html += '</ul></div>'
+    html += '</div></div>' # Close key-specs and build-summary
+    
+    # --- Table of Contents --- 
+    html += '<div class="toc no-print"><h2>Table of Contents</h2><ul>'
+    # Use the order from outline_structure if available, otherwise sorted keys of report_data_by_outline
+    toc_section_keys = list(outline_structure.keys()) if outline_structure else sorted(list(report_data_by_outline.keys()))
+
+    for section_name in toc_section_keys:
+        if section_name not in report_data_by_outline: continue # Skip if section from outline has no data
+        section_content = report_data_by_outline[section_name]
+        section_id = section_name.replace(" ", "_").replace("/", "_").replace("&", "and")
+        has_content = section_content.get("_direct_fields_") or any(section_content.get("_subsections_", {}).values())
+        if not has_content: continue
+
+        html += f'<li class="toc-section"><a href="#{section_id}">{section_name}</a></li>'
+        if "_subsections_" in section_content and section_content["_subsections_"]:
+            # Sort subsections from outline for TOC consistency
+            sorted_toc_subs = sorted(list(section_content["_subsections_"].keys()))
+            for sub_name in sorted_toc_subs:
+                if section_content["_subsections_"][sub_name]: # Only list if subsection has items
+                    sub_id = f"{section_id}_{sub_name.replace(' ', '_').replace('/', '_').replace('&', 'and')}"
+                    html += f'<li class="toc-subsection"><a href="#{sub_id}">{sub_name}</a></li>'
+    if sorted_unmapped_fields:
+        html += f'<li class="toc-section"><a href="#unmapped_additional_fields">Additional Specifications</a></li>'
+    html += '</ul></div>'
+    
+    # --- Main Report Content --- 
+    report_section_keys = list(outline_structure.keys()) if outline_structure else sorted(list(report_data_by_outline.keys()))
+
+    for section_name in report_section_keys:
+        if section_name not in report_data_by_outline: continue
+        section_content = report_data_by_outline[section_name]
+        section_id = section_name.replace(" ", "_").replace("/", "_").replace("&", "and")
+        
+        # Check if section has any content before rendering header
+        direct_fields_exist = bool(section_content.get("_direct_fields_"))
+        subsections_with_content = any(bool(fields) for fields in section_content.get("_subsections_", {}).values())
+        if not direct_fields_exist and not subsections_with_content: continue
+
+        total_items_in_section = len(section_content.get("_direct_fields_", [])) + sum(len(sub_list) for sub_list in section_content.get("_subsections_", {}).values())
+        html += f'<h2 id="{section_id}">{section_name} <span class="section-count">({total_items_in_section} items)</span></h2>'
+
+        # Render direct fields for the section
+        if direct_fields_exist:
+            html += '<div class="specs-container">'
+            # Group direct fields by category
+            direct_fields_by_cat = {}
+            for item in section_content["_direct_fields_"]:
+                cat = item["category"]
+                if cat not in direct_fields_by_cat: direct_fields_by_cat[cat] = []
+                direct_fields_by_cat[cat].append(item)
+            
+            for cat_name, cat_items in sorted(direct_fields_by_cat.items()):
+                html += f'<div class="spec-box category-{cat_name}"><div class="spec-box-title">{cat_name.replace("_", " ").title()}</div>'
+                for item in cat_items:
+                    display_value = item["value"].replace("\n", "<br>") if item["key"] == "options_listing" else item["value"]
+                    html += f'<div class="spec-item"><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></div>'
+                html += '</div>' # Close spec-box
+            html += '</div>' # Close specs-container
+
+            html += "<table><thead><tr><th>Item</th><th>Specification Path</th><th>Value</th></tr></thead><tbody>"
+            for item in section_content["_direct_fields_"]:
+                display_value_table = item["value"].replace("\n", "<br>") if item["key"] == "options_listing" else item["value"]
+                html += f'<tr><td>{item["label"]}</td><td>{item["path"]}</td><td>{display_value_table}</td></tr>'
+            html += "</tbody></table>"
+
+        # Render subsections
+        if "_subsections_" in section_content and section_content["_subsections_"]:
+            # Sort subsections for display (already sorted for TOC)
+            sorted_display_subs = sorted(list(section_content["_subsections_"].keys()))
+            for sub_name in sorted_display_subs:
+                fields_list = section_content["_subsections_"][sub_name]
+                if not fields_list: continue # Skip empty subsections
+
+                sub_id = f"{section_id}_{sub_name.replace(' ', '_').replace('/', '_').replace('&', 'and')}"
+                html += f'<h3 id="{sub_id}">{sub_name} <span class="subsection-count">({len(fields_list)} items)</span></h3>'
+                html += '<div class="specs-container">'
+                # Group subsection fields by category
+                sub_fields_by_cat = {}
+                for item in fields_list:
+                    cat = item["category"]
+                    if cat not in sub_fields_by_cat: sub_fields_by_cat[cat] = []
+                    sub_fields_by_cat[cat].append(item)
+
+                for cat_name, cat_items in sorted(sub_fields_by_cat.items()):
+                    html += f'<div class="spec-box category-{cat_name}"><div class="spec-box-title">{cat_name.replace("_", " ").title()}</div>'
+                    for item in cat_items:
+                        display_value = item["value"].replace("\n", "<br>") if item["key"] == "options_listing" else item["value"]
+                        html += f'<div class="spec-item"><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></div>'
+                    html += '</div>' # Close spec-box
+                html += '</div>' # Close specs-container
+
+                html += "<table><thead><tr><th>Item</th><th>Specification Path</th><th>Value</th></tr></thead><tbody>"
+                for item in fields_list:
+                    display_value_table = item["value"].replace("\n", "<br>") if item["key"] == "options_listing" else item["value"]
+                    html += f'<tr><td>{item["label"]}</td><td>{item["path"]}</td><td>{display_value_table}</td></tr>'
+                html += "</tbody></table>"
+
+    # Render unmapped/additional fields
+    if sorted_unmapped_fields:
+        html += f'<h2 id="unmapped_additional_fields">Additional Specifications <span class="section-count">({len(sorted_unmapped_fields)} items)</span></h2>'
+        html += '<div class="specs-container">'
+        unmapped_by_cat = {}
+        for item in sorted_unmapped_fields:
+            cat = item["category"]
+            if cat not in unmapped_by_cat: unmapped_by_cat[cat] = []
+            unmapped_by_cat[cat].append(item)
+        
+        for cat_name, cat_items in sorted(unmapped_by_cat.items()):
+            html += f'<div class="spec-box category-{cat_name}"><div class="spec-box-title">{cat_name.replace("_", " ").title()}</div>'
+            for item in cat_items:
+                display_value = item["value"].replace("\n", "<br>") if item["key"] == "options_listing" else item["value"]
+                html += f'<div class="spec-item"><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></div>'
+            html += '</div>' # Close spec-box
+        html += '</div>' # Close specs-container
+        
+        html += "<table><thead><tr><th>Item</th><th>Specification Path</th><th>Value</th></tr></thead><tbody>"
+        for item in sorted_unmapped_fields:
+            display_value_table = item["value"].replace("\n", "<br>") if item["key"] == "options_listing" else item["value"]
+            html += f'<tr><td>{item["label"]}</td><td>{item["path"]}</td><td>{display_value_table}</td></tr>'
+        html += "</tbody></table>"
+
+    html += """
+    <div class="print-header">
+        <h2>Machine Build Specification</h2>
+        <!-- Add machine name and other details if needed for print header -->
+    </div>
+    </body>
+    </html>
+    """
+    return html
+
+def show_printable_report(template_data, machine_name="", template_type=""):
+    """
+    Shows a printable report in a new tab using Streamlit components.
+    
+    Args:
+        template_data: Dictionary of field keys to values from template
+        machine_name: Name of the machine (optional)
+        template_type: Type of template (e.g., "GOA") (optional)
+    """
+    # Generate HTML report
+    html_report = generate_printable_report(template_data, machine_name, template_type)
+    
+    # Display with html component
+    st.components.v1.html(html_report, height=600, scrolling=True)
+    
+    # Provide a download button for the HTML report
+    st.download_button(
+        "Download Report (HTML)",
+        html_report,
+        file_name=f"template_items_report_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+        mime="text/html",
+        key="download_report_html"
+    )
+
+def show_goa_modifications_ui(machine_id: int = None):
+    """
+    Displays and manages GOA template modifications for a specific machine.
+    Uses a simpler UI similar to client records.
+    
+    Args:
+        machine_id: Optional ID of the machine to show modifications for
+    """
+    try:
+        from src.utils.crm_utils import load_machine_templates_with_modifications, save_goa_modification
+        
+        st.subheader("🔄 Template Modifications")
+        
+        if machine_id is None:
+            st.info("Please select a machine from the Client Dashboard to modify its templates.")
+            return
+            
+        # Basic info about the selected machine
+        st.info(f"Modifying templates for Machine ID: {machine_id}")
+        
+        # Load templates for this machine
+        templates_data = load_machine_templates_with_modifications(machine_id)
+        
+        if not templates_data or not templates_data.get("templates"):
+            st.warning(f"No templates found for machine ID {machine_id}.")
+            st.info("You need to process this machine for templates first.")
+            return
+        
+        # Display templates in tabs if there are multiple
+        templates = templates_data["templates"]
+        
+        if len(templates) > 1:
+            template_tabs = st.tabs([t["template_type"] for t in templates])
+            for i, template in enumerate(templates):
+                with template_tabs[i]:
+                    display_template_editor(template)
+        else:
+            # Only one template, no need for tabs
+            display_template_editor(templates[0])
+    except Exception as e:
+        st.error(f"Error displaying template modifications: {str(e)}")
+        import traceback
+        st.exception(e)
+        
+def display_template_editor(template):
+    """Helper function to display and edit a single template"""
+    try:
+        from src.utils.crm_utils import save_goa_modification
+        from src.utils.template_utils import explicit_placeholder_mappings
+        import re
+        
+        template_id = template["id"]
+        template_type = template["template_type"]
+        
+        # Check if template data exists and is valid
+        if "template_data" not in template or not template["template_data"]:
+            st.error(f"Template data missing or invalid for template ID {template_id}")
+            return
+            
+        template_data = template["template_data"]
+        
+        # Display template info
+        st.markdown(f"**Template ID:** {template_id}")
+        st.markdown(f"**Type:** {template_type}")
+        st.markdown(f"**Last Updated:** {template['processing_date']}")
+        
+        # Download document button if available
+        if template.get("generated_file_path") and os.path.exists(template["generated_file_path"]):
+            with open(template["generated_file_path"], "rb") as fp:
+                st.download_button(
+                    "Download Document", 
+                    fp, 
+                    os.path.basename(template["generated_file_path"]), 
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
+                    key=f"dl_template_{template_id}"
+                )
+        
+        # Create sections for editing vs adding fields
+        edit_tab, add_tab = st.tabs(["Edit Existing Fields", "Add New Fields"])
+        
+        # Tab for editing existing fields
+        with edit_tab:
+            st.markdown("#### Edit Existing Template Fields")
+
+            # Group fields by hierarchy from explicit_placeholder_mappings
+            structured_fields = {}
+            other_fields = [] # For fields in template_data but not in explicit_placeholder_mappings
+
+            # Sort template_data items by key for consistent processing order
+            sorted_template_data_items = sorted(template_data.items(), key=lambda item: item[0])
+
+            for field_key, current_value in sorted_template_data_items:
+                is_boolean = field_key.endswith("_check") or \
+                             (isinstance(current_value, str) and current_value.upper() in ["YES", "NO", "TRUE", "FALSE"])
                 
-                if not field_keys:
-                    st.error("No fields found in template data")
-                    st.form_submit_button("Cannot modify (no fields)")
-                    continue
-                
-                # Group fields by section and subsection
-                field_hierarchy = {}
-                field_display_lookup = {}
-                
-                for field_key in field_keys:
-                    hierarchy_info = get_field_hierarchical_display(field_key)
-                    section = hierarchy_info["section"]
-                    subsection = hierarchy_info["subsection"]
-                    field = hierarchy_info["field"]
+                if field_key in explicit_placeholder_mappings:
+                    path = explicit_placeholder_mappings[field_key]
+                    parts = [p.strip() for p in path.split(" - ")]
                     
-                    # Create hierarchical format for display
-                    if subsection:
-                        display_text = f"{section} - {subsection} - {field}"
-                        if section not in field_hierarchy:
-                            field_hierarchy[section] = {}
-                        if subsection not in field_hierarchy[section]:
-                            field_hierarchy[section][subsection] = []
-                        field_hierarchy[section][subsection].append(field_key)
-                    else:
-                        display_text = f"{section} - {field}"
-                        if section not in field_hierarchy:
-                            field_hierarchy[section] = {}
-                        if "General" not in field_hierarchy[section]:
-                            field_hierarchy[section]["General"] = []
-                        field_hierarchy[section]["General"].append(field_key)
+                    section = parts[0]
+                    subsection = None
+                    field_label = parts[-1]
+
+                    if len(parts) > 2: # Section - Subsection - Field
+                        subsection = " - ".join(parts[1:-1])
+                    elif len(parts) == 2: # Section - Field
+                        pass # subsection remains None, field_label is parts[1]
+                    # else: # Only section or malformed, treat as field label under section (field_label already set to parts[-1])
+
+                    if not section: # Should not happen if mappings are correct
+                        section = "Uncategorized"
+                    if not field_label: # Should not happen
+                        field_label = field_key
+
+                    if section not in structured_fields:
+                        structured_fields[section] = {}
                     
-                    # Store the display text for this field key
-                    field_display_lookup[field_key] = display_text
-                
-                # Add section browser
-                st.markdown("#### Browse by Section")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Create a section selector
-                    section_options = ["All Sections"] + sorted(field_hierarchy.keys())
-                    selected_section = st.selectbox(
-                        "Section",
-                        options=section_options,
-                        key=f"section_select_{template_id}"
-                    )
-                
-                with col2:
-                    # Create a subsection selector based on selected section
-                    if selected_section != "All Sections":
-                        subsection_options = ["All Subsections"] + sorted(field_hierarchy[selected_section].keys())
-                        selected_subsection = st.selectbox(
-                            "Subsection",
-                            options=subsection_options,
-                            key=f"subsection_select_{template_id}"
-                        )
-                    else:
-                        selected_subsection = "All Subsections"
-                        st.selectbox(
-                            "Subsection",
-                            options=["All Subsections"],
-                            key=f"subsection_select_all_{template_id}",
-                            disabled=True
-                        )
-                
-                # Filter options based on section/subsection selection
-                filtered_options = []
-                filtered_keys = []
-                
-                if selected_section == "All Sections":
-                    # Show all fields
-                    for section_name in sorted(field_hierarchy.keys()):
-                        for subsection_name in sorted(field_hierarchy[section_name].keys()):
-                            for field_key in field_hierarchy[section_name][subsection_name]:
-                                hierarchy_info = get_field_hierarchical_display(field_key)
-                                if subsection_name == "General" or not subsection_name:
-                                    display_text = f"{section_name} - {hierarchy_info['field']}"
-                                else:
-                                    display_text = f"{section_name} - {subsection_name} - {hierarchy_info['field']}"
-                                filtered_options.append(display_text)
-                                filtered_keys.append(field_key)
-                else:
-                    if selected_subsection == "All Subsections":
-                        # Show all fields in the selected section
-                        for subsection_name in sorted(field_hierarchy[selected_section].keys()):
-                            for field_key in field_hierarchy[selected_section][subsection_name]:
-                                hierarchy_info = get_field_hierarchical_display(field_key)
-                                if subsection_name == "General" or not subsection_name:
-                                    display_text = f"{selected_section} - {hierarchy_info['field']}"
-                                else:
-                                    display_text = f"{selected_section} - {subsection_name} - {hierarchy_info['field']}"
-                                filtered_options.append(display_text)
-                                filtered_keys.append(field_key)
-                    else:
-                        # Show only fields in the selected subsection
-                        for field_key in field_hierarchy[selected_section][selected_subsection]:
-                            hierarchy_info = get_field_hierarchical_display(field_key)
-                            if selected_subsection == "General" or not selected_subsection:
-                                display_text = f"{selected_section} - {hierarchy_info['field']}"
-                            else:
-                                display_text = f"{selected_section} - {selected_subsection} - {hierarchy_info['field']}"
-                            filtered_options.append(display_text)
-                            filtered_keys.append(field_key)
-                
-                # Create mapping between display text and field key
-                display_to_key_map = {display: key for display, key in zip(filtered_options, filtered_keys)}
-                
-                # Create formatted dataframe for field selection
-                field_selection_data = []
-                for i, (display, key) in enumerate(zip(filtered_options, filtered_keys)):
-                    parts = display.split(" - ")
-                    section = parts[0] if len(parts) >= 1 else ""
-                    subsection = parts[1] if len(parts) >= 3 else ""
-                    field = parts[-1]  # Last part is always the field
+                    current_section_dict = structured_fields[section]
+                    target_subsection_key = subsection if subsection else "_fields_" # Use a consistent key for direct fields
+
+                    if target_subsection_key not in current_section_dict:
+                        current_section_dict[target_subsection_key] = []
                     
-                    field_selection_data.append({
-                        "Section": section,
-                        "Subsection": subsection,
-                        "Field": field,
-                        "Key": key,
-                        "Display": display
+                    current_section_dict[target_subsection_key].append({
+                        "key": field_key, 
+                        "label": field_label, 
+                        "value": current_value, 
+                        "is_boolean": is_boolean
                     })
-                
-                # Sort by section, subsection, field
-                field_selection_data.sort(key=lambda x: (x["Section"], x["Subsection"], x["Field"]))
-                
-                # Display a selection table
-                st.markdown("#### Select Field to Modify")
-                
-                # Format selection table
-                selection_df = pd.DataFrame(field_selection_data)
-                
-                # Show the selectable field table
-                if not selection_df.empty:
-                    selection = st.dataframe(
-                        selection_df[["Section", "Subsection", "Field"]],
-                        use_container_width=True,
-                        hide_index=False,
-                        column_config={
-                            "Section": st.column_config.TextColumn("Section"),
-                            "Subsection": st.column_config.TextColumn("Subsection"),
-                            "Field": st.column_config.TextColumn("Field")
-                        }
-                    )
-                    
-                    # Get user selection
-                    selection_index = st.number_input(
-                        "Select a row number from the table above", 
-                        min_value=0, 
-                        max_value=len(field_selection_data)-1 if field_selection_data else 0,
-                        value=0,
-                        key=f"field_selection_index_{template_id}"
-                    )
-                    
-                    # Get the selected field key
-                    if field_selection_data:
-                        selected_field = field_selection_data[selection_index]["Key"]
-                    else:
-                        st.error("No fields available to select")
-                        selected_field = None
                 else:
-                    st.warning("No fields match the current filter criteria")
-                    # Provide a fallback selection method
-                    st.markdown("#### Alternative Selection Method")
-                    selected_field = st.selectbox(
-                        "Select a field directly",
-                        options=field_keys,
-                        key=f"field_select_fallback_{template_id}"
-                    )
-                
-                # Only show field details and value editing if a field is selected
-                if not selected_field:
-                    st.error("No field selected. Please select a field to modify.")
-                    # Add a dummy form submission button that does nothing
-                    st.form_submit_button("Cannot modify (no field selected)", disabled=True)
-                    # Skip the rest of the form
-                    continue
-                
-                # Display hierarchical context for the selected field
-                if "template_contexts" in st.session_state and selected_field in st.session_state.template_contexts:
-                    context = st.session_state.template_contexts[selected_field]
+                    other_fields.append({
+                        "key": field_key, 
+                        "label": field_key, # Use key as label if not in mappings
+                        "value": current_value, 
+                        "is_boolean": is_boolean
+                    })
+
+            # Sort sections alphabetically by name
+            sorted_sections_list = sorted(structured_fields.items(), key=lambda item: item[0])
+
+            for section_name, subsections_dict in sorted_sections_list:
+                # Determine if the expander should be open by default (e.g., if it contains many items or is critical)
+                # For now, keep all closed by default for brevity
+                expanded_default = False 
+                with st.expander(f"**{section_name}**", expanded=expanded_default):
+                    # Sort subsections alphabetically, ensuring "_fields_" (direct fields) comes first or last as desired
+                    # Here, sorting normally will place "_fields_" based on its string value.
+                    sorted_subsections_list = sorted(subsections_dict.items(), key=lambda item: item[0] if item[0] != "_fields_" else "")
                     
-                    # Split the context into hierarchy parts
-                    context_parts = context.split(' - ')
-                    
-                    # Extract hierarchical components
-                    section = context_parts[0] if len(context_parts) >= 1 else "Unknown"
-                    subsection = context_parts[1] if len(context_parts) >= 2 else ""
-                    field = context_parts[2] if len(context_parts) >= 3 else (context_parts[1] if len(context_parts) >= 2 else selected_field)
-                    
-                    # Create field info table
-                    field_info = [
-                        {"Component": "Section", "Value": section},
-                        {"Component": "Subsection", "Value": subsection},
-                        {"Component": "Field", "Value": field},
-                        {"Component": "Type", "Value": "Checkbox" if selected_field.endswith("_check") else "Text Field"},
-                        {"Component": "Field Key", "Value": selected_field}
-                    ]
-                    
-                    # Display as a clean table
-                    st.markdown("#### Field Information")
-                    field_info_df = pd.DataFrame(field_info)
-                    st.dataframe(field_info_df, use_container_width=True, hide_index=True)
-                    
-                    # Add helpful explanation based on field type
-                    if selected_field.endswith("_check"):
-                        st.caption(f"This is a checkbox field. 'YES' means this option is selected/included.")
-                
-                # Show current value
-                st.markdown("#### Current and New Values")
-                current_value = template_data.get(selected_field, "")
-                st.text_input("Current Value", value=current_value, disabled=True, key=f"current_val_{template_id}")
-                
-                # Input for new value
-                is_checkbox = selected_field.endswith("_check")
-                
-                if is_checkbox:
-                    # For checkbox fields (ending with _check), provide YES/NO radio buttons
-                    st.markdown("**New Value:**")
-                    new_value = st.radio(
-                        "Select YES or NO",
-                        options=["YES", "NO"],
-                        index=0 if current_value.upper() == "YES" else 1,
-                        key=f"new_val_radio_{template_id}",
-                        horizontal=True,
-                        label_visibility="collapsed"
-                    )
-                    
-                    # Add hint about the checkbox meaning based on context
-                    if "template_contexts" in st.session_state and selected_field in st.session_state.template_contexts:
-                        context = st.session_state.template_contexts[selected_field]
-                        field_parts = context.split(" - ")
-                        field_desc = field_parts[-1] if len(field_parts) > 0 else selected_field
-                        st.caption(f"'YES' means '{field_desc}' is selected/included in the template.")
-                
-                elif selected_field.lower().endswith(("_qty", "_count", "_amount", "_number", "_vol", "_capacity")):
-                    # For quantity fields, provide a numeric input
-                    try:
-                        # Try to convert current value to a number
-                        current_numeric = float(current_value) if current_value else 0
-                        is_integer = current_numeric.is_integer()
+                    for subsection_name, fields_list in sorted_subsections_list:
+                        if subsection_name != "_fields_":
+                            st.markdown(f"##### {subsection_name}")
                         
-                        if is_integer:
-                            new_value = str(st.number_input(
-                                "New Value",
-                                value=int(current_numeric),
-                                step=1,
-                                key=f"new_val_int_{template_id}"
-                            ))
-                        else:
-                            new_value = str(st.number_input(
-                                "New Value",
-                                value=current_numeric,
-                                step=0.1,
-                                format="%.2f",
-                                key=f"new_val_float_{template_id}"
-                            ))
-                    except ValueError:
-                        # Fall back to text input if conversion fails
-                        new_value = st.text_input(
-                            "New Value", 
-                            value=current_value,
-                            key=f"new_val_text_{template_id}",
-                            placeholder="Enter a numeric value"
-                        )
-                
-                elif any(dimension in selected_field.lower() for dimension in ["_width", "_height", "_length", "_size", "_diameter"]):
-                    # For dimension fields, provide numeric input with units hint
-                    new_value = st.text_input(
-                        "New Value", 
-                        value=current_value,
-                        key=f"new_val_text_{template_id}",
-                        placeholder="Enter value with units (e.g., 10mm, 1.5in)"
-                    )
-                    
-                    # Add hint about expected format
-                    st.caption("Include units if applicable (mm, cm, in, etc.)")
-                
-                else:
-                    # For text fields, provide a text input with context-based placeholder
-                    placeholder_text = "Enter new value"
-                    
-                    # Generate placeholder based on field context
-                    if "template_contexts" in st.session_state and selected_field in st.session_state.template_contexts:
-                        context = st.session_state.template_contexts[selected_field]
-                        if "model" in selected_field.lower() or "model" in context.lower():
-                            placeholder_text = "Enter model number or name"
-                        elif "voltage" in selected_field.lower() or "voltage" in context.lower():
-                            placeholder_text = "Enter voltage (e.g., 110V, 220-240V)"
-                        elif "date" in selected_field.lower() or "date" in context.lower():
-                            placeholder_text = "Enter date (YYYY-MM-DD)"
-                        elif "country" in selected_field.lower() or "country" in context.lower():
-                            placeholder_text = "Enter country name"
-                    
-                    new_value = st.text_input(
-                        "New Value", 
-                        value=current_value,
-                        key=f"new_val_text_{template_id}",
-                        placeholder=placeholder_text
-                    )
-                
-                # Input for reason and modified by
-                st.markdown("#### Modification Details")
-                reason = st.text_input("Reason for Change", key=f"reason_{template_id}", 
-                                       placeholder="e.g., Kickoff meeting, Client request")
-                modified_by = st.text_input("Modified By", key=f"modified_by_{template_id}", 
-                                           placeholder="Your name")
-                
-                submitted = st.form_submit_button("Save Modification")
-                if submitted:
-                    if new_value != current_value:
-                        with st.spinner("Saving modification..."):
-                            if save_goa_modification(
-                                template_id, 
-                                selected_field, 
-                                current_value, 
-                                new_value,
-                                reason,
-                                modified_by
-                            ):
-                                st.success(f"Modification saved for field '{selected_field}'.")
-                                # Reload page to show the new modification
-                                st.rerun()
-                            else:
-                                st.error("Failed to save modification. Check the database connection.")
-                    else:
-                        st.warning("No changes detected. New value must be different from current value.")
-            
-            # Regenerate document with modifications
-            st.markdown("### Regenerate Document with Modifications")
-            if st.button("Regenerate Document", key=f"regenerate_btn_{template_id}"):
-                # Ensure all modifications are applied to template data
-                with st.spinner("Updating template with modifications..."):
-                    if update_template_after_modifications(template_id):
-                        # Get updated template data
-                        templates_data = load_machine_templates_with_modifications(machine_id)
-                        updated_template = next((t for t in templates_data["templates"] if t["id"] == template_id), None)
-                        
-                        if updated_template:
-                            # Find a template file to use
-                            template_file_path = "templates/template.docx"  # Default
-                            
-                            # Try to find a specific template file based on template_type
-                            if template_type.lower() == "goa":
-                                template_file_path = "templates/template.docx"  # Specific GOA template
-                            elif template_type.lower() == "packing slip":
-                                template_file_path = "templates/Packing Slip.docx"
-                            elif template_type.lower() == "commercial invoice":
-                                template_file_path = "templates/Commercial Invoice.docx"
-                            elif template_type.lower() == "certificate of origin":
-                                template_file_path = "templates/CERTIFICATION OF ORIGIN_NAFTA.docx"
-                            
-                            if not os.path.exists(template_file_path):
-                                st.error(f"Template file not found: {template_file_path}")
-                            else:
-                                # Generate new file name
-                                file_name = f"output_modified_{template_type.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-                                
-                                # Fill document with updated data
-                                try:
-                                    with st.spinner(f"Generating modified document: {file_name}"):
-                                        fill_word_document_from_llm_data(
-                                            template_file_path, 
-                                            updated_template["template_data"], 
-                                            file_name
+                        # Sort fields within the subsection/section alphabetically by label
+                        sorted_fields_list = sorted(fields_list, key=lambda x: x["label"])
+
+                        for field_info in sorted_fields_list:
+                            field_key = field_info["key"]
+                            field_display = field_info["label"]
+                            current_value = field_info["value"]
+                            is_boolean = field_info["is_boolean"]
+
+                            col1, col2, col3 = st.columns([3, 4, 1.5]) 
+                            with col1:
+                                st.markdown(f"{field_display}")
+                            with col2:
+                                if is_boolean:
+                                    cv_str = str(current_value) if current_value is not None else "NO"
+                                    is_checked = cv_str.upper() in ["YES", "TRUE"]
+                                    new_checked = st.checkbox(
+                                        f"Enable {field_key}", 
+                                        value=is_checked,
+                                        key=f"edit_bool_{field_key}_{template_id}",
+                                        label_visibility="collapsed"
+                                    )
+                                    new_value = "YES" if new_checked else "NO"
+                                else:
+                                    current_value_str = "" if current_value is None else str(current_value)
+                                    if field_key == "options_listing":
+                                        new_value = st.text_area(
+                                            f"Value for {field_key}", 
+                                            value=current_value_str,
+                                            key=f"edit_text_{field_key}_{template_id}",
+                                            label_visibility="collapsed",
+                                            height=150 # Provide more space for options_listing
                                         )
-                                        
-                                        if os.path.exists(file_name):
-                                            # Update path in database
-                                            from src.utils.crm_utils import save_machine_template_data
-                                            save_machine_template_data(
-                                                machine_id, 
-                                                template_type, 
-                                                updated_template["template_data"],
-                                                file_name
+                                    else:
+                                        new_value = st.text_input(
+                                            f"Value for {field_key}", 
+                                            value=current_value_str,
+                                            key=f"edit_text_{field_key}_{template_id}",
+                                            label_visibility="collapsed"
+                                        )
+                            with col3:
+                                current_compare_val = str(current_value).upper() if is_boolean and current_value is not None else str(current_value if current_value is not None else "")
+                                new_compare_val = str(new_value).upper() if is_boolean else str(new_value)
+
+                                if new_compare_val != current_compare_val:
+                                    if st.button("Save", key=f"save_edit_{field_key}_{template_id}", use_container_width=True):
+                                        try:
+                                            save_goa_modification(
+                                                template_id, field_key, 
+                                                str(current_value if current_value is not None else ("NO" if is_boolean else "")), 
+                                                new_value,
+                                                "Manual edit", "User"
                                             )
-                                            
-                                            st.success(f"Document regenerated successfully: {file_name}")
-                                            with open(file_name, "rb") as fp:
-                                                st.download_button(
-                                                    "Download Regenerated Document", 
-                                                    fp, 
-                                                    file_name, 
-                                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
-                                                    key=f"dl_regen_{template_id}"
-                                                )
-                                        else:
-                                            st.error(f"Failed to generate document at path: {file_name}")
-                                except Exception as e:
-                                    st.error(f"Error regenerating document: {str(e)}")
-                                    import traceback
-                                    st.code(traceback.format_exc())
+                                            st.success(f"Updated: {field_display}")
+                                            template_data[field_key] = new_value 
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error saving: {str(e)}")
+            
+            if other_fields:
+                # Sort other_fields by label as well
+                sorted_other_fields = sorted(other_fields, key=lambda x: x["label"])
+                with st.expander("**Other Fields (Not in Standard Outline)**", expanded=False):
+                    for field_info in sorted_other_fields:
+                        field_key = field_info["key"]
+                        field_display = field_info["label"]
+                        current_value = field_info["value"]
+                        is_boolean = field_info["is_boolean"]
+
+                        col1, col2, col3 = st.columns([3, 4, 1.5])
+                        with col1:
+                            st.markdown(f"{field_display}")
+                        with col2:
+                            if is_boolean:
+                                cv_str = str(current_value) if current_value is not None else "NO"
+                                is_checked = cv_str.upper() in ["YES", "TRUE"]
+                                new_checked = st.checkbox(
+                                    f"Enable {field_key}", 
+                                    value=is_checked,
+                                    key=f"edit_bool_other_{field_key}_{template_id}",
+                                    label_visibility="collapsed"
+                                )
+                                new_value = "YES" if new_checked else "NO"
+                            else:
+                                current_value_str = "" if current_value is None else str(current_value)
+                                if field_key == "options_listing":
+                                    new_value = st.text_area(
+                                        f"Value for {field_key}", 
+                                        value=current_value_str,
+                                        key=f"edit_text_other_{field_key}_{template_id}",
+                                        label_visibility="collapsed",
+                                        height=150
+                                    )
+                                else:
+                                    new_value = st.text_input(
+                                        f"Value for {field_key}", 
+                                        value=current_value_str,
+                                        key=f"edit_text_other_{field_key}_{template_id}",
+                                        label_visibility="collapsed"
+                                    )
+                            with col3:
+                                current_compare_val = str(current_value).upper() if is_boolean and current_value is not None else str(current_value if current_value is not None else "")
+                                new_compare_val = str(new_value).upper() if is_boolean else str(new_value)
+                                if new_compare_val != current_compare_val:
+                                    if st.button("Save", key=f"save_edit_other_{field_key}_{template_id}", use_container_width=True):
+                                        try:
+                                            save_goa_modification(
+                                                template_id, field_key, 
+                                                str(current_value if current_value is not None else ("NO" if is_boolean else "")), 
+                                                new_value,
+                                                "Manual edit", "User"
+                                            )
+                                            st.success(f"Updated: {field_display}")
+                                            template_data[field_key] = new_value
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error saving: {str(e)}")
+        
+        # Tab for adding new fields
+        with add_tab:
+            st.subheader("Add New Fields")
+            st.info("Use this section to add fields that weren't found by the LLM but should be included in the template.")
+            
+            try:
+                # Filter out fields that are already in the template
+                available_fields = {k: v for k, v in explicit_placeholder_mappings.items() 
+                                   if k not in template_data}
+                
+                if not available_fields:
+                    st.warning("All known fields are already in the template.")
+                else:
+                    # Create categories for easier selection
+                    categories = {}
+                    for key, value in available_fields.items():
+                        if " - " in value:
+                            category = value.split(" - ")[0]
                         else:
-                            st.error("Failed to get updated template data.")
+                            category = "Other"
+                        
+                        if category not in categories:
+                            categories[category] = []
+                        
+                        categories[category].append((key, value))
+                    
+                    # Create a dropdown to select category
+                    selected_category = st.selectbox(
+                        "Select Category", 
+                        options=sorted(categories.keys()),
+                        key=f"category_select_{template_id}"
+                    )
+                    
+                    if selected_category and selected_category in categories:
+                        # Create a dropdown to select the field
+                        field_options = [(key, value) for key, value in categories[selected_category]]
+                        selected_field_index = st.selectbox(
+                            "Select Field to Add",
+                            options=range(len(field_options)),
+                            format_func=lambda i: field_options[i][1], # Show only the descriptive value
+                            key=f"field_select_{template_id}"
+                        )
+                        
+                        if selected_field_index is not None:
+                            selected_key, selected_value = field_options[selected_field_index]
+                            
+                            # Determine if it's a boolean field
+                            is_boolean = selected_key.endswith("_check")
+                            
+                            # Input for the new value
+                            st.markdown(f"**Adding Field:** {selected_key}")
+                            st.markdown(f"**Description:** {selected_value}")
+                            
+                            if is_boolean:
+                                new_value = "YES" if st.checkbox(
+                                    "Set to YES", 
+                                    key=f"new_bool_{selected_key}_{template_id}"
+                                ) else "NO"
+                            else:
+                                new_value = st.text_input(
+                                    f"Value for {selected_key}",
+                                    key=f"new_text_{selected_key}_{template_id}"
+                                )
+                            
+                            # Button to add the field
+                            if st.button("Add Field", key=f"add_field_{template_id}"):
+                                try:
+                                    # Save the new field
+                                    save_goa_modification(
+                                        template_id, selected_key, "", new_value,
+                                        "Manual addition", "User"
+                                    )
+                                    st.success(f"Added new field: {selected_key}")
+                                    # Rerun to refresh UI
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error adding field: {str(e)}")
+            except Exception as e:
+                st.error(f"Error in Add New Fields section: {str(e)}")
+    except Exception as e:
+        st.error(f"Error displaying template editor: {str(e)}")
+        import traceback
+        st.exception(e)
+
+def show_template_report_page():
+    """
+    Displays a dedicated page for viewing and printing template reports.
+    This page allows users to select any machine that has template data
+    and generate a printable report.
+    """
+    st.title("📋 Template Reports")
+    st.markdown("### Generate Printable Template Reports")
+    
+    # Load all clients
+    clients = st.session_state.all_crm_clients if "all_crm_clients" in st.session_state else []
+    
+    if not clients:
+        st.warning("No clients found. Please add client data first.")
+        return
+    
+    # Create client selector
+    client_options = [(c.get('id'), f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')}") for c in clients]
+    selected_client_id = st.selectbox(
+        "Select client:",
+        options=[c[0] for c in client_options],
+        format_func=lambda x: next((c[1] for c in client_options if c[0] == x), ""),
+        key="template_report_client_select"
+    )
+    
+    if selected_client_id:
+        # Load client info
+        from src.utils.crm_utils import get_client_by_id, load_machines_for_quote
+        client = get_client_by_id(selected_client_id)
+        
+        if client:
+            st.markdown(f"**Client:** {client.get('customer_name', 'Unknown')}")
+            st.markdown(f"**Quote Reference:** {client.get('quote_ref', 'Unknown')}")
+            
+            # Load machines for this client
+            machines = load_machines_for_quote(client.get('quote_ref', ''))
+            
+            if not machines:
+                st.warning(f"No machines found for client {client.get('customer_name', 'Unknown')}.")
+                return
+            
+            # Create machine selector
+            machine_options = [(m.get('id'), m.get('machine_name', f"Machine ID: {m.get('id')}")) for m in machines]
+            selected_machine_id = st.selectbox(
+                "Select machine:",
+                options=[m[0] for m in machine_options],
+                format_func=lambda x: next((m[1] for m in machine_options if m[0] == x), ""),
+                key="template_report_machine_select"
+            )
+            
+            if selected_machine_id:
+                # Load templates for this machine
+                from src.utils.crm_utils import load_machine_templates_with_modifications
+                templates_data = load_machine_templates_with_modifications(selected_machine_id)
+                templates = templates_data.get('templates', [])
+                
+                if not templates:
+                    st.warning(f"No templates found for the selected machine.")
+                    st.info("You need to process a GOA template for this machine first.")
+                    return
+                
+                # Create template selector
+                template_options = [(t.get('id'), t.get('template_type', 'Unknown')) for t in templates]
+                
+                # Print debug info about available templates
+                with st.expander("Debug Template Info", expanded=False):
+                    st.write(f"Found {len(templates)} templates for machine ID {selected_machine_id}")
+                    for i, t in enumerate(templates):
+                        st.write(f"Template {i+1}: ID={t.get('id')}, Type={t.get('template_type')}")
+                        st.write(f"Has template_data: {'Yes' if 'template_data' in t else 'No'}")
+                        st.write(f"Has template_data_json: {'Yes' if 'template_data_json' in t else 'No'}")
+                
+                # Force type to list if needed for options, handle empty list case
+                if not template_options:
+                    st.warning("Template options list is empty.")
+                    return
+                
+                selected_template_id = st.selectbox(
+                    "Select template type:",
+                    options=[t[0] for t in template_options],
+                    format_func=lambda x: next((t[1] for t in template_options if t[0] == x), "Unknown"),
+                    key="template_report_template_select"
+                )
+                
+                if selected_template_id:
+                    # Get the selected template
+                    selected_template = next((t for t in templates if t.get('id') == selected_template_id), None)
+                    
+                    # Debug the template selection
+                    st.write(f"Selected template ID: {selected_template_id}")
+                    if selected_template:
+                        st.write(f"Template found: {selected_template.get('template_type')}")
                     else:
-                        st.error("Failed to update template with modifications.")
+                        st.error(f"Template with ID {selected_template_id} not found in available templates.")
+                        # List available template IDs
+                        available_ids = [t.get('id') for t in templates]
+                        st.write(f"Available template IDs: {available_ids}")
+                    
+                    if selected_template and 'template_data' in selected_template and selected_template['template_data']:
+                        st.markdown("---")
+                        st.markdown("### Template Report")
+                        
+                        # Get machine name
+                        machine_name = next((m.get('machine_name', '') for m in machines if m.get('id') == selected_machine_id), "")
+                        
+                        # Show the report
+                        show_printable_report(
+                            selected_template['template_data'],
+                            machine_name,
+                            selected_template.get('template_type', '')
+                        )
+                        
+                        # Show a reminder about printing
+                        st.info("To print this report, use your browser's print function (CTRL+P) or download the HTML version and open it in a browser.")
+                    else:
+                        st.error("Template data not found or is invalid.")
+                        # Add debugging information
+                        if selected_template:
+                            st.expander("Debug Template Data Issue", expanded=True).write({
+                                "template_id": selected_template_id,
+                                "has_template_data_key": 'template_data' in selected_template,
+                                "template_data_type": type(selected_template.get('template_data', None)).__name__,
+                                "template_data_empty": not selected_template.get('template_data', {}) if 'template_data' in selected_template else True,
+                                "template_data_json_exists": 'template_data_json' in selected_template,
+                                "template_data_json_length": len(selected_template.get('template_data_json', '')) if 'template_data_json' in selected_template else 0
+                            })
+                            
+                            # If we have JSON data but parsing failed, try to fix it
+                            if 'template_data_json' in selected_template and selected_template.get('template_data_json'):
+                                try:
+                                    import json
+                                    template_data = json.loads(selected_template.get('template_data_json'))
+                                    if template_data:
+                                        st.success("Successfully parsed template data from JSON!")
+                                        # Show the report with the parsed data
+                                        machine_name = next((m.get('machine_name', '') for m in machines if m.get('id') == selected_machine_id), "")
+                                        show_printable_report(
+                                            template_data,
+                                            machine_name,
+                                            selected_template.get('template_type', '')
+                                        )
+                                    else:
+                                        st.warning("Parsed template data is empty.")
+                                except Exception as e:
+                                    st.error(f"Failed to parse template_data_json: {str(e)}")
+                        else:
+                            st.warning(f"Selected template ID {selected_template_id} not found in available templates.")
+    
+    # Add a section for batch reports for all machines of a client
+    st.markdown("---")
+    st.markdown("### Generate Batch Report for All Machines")
+    
+    # Create client selector for batch report
+    selected_client_id_batch = st.selectbox(
+        "Select client for batch report:",
+        options=[c[0] for c in client_options],
+        format_func=lambda x: next((c[1] for c in client_options if c[0] == x), ""),
+        key="template_report_client_select_batch"
+    )
+    
+    if selected_client_id_batch:
+        # Load client info
+        from src.utils.crm_utils import get_client_by_id, load_machines_for_quote
+        client = get_client_by_id(selected_client_id_batch)
+        
+        if client:
+            # Load machines for this client
+            machines = load_machines_for_quote(client.get('quote_ref', ''))
+            
+            if not machines:
+                st.warning(f"No machines found for client {client.get('customer_name', 'Unknown')}.")
+                return
+            
+            # Select template type for all machines
+            template_type_options = ["GOA", "Packing Slip", "Commercial Invoice", "Certificate of Origin"]
+            selected_template_type = st.selectbox(
+                "Select template type for all machines:",
+                options=template_type_options,
+                key="template_report_type_select_batch"
+            )
+            
+            # Generate batch report button
+            if st.button("Generate Batch Report", key="generate_batch_report_btn"):
+                st.markdown("---")
+                st.markdown(f"### Batch Report: {selected_template_type} for {client.get('customer_name', 'Unknown')}")
+                
+                # Initialize an HTML string for the combined report
+                import datetime
+                
+                combined_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Batch Template Report - {client.get('customer_name', 'Unknown')}</title>
+                    <style>
+                        body {{
+                            font-family: Arial, sans-serif;
+                            margin: 20px;
+                            color: #333;
+                        }}
+                        h1 {{
+                            color: #2c3e50;
+                            border-bottom: 2px solid #3498db;
+                            padding-bottom: 10px;
+                        }}
+                        h2 {{
+                            color: #2980b9;
+                            margin-top: 30px;
+                            border-bottom: 1px solid #bdc3c7;
+                            padding-bottom: 5px;
+                        }}
+                        h3 {{
+                            color: #16a085;
+                            margin-top: 25px;
+                        }}
+                        .machine-section {{
+                            margin-bottom: 40px;
+                            page-break-before: always;
+                        }}
+                        .report-meta {{
+                            color: #7f8c8d;
+                            font-size: 14px;
+                            margin-bottom: 5px;
+                        }}
+                        .client-info {{
+                            margin-bottom: 30px;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <h1>Batch Template Report: {selected_template_type}</h1>
+                    <div class="client-info">
+                        <div class="report-meta">Generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
+                        <div class="report-meta">Client: {client.get('customer_name', 'Unknown')}</div>
+                        <div class="report-meta">Quote Reference: {client.get('quote_ref', 'Unknown')}</div>
+                    </div>
+                """
+                
+                # Counter for machines with reports
+                machines_with_reports = 0
+                
+                # Process each machine
+                for machine in machines:
+                    machine_id = machine.get('id')
+                    machine_name = machine.get('machine_name', f"Machine ID: {machine_id}")
+                    
+                    # Load templates for this machine
+                    templates_data = load_machine_templates_with_modifications(machine_id)
+                    templates = templates_data.get('templates', [])
+                    
+                    # Find the template of the selected type
+                    template = next((t for t in templates if t.get('template_type', '').lower() == selected_template_type.lower()), None)
+                    
+                    if template and 'template_data' in template and template['template_data']:
+                        # Generate report for this machine
+                        machine_report = generate_printable_report(
+                            template['template_data'],
+                            machine_name,
+                            selected_template_type
+                        )
+                        
+                        # Extract the body content (between <body> and </body>)
+                        import re
+                        body_content = re.search(r'<body>(.*?)</body>', machine_report, re.DOTALL)
+                        
+                        if body_content:
+                            # Add machine section to combined report
+                            combined_html += f"""
+                            <div class="machine-section">
+                                <h2>{machine_name}</h2>
+                            """
+                            
+                            # Add the report content for this machine (removing the outer structure)
+                            content = body_content.group(1)
+                            # Remove the main title and metadata since we have it in the combined report
+                            content = re.sub(r'<h1>.*?</h1>', '', content)
+                            content = re.sub(r'<div class="report-header">.*?</div>', '', content)
+                            
+                            combined_html += content
+                            combined_html += "</div>"
+                            machines_with_reports += 1
+                
+                # Close the HTML document
+                combined_html += """
+                </body>
+                </html>
+                """
+                
+                if machines_with_reports > 0:
+                    # Display the combined report
+                    st.components.v1.html(combined_html, height=600, scrolling=True)
+                    
+                    # Provide a download button for the combined report
+                    st.download_button(
+                        "Download Batch Report (HTML)",
+                        combined_html,
+                        file_name=f"batch_report_{selected_template_type.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                        mime="text/html",
+                        key="download_batch_report_html"
+                    )
+                    
+                    st.success(f"Generated reports for {machines_with_reports} machines.")
+                else:
+                    st.warning(f"No machines with {selected_template_type} templates found.")
 
 def show_quote_processing():
     st.title("📄 Quote Processing")
@@ -1207,7 +1790,7 @@ def show_quote_processing():
                 st.markdown(f"**Main Item:** {selected_machine.get('main_item', {}).get('description', 'N/A')}")
                 st.markdown(f"**Add-ons:** {len(selected_machine.get('add_ons', []))} items")
             col1, col2 = st.columns(2)
-            with col1: 
+            with col1:
                 if st.button("⬅️ Back (GOA Common Options)", key="goa_back_common"): st.session_state.common_options_confirmation_done = False; st.session_state.processing_step = 2; st.rerun()
             with col2:
                 if st.button("Process This Machine for GOA", type="primary", key=f"process_machine_btn_{st.session_state.run_key}"):
@@ -1336,9 +1919,26 @@ def show_crm_management_page():
                     uploaded_pdf_client = st.file_uploader("Choose PDF for this client", type="pdf", key=f"client_pdf_upload_{quote_ref_for_upload}")
                     # Logic for client-specific PDF upload and processing would go here
                 with client_tab4:
-                    # Show template modifications for this client
-                    show_client_template_modifications(client_to_display_and_edit.get('id'))
-        except Exception as e: st.error(f"Error in CRM client display: {e}"); traceback.print_exc()
+                    # Find machines for this client
+                    from src.utils.crm_utils import load_machines_for_quote
+                    machines = load_machines_for_quote(client_to_display_and_edit.get('quote_ref', ''))
+                    
+                    if not machines:
+                        st.warning("No machines found for this client.")
+                    else:
+                        st.subheader("Select Machine to Modify Templates")
+                        machine_options = [(m.get('id'), m.get('machine_name', f"Machine ID {m.get('id')}")) for m in machines]
+                        selected_machine_id = st.selectbox(
+                            "Select Machine:", 
+                            options=[m[0] for m in machine_options],
+                            format_func=lambda x: next((m[1] for m in machine_options if m[0] == x), ""),
+                            key="template_machine_select"
+                        )
+                        
+                        if selected_machine_id:
+                            # Show template modifications UI for the selected machine
+                            show_goa_modifications_ui(selected_machine_id)
+        except Exception as e: st.error(f"Error in CRM client display: {e}"); import traceback; traceback.print_exc()
     else: st.info("Select a client to view/edit details.")
     with st.expander("Manually Add New Client Record"):
         with st.form(key=f"crm_add_new_form_{st.session_state.run_key}"):
@@ -1367,576 +1967,41 @@ def show_crm_management_page():
     else: st.info("No client records found.")
 
 def show_chat_page():
-    st.title("💬 Chat Interface")
-    
-    # Check if we have a specific chat context
-    if "chat_context" in st.session_state and st.session_state.chat_context:
-        chat_context = st.session_state.chat_context
-        context_client = chat_context.get("client_info", {})
-        
-        # Get PDF size for warning
-        full_pdf_text = chat_context.get("full_pdf_text", "")
-        pdf_size_kb = len(full_pdf_text) / 1024
-        
-        # Display context information
-        with st.container(border=True):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown("### Current Chat Context")
-                if context_client:
-                    st.markdown(f"**Client:** {context_client.get('client_name', 'Unknown')}")
-                    st.markdown(f"**Quote:** {context_client.get('quote_ref', 'Unknown')}")
-                else:
-                    st.markdown("No specific client context.")
-            with col2:
-                # Display PDF size warning if applicable
-                if pdf_size_kb > 100:
-                    st.warning(f"PDF Size: {pdf_size_kb:.1f} KB")
-                    st.markdown("*Large PDFs may cause slower responses*")
-                else:
-                    st.info(f"PDF Size: {pdf_size_kb:.1f} KB")
-        
-        # Show selected items from profile if available
-        if "action_profile" in st.session_state and st.session_state.action_profile:
-            profile_data = st.session_state.action_profile
-            
-            # Show machines if available
-            machines = profile_data.get("machines_data", {}).get("machines", [])
-            if machines:
-                with st.expander("Available Machines (You can ask about these)", expanded=True):
-                    for i, machine in enumerate(machines):
-                        machine_name = machine.get("machine_name", "Unknown Machine")
-                        st.markdown(f"**Machine {i+1}:** {machine_name}")
-                        main_item = machine.get("main_item", {})
-                        if main_item and "description" in main_item:
-                            st.markdown(f"*Main Item:* {main_item.get('description', '')[:100]}...")
-            
-            # Show selected items if available
-            line_items = profile_data.get("line_items", [])
-            if line_items:
-                with st.expander("Selected Items (You can ask about these)", expanded=False):
-                    for i, item in enumerate(line_items[:10]):  # Limit to first 10 items
-                        if "description" in item:
-                            desc = item.get("description", "")
-                            first_line = desc.split('\n')[0] if '\n' in desc else desc
-                            st.markdown(f"- {first_line}")
-                    if len(line_items) > 10:
-                        st.caption(f"... and {len(line_items) - 10} more items")
-    else:
-        # No context
-        st.info("Please try selecting the quote and the 'Chat with Quote' action again from the Client Dashboard.")
-        if st.button("Return to Client Dashboard"):
-            st.session_state.current_page = "Client Dashboard"
-            st.rerun()
-        return
-    
-    # Reset button
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if st.button("🔄 New Chat"):
-            st.session_state.quote_chat_history = []
-            st.rerun()
-    with col2:
-        if pdf_size_kb > 200:
-            st.warning("⚠️ This is a very large PDF. Chat processing may be slow and could time out.")
-    
-    # Chat message container
-    if "quote_chat_history" not in st.session_state:
-        st.session_state.quote_chat_history = []
-    
-    # Display chat history
-    for msg in st.session_state.quote_chat_history:
-        role = msg.get("role", "assistant")
-        with st.chat_message(role):
-            st.markdown(msg.get("content", ""))
-    
-    # Processing indicator for ongoing queries
-    if "chat_processing" not in st.session_state:
-        st.session_state.chat_processing = False
-    
-    # Chat input
-    user_input = st.chat_input("Ask a question about the quote...", disabled=st.session_state.chat_processing)
-    if user_input and not st.session_state.chat_processing:
-        # Add user message to chat history
-        st.session_state.quote_chat_history.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        
-        # Set processing flag to avoid multiple queries
-        st.session_state.chat_processing = True
-        st.rerun()
-    
-    # Process the query (after rerun if needed)
-    if st.session_state.chat_processing and st.session_state.quote_chat_history and st.session_state.quote_chat_history[-1]["role"] == "user":
-        with st.chat_message("assistant"):
-            with st.status("Analyzing document...", expanded=True) as status:
-                try:
-                    status.update(label="Retrieving relevant document sections...")
-                    
-                    from app import process_chat_query, get_current_context
-                    context_type, context_data = get_current_context()
-                    
-                    status.update(label="Generating response...")
-                    ai_response = process_chat_query(st.session_state.quote_chat_history[-1]["content"], context_type, context_data)
-                    
-                    # Success - update status
-                    status.update(label="✅ Response ready", state="complete")
-                    
-                    # Add response to history
-                    st.session_state.quote_chat_history.append({"role": "assistant", "content": ai_response})
-                    
-                    # Display the response
-                    st.markdown(ai_response)
-                    
-                except Exception as e:
-                    # Handle errors in processing
-                    error_message = f"Sorry, I encountered an error processing your query: {str(e)}"
-                    st.error(error_message)
-                    
-                    # Add error to chat history
-                    st.session_state.quote_chat_history.append({"role": "assistant", "content": error_message})
-                    
-                    # Update status to show error
-                    status.update(label="❌ Error in processing", state="error")
-                    
-                finally:
-                    # Clear processing flag
-                    st.session_state.chat_processing = False
-                    
-        # Rerun one more time to refresh the UI with the complete response
-        st.rerun()
-    
-    # Return button
-    if st.button("⬅️ Back to Client Dashboard"):
-        st.session_state.current_page = "Client Dashboard"
-        if st.session_state.profile_extraction_step == "action_selection":
-            # Action hub is on Client Dashboard
-            pass
-        else:
-            st.session_state.chat_context = None
-            st.session_state.quote_chat_history = []
-            st.session_state.chat_processing = False
-        st.rerun()
-
-def render_chat_ui(): 
-    with st.sidebar.expander("💬 Chat Assistant", expanded=False):
-        from app import get_current_context, process_chat_query 
-        context_type, context_data = get_current_context()
-        
-        # Show context information
-        if context_type == "quote": 
-            st.markdown("**Context:** Quote processing")
-            # Display PDF size for context
-            if context_data and "full_pdf_text" in context_data:
-                pdf_size_kb = len(context_data["full_pdf_text"]) / 1024
-                if pdf_size_kb > 100:
-                    st.caption(f"PDF Size: {pdf_size_kb:.1f}KB (large)")
-        elif context_type == "client" and context_data: 
-            st.markdown(f"**Context:** Client {context_data.get('customer_name', '')}")
-        elif context_type == "crm": 
-            st.markdown("**Context:** CRM management")
-        else: 
-            st.markdown("**Context:** General assistance")
-        
-        # Initialize processing state if not present
-        if "sidebar_chat_processing" not in st.session_state:
-            st.session_state.sidebar_chat_processing = False
-            
-        # Chat input
-        user_query = st.text_input(
-            "Ask a question:", 
-            key="sidebar_chat_query",
-            disabled=st.session_state.sidebar_chat_processing
-        )
-        
-        # Process button
-        if st.button("Send", key="send_chat_query_sidebar", disabled=st.session_state.sidebar_chat_processing):
-            if user_query:
-                # Add query to history
-                st.session_state.chat_history.append({"role": "user", "content": user_query})
-                
-                # Set processing flag
-                st.session_state.sidebar_chat_processing = True
-                
-                # Trigger rerun to show processing state
-                st.rerun()
-        
-        # Process the query (after rerun)
-        if st.session_state.sidebar_chat_processing and st.session_state.chat_history and st.session_state.chat_history[-1]["role"] == "user":
-            with st.status("Processing...", expanded=True) as status:
-                try:
-                    # Get the last query from history
-                    last_query = st.session_state.chat_history[-1]["content"]
-                    
-                    # Process the query
-                    response = process_chat_query(last_query, context_type, context_data)
-                    
-                    # Add response to history
-                    st.session_state.chat_history.append({"role": "assistant", "content": response})
-                    
-                    # Clear input
-                    st.session_state.sidebar_chat_query = ""
-                    
-                    # Update status
-                    status.update(label="✅ Done", state="complete")
-                    
-                except Exception as e:
-                    # Handle errors
-                    error_msg = f"Error: {str(e)}"
-                    st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
-                    status.update(label="❌ Error", state="error")
-                
-                finally:
-                    # Clear processing flag
-                    st.session_state.sidebar_chat_processing = False
-                
-                # Rerun to refresh UI
-                st.rerun()
-        
-        # Display chat history
-        if st.session_state.chat_history:
-            st.markdown("### Chat History")
-            max_display = min(5, len(st.session_state.chat_history))
-            for msg in st.session_state.chat_history[-max_display:]:
-                if msg["role"] == "user": 
-                    st.markdown(f"**You:** {msg['content']}")
-                else: 
-                    st.markdown(f"**Assistant:** {msg['content']}")
-            
-            if st.button("Clear History", key="clear_chat_sidebar"): 
-                st.session_state.chat_history = []
-                st.rerun() 
-
-def show_client_template_modifications(client_id):
     """
-    Shows template modifications for all machines belonging to a client.
-    This provides a consolidated view of all GOA changes across machines.
-    
-    Args:
-        client_id: ID of the client
+    Displays the chat interface page.
     """
-    from src.utils.crm_utils import (
-        get_client_by_id, load_machines_for_quote, 
-        load_machine_templates_with_modifications
-    )
-    from src.utils.template_utils import extract_placeholder_context_hierarchical
-    import pandas as pd
+    st.title("💬 Chat with Document Assistant")
+    st.write("Chat functionality will be implemented here.")
     
-    st.subheader("🔄 Client Template Modifications History")
+    # Placeholder for where the main chat interaction would go
+    # This might call render_chat_ui or parts of it, 
+    # or render_chat_ui might be a global component.
+    st.info("Chat UI placeholder.")
+
+def render_chat_ui():
+    """
+    Renders the main chat UI components (input, history, etc.).
+    This might be called from show_chat_page or used as a global component.
+    """
+    # This is a simplified placeholder.
+    # A real implementation would handle message display and input.
+    if "chat_history" not in st.session_state: # Ensure chat_history is initialized
+        st.session_state.chat_history = []
+
+    st.sidebar.subheader("Chat Controls")
+    if st.sidebar.button("Clear Chat History"):
+        st.session_state.chat_history = []
+        st.rerun()
     
-    # Get client information
-    client = get_client_by_id(client_id)
-    if not client:
-        st.error(f"Client with ID {client_id} not found.")
-        return
-        
-    st.markdown(f"**Client:** {client.get('customer_name', 'Unknown')}")
-    st.markdown(f"**Quote Reference:** {client.get('quote_ref', 'Unknown')}")
+    # Example of displaying chat history (very basic)
+    # for sender, message in st.session_state.chat_history:
+    #     st.markdown(f"**{sender}:** {message}")
     
-    # Load all machines for this client
-    machines = load_machines_for_quote(client.get('quote_ref', ''))
-    if not machines:
-        st.warning(f"No machines found for client {client.get('customer_name', 'Unknown')}.")
-        return
-        
-    st.markdown(f"Found {len(machines)} machines for this client.")
-    
-    # Function to get hierarchical display for a field
-    def get_field_hierarchical_display(field_key, template_contexts=None):
-        """
-        Returns a formatted hierarchical display for a field based on template_contexts.
-        
-        Args:
-            field_key: The field key to get hierarchical display for
-            template_contexts: Optional dictionary of field keys to their context
-            
-        Returns:
-            A dictionary with section, subsection, and field information
-        """
-        result = {
-            "section": "Unknown Section",
-            "subsection": "",
-            "field": field_key,
-            "display": field_key
-        }
-        
-        # Try session state first
-        if "template_contexts" in st.session_state and field_key in st.session_state.template_contexts:
-            context = st.session_state.template_contexts[field_key]
-            context_parts = context.split(' - ')
-            
-            if len(context_parts) >= 1:
-                result["section"] = context_parts[0]
-            if len(context_parts) >= 2:
-                result["subsection"] = context_parts[1]
-            if len(context_parts) >= 3:
-                result["field"] = context_parts[2]
-            elif len(context_parts) == 2:
-                result["field"] = context_parts[1]
-            
-            # Create a formatted display
-            if result["subsection"]:
-                result["display"] = f"{result['section']} → {result['subsection']} → {result['field']}"
-            else:
-                result["display"] = f"{result['section']} → {result['field']}"
-        
-        # Try provided contexts if available and field not found in session state
-        elif template_contexts and field_key in template_contexts:
-            context = template_contexts[field_key]
-            context_parts = context.split(' - ')
-            
-            if len(context_parts) >= 1:
-                result["section"] = context_parts[0]
-            if len(context_parts) >= 2:
-                result["subsection"] = context_parts[1]
-            if len(context_parts) >= 3:
-                result["field"] = context_parts[2]
-            elif len(context_parts) == 2:
-                result["field"] = context_parts[1]
-            
-            # Create a formatted display
-            if result["subsection"]:
-                result["display"] = f"{result['section']} → {result['subsection']} → {result['field']}"
-            else:
-                result["display"] = f"{result['section']} → {result['field']}"
-        
-        return result
-    
-    # Create tabs for each machine
-    machine_tabs = st.tabs([m.get('machine_name', f"Machine {i+1}") for i, m in enumerate(machines)])
-    
-    # For each machine, show its template modifications
-    for i, machine in enumerate(machines):
-        with machine_tabs[i]:
-            machine_id = machine.get('id')
-            st.markdown(f"**Machine ID:** {machine_id}")
-            st.markdown(f"**Name:** {machine.get('machine_name', 'Unknown')}")
-            
-            # Get templates and modifications for this machine
-            templates_data = load_machine_templates_with_modifications(machine_id)
-            templates = templates_data.get('templates', [])
-            
-            if not templates:
-                st.info(f"No templates found for machine {machine.get('machine_name', 'Unknown')}.")
-                continue
-                
-            # Create sub-tabs for each template type
-            template_types = [t.get('template_type', 'Unknown') for t in templates]
-            template_subtabs = st.tabs(template_types)
-            
-            for j, template in enumerate(templates):
-                with template_subtabs[j]:
-                    template_id = template.get('id')
-                    template_type = template.get('template_type', 'Unknown')
-                    
-                    st.markdown(f"**Template ID:** {template_id}")
-                    st.markdown(f"**Last Updated:** {template.get('processing_date', 'Unknown')}")
-                    
-                    # Show document download if available
-                    if template.get('generated_file_path') and os.path.exists(template.get('generated_file_path')):
-                        with open(template.get('generated_file_path'), "rb") as fp:
-                            st.download_button(
-                                "Download Document", 
-                                fp, 
-                                os.path.basename(template.get('generated_file_path')), 
-                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
-                                key=f"dl_client_template_{template_id}"
-                            )
-                    
-                    # Show template summary
-                    if 'template_data' in template and template['template_data']:
-                        # Get template contexts from session state if available
-                        template_contexts = None
-                        if "template_contexts" in st.session_state:
-                            template_contexts = st.session_state.template_contexts
-                        elif os.path.exists("templates/template.docx"):
-                            # Try to extract contexts if not in session state
-                            template_contexts = extract_placeholder_context_hierarchical("templates/template.docx")
-                            
-                        # Show hierarchical summary
-                        st.markdown("### Template Content Summary")
-                        show_template_summary(template['template_data'], template_contexts)
-                    
-                    # Show modifications
-                    modifications = template.get('modifications', [])
-                    if modifications:
-                        st.markdown("### Modifications History")
-                        
-                        # Create enhanced display data with hierarchical information
-                        enhanced_mods_data = []
-                        for mod in modifications:
-                            field_key = mod.get("field_key", "")
-                            hierarchy_info = get_field_hierarchical_display(field_key, template_contexts)
-                            
-                            enhanced_mod = {
-                                "field_key": field_key,
-                                "field_display": hierarchy_info["display"],
-                                "section": hierarchy_info["section"],
-                                "subsection": hierarchy_info["subsection"],
-                                "field": hierarchy_info["field"],
-                                "original_value": mod.get("original_value", ""),
-                                "modified_value": mod.get("modified_value", ""),
-                                "modification_reason": mod.get("modification_reason", ""),
-                                "modified_by": mod.get("modified_by", ""),
-                                "modification_date": mod.get("modification_date", "")
-                            }
-                            enhanced_mods_data.append(enhanced_mod)
-                        
-                        # Sort modifications by section, subsection and field
-                        enhanced_mods_data.sort(key=lambda x: (x["section"], x["subsection"], x["field"]))
-                        
-                        # Group modifications by section for organized display
-                        from itertools import groupby
-                        grouped_mods = {}
-                        for section, section_items in groupby(enhanced_mods_data, key=lambda x: x["section"]):
-                            section_items_list = list(section_items)
-                            if section not in grouped_mods:
-                                grouped_mods[section] = section_items_list
-                            else:
-                                grouped_mods[section].extend(section_items_list)
-                        
-                        # Display modifications by section in expandable containers
-                        for section, section_mods in grouped_mods.items():
-                            with st.expander(f"Section: {section} ({len(section_mods)} modifications)", expanded=True):
-                                # Convert to dataframe for display
-                                df_data = []
-                                for mod in section_mods:
-                                    display_row = {
-                                        "Section": mod["section"],
-                                        "Subsection": mod["subsection"],
-                                        "Field": mod["field"],
-                                        "Original Value": mod["original_value"],
-                                        "Modified Value": mod["modified_value"],
-                                        "Reason": mod["modification_reason"],
-                                        "Modified By": mod["modified_by"],
-                                        "Date": mod["modification_date"]
-                                    }
-                                    df_data.append(display_row)
-                                
-                                if df_data:
-                                    df = pd.DataFrame(df_data)
-                                    st.dataframe(df, use_container_width=True)
-                        
-                        # Also provide a traditional table view option
-                        with st.expander("Show All Modifications (Table View)", expanded=False):
-                            mods_df = pd.DataFrame(modifications)
-                            # Format the dataframe for display
-                            display_cols = {
-                                "field_key": "Field Key",
-                                "original_value": "Original Value",
-                                "modified_value": "Modified Value",
-                                "modification_reason": "Reason",
-                                "modified_by": "Modified By",
-                                "modification_date": "Date"
-                            }
-                            mods_df = mods_df[[col for col in display_cols.keys() if col in mods_df.columns]]
-                            mods_df.columns = [display_cols[col] for col in mods_df.columns if col in display_cols]
-                            st.dataframe(mods_df, use_container_width=True)
-                    else:
-                        st.info("No modifications have been made to this template yet.")
-                        
-    # Add a consolidated view of all modifications across machines
-    st.markdown("### Consolidated Modifications View")
-    st.markdown("#### All Template Modifications")
-    
-    # Collect all modifications from all machines and templates
-    all_mods = []
-    for machine in machines:
-        machine_id = machine.get('id')
-        machine_name = machine.get('machine_name', 'Unknown')
-        
-        templates_data = load_machine_templates_with_modifications(machine_id)
-        for template in templates_data.get('templates', []):
-            template_id = template.get('id')
-            template_type = template.get('template_type', 'Unknown')
-            
-            for mod in template.get('modifications', []):
-                field_key = mod.get("field_key", "")
-                hierarchy_info = get_field_hierarchical_display(field_key)
-                
-                enhanced_mod = {
-                    "machine_name": machine_name,
-                    "template_type": template_type,
-                    "field_key": field_key,
-                    "field_display": hierarchy_info["display"],
-                    "section": hierarchy_info["section"],
-                    "subsection": hierarchy_info["subsection"],
-                    "field": hierarchy_info["field"],
-                    "original_value": mod.get("original_value", ""),
-                    "modified_value": mod.get("modified_value", ""),
-                    "modification_reason": mod.get("modification_reason", ""),
-                    "modified_by": mod.get("modified_by", ""),
-                    "modification_date": mod.get("modification_date", "")
-                }
-                all_mods.append(enhanced_mod)
-    
-    if all_mods:
-        # Sort by section and date
-        all_mods.sort(key=lambda x: (x["section"], x.get("modification_date", "")), reverse=True)
-        
-        # Group by section for display
-        from itertools import groupby
-        grouped_mods = {}
-        for section, section_items in groupby(all_mods, key=lambda x: x["section"]):
-            section_items_list = list(section_items)
-            if section not in grouped_mods:
-                grouped_mods[section] = section_items_list
-            else:
-                grouped_mods[section].extend(section_items_list)
-        
-        # Display modifications by section
-        for section, section_mods in grouped_mods.items():
-            with st.expander(f"Section: {section} ({len(section_mods)} modifications)", expanded=True):
-                # Convert to dataframe for display
-                df_data = []
-                for mod in section_mods:
-                    display_row = {
-                        "Machine": mod["machine_name"],
-                        "Template": mod["template_type"],
-                        "Section": mod["section"],
-                        "Subsection": mod["subsection"],
-                        "Field": mod["field"],
-                        "Original": mod["original_value"],
-                        "Modified": mod["modified_value"],
-                        "Reason": mod["modification_reason"],
-                        "By": mod["modified_by"],
-                        "Date": mod["modification_date"]
-                    }
-                    df_data.append(display_row)
-                
-                if df_data:
-                    df = pd.DataFrame(df_data)
-                    st.dataframe(df, use_container_width=True)
-        
-        # Also provide a summary of modifications
-        st.markdown("### Modification Summary")
-        
-        # Group by field
-        field_mods = {}
-        for mod in all_mods:
-            field_key = mod["field_key"]
-            if field_key not in field_mods:
-                field_mods[field_key] = []
-            field_mods[field_key].append(mod)
-        
-        # Display summary of most frequently modified fields
-        field_counts = {field: len(mods) for field, mods in field_mods.items()}
-        sorted_fields = sorted(field_counts.items(), key=lambda x: x[1], reverse=True)
-        
-        top_modified_fields = []
-        for field_key, count in sorted_fields[:10]:  # Top 10 most modified fields
-            hierarchy_info = get_field_hierarchical_display(field_key)
-            top_modified_fields.append({
-                "Section": hierarchy_info["section"],
-                "Subsection": hierarchy_info["subsection"],
-                "Field": hierarchy_info["field"],
-                "Modification Count": count,
-                "Last Modified": max([mod.get("modification_date", "") for mod in field_mods[field_key]])
-            })
-        
-        if top_modified_fields:
-            st.markdown("#### Top Modified Fields")
-            top_fields_df = pd.DataFrame(top_modified_fields)
-            st.dataframe(top_fields_df, use_container_width=True)
-    else:
-        st.info("No modifications found across any machines for this client.") 
+    # user_input = st.chat_input("Ask a question about the current context...")
+    # if user_input:
+        # Process input, get response, add to history, rerun...
+        # st.session_state.chat_history.append(("User", user_input))
+        # response = "Placeholder response..."
+        # st.session_state.chat_history.append(("Assistant", response))
+        # st.rerun()
+    pass # For now, just a pass as the main logic is in app.py's chat handling

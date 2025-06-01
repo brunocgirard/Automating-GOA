@@ -11,7 +11,7 @@ from datetime import datetime
 # Import from new modules
 from src.ui.ui_pages import (
     show_welcome_page, show_client_dashboard_page, show_quote_processing, 
-    show_crm_management_page, show_chat_page, render_chat_ui
+    show_crm_management_page, show_chat_page, render_chat_ui, show_template_report_page
 )
 from src.workflows.profile_workflow import (
     extract_client_profile, confirm_client_profile, show_action_selection, 
@@ -689,10 +689,33 @@ def main():
     initialize_session_state()
     init_db() 
     if not st.session_state.crm_data_loaded: load_crm_data()
+    
+    # Initialize template contexts if needed for Template Reports page
+    if st.session_state.current_page == "Template Reports" and not st.session_state.get("template_contexts"):
+        if os.path.exists(TEMPLATE_FILE):
+            try:
+                # Try using the enhanced outline-based extraction first
+                outline_path = "full_fields_outline.md"
+                if os.path.exists(outline_path):
+                    st.session_state.template_contexts = extract_placeholder_context_hierarchical(
+                        TEMPLATE_FILE, 
+                        enhance_with_outline=True,
+                        outline_path=outline_path
+                    )
+                else:
+                    # If outline file not available, use standard schema extraction
+                    st.session_state.template_contexts = extract_placeholder_schema(TEMPLATE_FILE)
+                
+                # If no fields were found or another issue occurred, try the legacy format
+                if not st.session_state.template_contexts:
+                    st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
+            except Exception as e:
+                st.error(f"Error loading template contexts: {e}")
+    
     if st.session_state.error_message: st.error(st.session_state.error_message); st.session_state.error_message = ""
 
     st.sidebar.title("Navigation")
-    page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Chat"]
+    page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Machine Build Reports", "Chat"]
     
     # Set default page to Client Dashboard
     if st.session_state.current_page == "Welcome":
@@ -721,6 +744,8 @@ def main():
         show_quote_processing()
     elif st.session_state.current_page == "CRM Management": 
         show_crm_management_page()
+    elif st.session_state.current_page == "Machine Build Reports":
+        show_template_report_page()
     elif st.session_state.current_page == "Chat": 
         show_chat_page()
 

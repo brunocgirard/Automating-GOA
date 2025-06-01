@@ -78,7 +78,7 @@ explicit_placeholder_mappings = {
     
     # Validation Documents mappings
     "vd_d_check": "Validation Documents - dq",
-    "vd_f_check": "Validation Documents - vd_f_check",
+    "vd_f_check": "Validation Documents - fat",
     "vd_fd_check": "Validation Documents - fs/ds",
     "vd_h_check": "Validation Documents - hds/sds",
     "vd_i_check": "Validation Documents - iq/oq",
@@ -302,7 +302,6 @@ explicit_placeholder_mappings = {
     "sf_lf100_check": "Street Fighter Tablet Counter - Lift fighter - 100l",
     "sf_lf_check": "Street Fighter Tablet Counter - Lift fighter - sf_lf_check",
     "sf_lfi_check": "Street Fighter Tablet Counter - Lift fighter - interlocked",
-    "sf_lfic_check": "Street Fighter Tablet Counter - Lift fighter - int. dust collection",
     "sf_lflc_check": "Street Fighter Tablet Counter - Lift fighter - load cells",
     "sf_lfna_check": "Street Fighter Tablet Counter - Lift fighter - no air",
     "sf_lftah_check": "Street Fighter Tablet Counter - Lift fighter - twin axis hmi",
@@ -407,7 +406,9 @@ explicit_placeholder_mappings = {
     "hz": "Utility Specifications - Hz",
     "phases": "Utility Specifications - phases",
     "psi": "Utility Specifications - PSI",
-    "voltage": "Utility Specifications - Voltage"
+    "voltage": "Utility Specifications - Voltage",
+
+    "options_listing": "Option Listing - All Additional Quoted Options"
 }
 
 def extract_placeholders(template_path: str) -> List[str]:
@@ -1842,6 +1843,62 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outlin
         import traceback
         traceback.print_exc()
         return context_map
+
+def parse_full_fields_outline(outline_md_content: str) -> Dict[str, Dict[str, list]]:
+    """
+    Parses the full_fields_outline.md content to extract a hierarchical structure
+    of sections and subsections.
+
+    Args:
+        outline_md_content: The string content of the full_fields_outline.md file.
+
+    Returns:
+        A dictionary where keys are section names, and values are dictionaries
+        containing a list of subsection names under "_subsections_".
+        Example: 
+        {
+            "Section Name 1": {
+                "_subsections_": ["Subsection Name 1.1", "Subsection Name 1.2"],
+                "_fields_": [] # To be populated later with field objects
+            },
+            "Section Name 2": {
+                "_subsections_": [], # No subsections, fields will go into _fields_
+                "_fields_": []
+            }
+        }
+    """
+    parsed_structure = {}
+    current_section_name = None
+    # current_subsection_name = None # Not needed here, just collecting subsection titles
+
+    for line in outline_md_content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        if line.startswith('## '):
+            current_section_name = line[3:].strip()
+            if current_section_name not in parsed_structure:
+                # Initialize with keys for subsections and direct fields for this section
+                parsed_structure[current_section_name] = {"_subsections_": [], "_fields_": []}
+            # current_subsection_name = None # Reset for new section
+        elif line.startswith('- ') and current_section_name:
+            # This is potentially a subsection title or a field listed directly under a section.
+            # We only capture it as a subsection if it does NOT look like a field specifier.
+            item_name_full = line[2:].strip()
+            
+            # If it doesn't have (checkbox), (text), (qty), (section) it is likely a true subsection title
+            if not re.search(r'\((checkbox|text|qty|section)\)', item_name_full, re.IGNORECASE):
+                subsection_title = re.sub(r'\s*\(.*\)\s*$', '', item_name_full).strip() # Clean name
+                if subsection_title and subsection_title not in parsed_structure[current_section_name]["_subsections_"]:
+                    parsed_structure[current_section_name]["_subsections_"].append(subsection_title)
+    
+    # Sort subsections alphabetically within each section for consistent order
+    for section_name in parsed_structure:
+        if "_subsections_" in parsed_structure[section_name]:
+            parsed_structure[section_name]["_subsections_"] = sorted(list(set(parsed_structure[section_name]["_subsections_"])))
+
+    return parsed_structure
 
 if __name__ == '__main__':
     test_template_path = 'template.docx' 
