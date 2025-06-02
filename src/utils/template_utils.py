@@ -71,7 +71,7 @@ explicit_placeholder_mappings = {
     "pt_pbc_check": "Packaging & Transport - Packaging by - capmatic",
     "pt_pbcu_check": "Packaging & Transport - Packaging by - customer / not incl.",
     "pt_ptc_check": "Packaging & Transport - Packaging type - crate",
-    "pt_pts_check": "Packaging & Transport - Packaging type - skid",
+    # "pt_pts_check": "Packaging & Transport - Packaging type - skid",
     "pt_ptsw_check": "Packaging & Transport - Packaging type -  sea worthy",
     "pt_tcc_check": "Packaging & Transport - Transport charges - capmatic",
     "pt_tccu_check": "Packaging & Transport - Transport charges - customer",
@@ -389,8 +389,6 @@ explicit_placeholder_mappings = {
     "plug_ss316_check": "Plugging System Specifications - ss 316",
 
     # Order Identification and Basic Information mappings
-    "customer": "Basic Information - Customer",
-    "direction": "Basic Information - Direction",
     "machine": "Basic Information - Machine",
     "production_speed": "Order Identification - Production speed",
     "quote": "Order Identification - Quote",
@@ -811,9 +809,9 @@ def generate_synonyms_for_checkbox(key: str, description: str) -> List[str]:
         
         # Control systems
         "hmi": ["hmi", "human machine interface", "touch screen", "touch panel", "operator interface", 
-               "control panel", "display", "panel pc", "operator panel", "touchscreen", "monitor"],
+               "control panel", "display", "panel pc", "operator panel", "touchscreen", "monitor", "5.7 hmi", "5.7 inch hmi"],
         "plc": ["plc", "controller", "control system", "automation controller", "programmable logic", 
-               "automation system", "control unit", "processor", "allen bradley", "siemens", "b&r", "omron"],
+               "automation system", "control unit", "processor", "allen bradley", "siemens", "b&r", "omron", "b & r plc", "b&r plc"],
         "servo": ["servo motor", "servo drive", "servo system", "servo control", "brushless", "motion control", 
                  "precision motion", "servo-driven", "servo actuator", "stepper", "motor"],
         "pneumatic": ["air", "pneumatic cylinder", "pneumatic actuator", "pneumatic system", "compressed air", 
@@ -896,7 +894,21 @@ def generate_synonyms_for_checkbox(key: str, description: str) -> List[str]:
     desc_words = description.lower().split()
     
     # Start with the key itself and the description
-    synonyms = [clean_key.replace("_", " "), description]
+    synonyms = [key, clean_key.replace("_", " ")]
+
+    # Add variations from description
+    if description:
+        desc_lower = description.lower()
+        synonyms.append(desc_lower) # Raw lowercase description
+
+        # Description with punctuation (except period and ampersand) removed, spaces kept
+        desc_no_punct_spaces = re.sub(r'[^\w\s.&]', '', desc_lower) # Keep periods and ampersands
+        desc_no_punct_spaces = re.sub(r'\s+', ' ', desc_no_punct_spaces).strip() # Consolidate spaces
+        synonyms.append(desc_no_punct_spaces)
+
+        # Description with all non-alphanumeric chars removed (concatenated)
+        desc_concatenated = re.sub(r'[\W_]', '', desc_lower)
+        synonyms.append(desc_concatenated)
     
     # Add synonyms for each key part if available
     for part in key_parts:

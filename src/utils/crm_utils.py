@@ -5,8 +5,13 @@ from datetime import datetime
 import json
 import re
 
+# Import for document regeneration
+from src.utils.doc_filler import fill_word_document_from_llm_data
+
 # Define database connection
 DB_PATH = os.path.join("data", "crm_data.db")
+# Define base template path (ideally this would be passed or configured globally)
+TEMPLATE_FILE_PATH = os.path.join("templates", "template.docx")
 
 def init_db(db_path: str = DB_PATH):
     """
@@ -1058,8 +1063,26 @@ def save_goa_modification(
                 """, (json.dumps(template_data), modification_date, machine_template_id))
                 conn.commit()
                 print(f"Updated template data (added/modified field '{field_key}') for machine template ID: {machine_template_id}")
+
+                # Regenerate the document
+                cursor.execute("SELECT generated_file_path FROM machine_templates WHERE id = ?", (machine_template_id,))
+                file_path_row = cursor.fetchone()
+                if file_path_row and file_path_row[0]:
+                    generated_file_path = file_path_row[0]
+                    if os.path.exists(TEMPLATE_FILE_PATH): # Check if base template exists
+                        if generated_file_path: # Check if a file path exists to overwrite
+                            print(f"Regenerating document at: {generated_file_path}")
+                            fill_word_document_from_llm_data(TEMPLATE_FILE_PATH, template_data, generated_file_path)
+                            print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+                        else:
+                            print(f"Warning: No generated_file_path found for template ID {machine_template_id}. Document not regenerated.")
+                    else:
+                        print(f"Warning: Base template file {TEMPLATE_FILE_PATH} not found. Document not regenerated.")
+                else:
+                    print(f"Warning: Could not retrieve generated_file_path for template ID {machine_template_id}. Document not regenerated.")
+
             except json.JSONDecodeError:
-                print(f"Error parsing JSON for machine template ID {machine_template_id}")
+                print(f"Error parsing JSON for machine template ID {machine_template_id} during document regeneration step.")
         
         return True
             
