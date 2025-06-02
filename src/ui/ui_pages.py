@@ -1296,7 +1296,7 @@ def show_template_report_page():
     if not processed_machines:
         st.warning("No machines with processed templates found. Please process a GOA for a machine first.")
         return
-
+    
     # Create a mapping for easier lookup: client_name - quote_ref -> list of machines
     client_machine_map = {}
     for machine_info in processed_machines:
@@ -1323,15 +1323,15 @@ def show_template_report_page():
             format_func=lambda x: next((m[1] for m in machine_options if m[0] == x), "Unknown Machine"),
             key="report_machine_selector"
         )
-
+        
         if selected_machine_id:
             templates_data = load_machine_templates_with_modifications(selected_machine_id)
             templates = templates_data.get('templates', [])
-
+            
             if not templates:
                 st.warning(f"No templates found for the selected machine. Process a GOA first.")
                 return
-
+            
             # --- Streamlined GOA Template Handling ---
             goa_template_data = None
             goa_template_type_name = "GOA"
@@ -1948,41 +1948,118 @@ def show_chat_page():
     """
     Displays the chat interface page.
     """
-    st.title("💬 Chat with Document Assistant")
-    st.write("Chat functionality will be implemented here.")
+    # Set a flag in session state to indicate we're showing the chat page
+    st.session_state.showing_chat_page = True
     
-    # Placeholder for where the main chat interaction would go
-    # This might call render_chat_ui or parts of it, 
-    # or render_chat_ui might be a global component.
-    st.info("Chat UI placeholder.")
+    st.title("💬 Chat with Document Assistant")
+    
+    # Initialize chat history if not exists
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Sidebar controls
+    with st.sidebar:
+        st.subheader("Chat Controls")
+        if st.button("Clear Chat History", key="chat_page_clear_history_btn"):
+            st.session_state.chat_history = []
+            st.rerun()
+        
+        # Context selection
+        st.subheader("Context")
+        context_type = st.selectbox(
+            "Select Context Type",
+            options=["Current Document", "CRM Data", "Template Data"],
+            key="chat_page_context_type_selector"
+        )
+        
+        # Load appropriate context based on selection
+        context_data = None
+        if context_type == "Current Document":
+            from app import get_current_context
+            context_data = get_current_context()
+        elif context_type == "CRM Data":
+            if "all_crm_clients" in st.session_state:
+                context_data = st.session_state.all_crm_clients
+        elif context_type == "Template Data":
+            if "current_template_data" in st.session_state:
+                context_data = st.session_state.current_template_data
+    
+    # Main chat interface
+    st.markdown("Ask questions about your documents, CRM data, or templates.")
+    
+    # Display chat history
+    for idx, message in enumerate(st.session_state.chat_history):
+        with st.chat_message(message["role"], key=f"chat_page_msg_{idx}"):
+            st.markdown(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("What would you like to know?", key="chat_page_input_field"):
+        # Add user message to chat history
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        
+        # Display user message
+        with st.chat_message("user", key=f"chat_page_user_msg_{len(st.session_state.chat_history)}"):
+            st.markdown(prompt)
+        
+        # Process the query and get response
+        from app import process_chat_query
+        response = process_chat_query(prompt, context_type, context_data)
+        
+        # Add assistant response to chat history
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+        
+        # Display assistant response
+        with st.chat_message("assistant", key=f"chat_page_assistant_msg_{len(st.session_state.chat_history)}"):
+            st.markdown(response)
+        
+        # Rerun to update the chat interface
+        st.rerun()
 
 def render_chat_ui():
     """
-    Renders the main chat UI components (input, history, etc.).
-    This might be called from show_chat_page or used as a global component.
+    Renders the main chat UI components.
+    This function is kept for backward compatibility but will now check
+    if we're already showing the chat page to avoid duplicate elements.
     """
-    # This is a simplified placeholder.
-    # A real implementation would handle message display and input.
-    if "chat_history" not in st.session_state: # Ensure chat_history is initialized
+    # Check if we're already showing the chat page to avoid duplicate elements
+    if hasattr(st.session_state, 'showing_chat_page') and st.session_state.showing_chat_page:
+        # We're already showing the chat page, so don't render again
+        return
+    
+    # If chat page isn't showing, display a minimal chat interface for the sidebar/floating chat
+    if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    st.sidebar.subheader("Chat Controls")
-    if st.sidebar.button("Clear Chat History"):
-        st.session_state.chat_history = []
-        st.rerun()
+    # Display a smaller chat interface
+    with st.container(border=True):
+        st.subheader("Quick Chat")
+        
+        if st.button("Clear History", key="render_chat_ui_clear_btn"):
+            st.session_state.chat_history = []
+            st.rerun()
     
-    # Example of displaying chat history (very basic)
-    # for sender, message in st.session_state.chat_history:
-    #     st.markdown(f"**{sender}:** {message}")
-    
-    # user_input = st.chat_input("Ask a question about the current context...")
-    # if user_input:
-        # Process input, get response, add to history, rerun...
-        # st.session_state.chat_history.append(("User", user_input))
-        # response = "Placeholder response..."
-        # st.session_state.chat_history.append(("Assistant", response))
-        # st.rerun()
-    pass # For now, just a pass as the main logic is in app.py's chat handling
+        # Display last few messages
+        max_messages = 3
+        recent_messages = st.session_state.chat_history[-max_messages:] if st.session_state.chat_history else []
+        
+        for idx, message in enumerate(recent_messages):
+            with st.chat_message(message["role"], key=f"render_ui_msg_{idx}"):
+                st.markdown(message["content"])
+        
+        if prompt := st.chat_input("Ask a question...", key="render_chat_ui_input"):
+            # Get context from current page
+            from app import get_current_context
+            context_type, context_data = get_current_context()
+            
+            # Process query
+            from app import process_chat_query
+            response = process_chat_query(prompt, context_type, context_data)
+            
+            # Update history
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
+            
+            st.rerun()
 
 def generate_machine_build_summary_html(template_data, machine_name="", template_type=""):
     """
