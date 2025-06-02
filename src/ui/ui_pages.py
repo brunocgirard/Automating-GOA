@@ -1287,168 +1287,124 @@ def show_template_report_page():
     st.markdown("### Generate Printable Template Reports")
     
     # Load all clients
-    clients = st.session_state.all_crm_clients if "all_crm_clients" in st.session_state else []
+    # Ensure all_processed_machines is loaded if not already
+    if "all_processed_machines" not in st.session_state or not st.session_state.all_processed_machines:
+        st.session_state.all_processed_machines = load_all_processed_machines() # from crm_utils
+
+    processed_machines = st.session_state.all_processed_machines
     
-    if not clients:
-        st.warning("No clients found. Please add client data first.")
+    if not processed_machines:
+        st.warning("No machines with processed templates found. Please process a GOA for a machine first.")
         return
-    
-    # Create client selector
-    client_options = [(c.get('id'), f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')}") for c in clients]
-    selected_client_id = st.selectbox(
-        "Select client:",
-        options=[c[0] for c in client_options],
-        format_func=lambda x: next((c[1] for c in client_options if c[0] == x), ""),
-        key="template_report_client_select"
+
+    # Create a mapping for easier lookup: client_name - quote_ref -> list of machines
+    client_machine_map = {}
+    for machine_info in processed_machines:
+        client_key = f"{machine_info.get('client_name', 'N/A')} - {machine_info.get('quote_ref', 'N/A')}"
+        if client_key not in client_machine_map:
+            client_machine_map[client_key] = []
+        client_machine_map[client_key].append(machine_info)
+
+    client_options_display = ["Select a Client..."] + sorted(list(client_machine_map.keys()))
+    selected_client_key = st.selectbox(
+        "Select Client:",
+        options=client_options_display,
+        index=0,
+        key="report_client_selector"
     )
-    
-    if selected_client_id:
-        # Load client info
-        from src.utils.crm_utils import get_client_by_id, load_machines_for_quote
-        client = get_client_by_id(selected_client_id)
+
+    if selected_client_key != "Select a Client...":
+        machines_for_client = client_machine_map[selected_client_key]
+        machine_options = [(m.get('id'), m.get('machine_name', f"Machine ID {m.get('id')}")) for m in machines_for_client]
         
-        if client:
-            st.markdown(f"**Client:** {client.get('customer_name', 'Unknown')}")
-            st.markdown(f"**Quote Reference:** {client.get('quote_ref', 'Unknown')}")
-            
-            # Load machines for this client
-            machines = load_machines_for_quote(client.get('quote_ref', ''))
-            
-            if not machines:
-                st.warning(f"No machines found for client {client.get('customer_name', 'Unknown')}.")
+        selected_machine_id = st.selectbox(
+            "Select Machine:",
+            options=[m[0] for m in machine_options],
+            format_func=lambda x: next((m[1] for m in machine_options if m[0] == x), "Unknown Machine"),
+            key="report_machine_selector"
+        )
+
+        if selected_machine_id:
+            templates_data = load_machine_templates_with_modifications(selected_machine_id)
+            templates = templates_data.get('templates', [])
+
+            if not templates:
+                st.warning(f"No templates found for the selected machine. Process a GOA first.")
                 return
+
+            # --- Streamlined GOA Template Handling ---
+            goa_template_data = None
+            goa_template_type_name = "GOA"
+            machine_name_for_report = next((m.get('machine_name', '') for m in machines_for_client if m.get('id') == selected_machine_id), "Unknown Machine")
+
+            for t in templates:
+                if str(t.get('template_type', '')).lower() == "goa":
+                    if t.get('template_data') and isinstance(t.get('template_data'), dict):
+                        goa_template_data = t['template_data']
+                        goa_template_type_name = t.get('template_type', "GOA") # Use actual type name if available
+                        break # Found valid GOA template data
+                    elif t.get('template_data_json'): # Attempt to parse from JSON if direct data is bad
+                        try:
+                            import json
+                            parsed_data = json.loads(t.get('template_data_json'))
+                            if parsed_data and isinstance(parsed_data, dict):
+                                goa_template_data = parsed_data
+                                goa_template_type_name = t.get('template_type', "GOA")
+                                st.info("Successfully recovered GOA template data from JSON.")
+                                break
+                        except Exception as e_parse:
+                            st.warning(f"Could not parse GOA template JSON for machine {machine_name_for_report}: {e_parse}")
             
-            # Create machine selector
-            machine_options = [(m.get('id'), m.get('machine_name', f"Machine ID: {m.get('id')}")) for m in machines]
-            selected_machine_id = st.selectbox(
-                "Select machine:",
-                options=[m[0] for m in machine_options],
-                format_func=lambda x: next((m[1] for m in machine_options if m[0] == x), ""),
-                key="template_report_machine_select"
-            )
-            
-            if selected_machine_id:
-                # Load templates for this machine
-                from src.utils.crm_utils import load_machine_templates_with_modifications
-                templates_data = load_machine_templates_with_modifications(selected_machine_id)
-                templates = templates_data.get('templates', [])
-                
-                if not templates:
-                    st.warning(f"No templates found for the selected machine.")
-                    st.info("You need to process a GOA template for this machine first.")
-                    return
-                
-                # Create template selector
-                template_options = [(t.get('id'), t.get('template_type', 'Unknown')) for t in templates]
-                
-                # Print debug info about available templates
-                with st.expander("Debug Template Info", expanded=False):
-                    st.write(f"Found {len(templates)} templates for machine ID {selected_machine_id}")
-                    for i, t in enumerate(templates):
-                        st.write(f"Template {i+1}: ID={t.get('id')}, Type={t.get('template_type')}")
-                        st.write(f"Has template_data: {'Yes' if 'template_data' in t else 'No'}")
-                        st.write(f"Has template_data_json: {'Yes' if 'template_data_json' in t else 'No'}")
-                
-                # Force type to list if needed for options, handle empty list case
-                if not template_options:
-                    st.warning("Template options list is empty.")
-                    return
-                
-                selected_template_id = st.selectbox(
-                    "Select template type:",
-                    options=[t[0] for t in template_options],
-                    format_func=lambda x: next((t[1] for t in template_options if t[0] == x), "Unknown"),
-                    key="template_report_template_select"
-                )
-                
-                if selected_template_id:
-                    # Get the selected template
-                    selected_template = next((t for t in templates if t.get('id') == selected_template_id), None)
-                    
-                    # Debug the template selection
-                    st.write(f"Selected template ID: {selected_template_id}")
-                    if selected_template:
-                        st.write(f"Template found: {selected_template.get('template_type')}")
-                    else:
-                        st.error(f"Template with ID {selected_template_id} not found in available templates.")
-                        # List available template IDs
-                        available_ids = [t.get('id') for t in templates]
-                        st.write(f"Available template IDs: {available_ids}")
-                    
-                    if selected_template and 'template_data' in selected_template and selected_template['template_data']:
-                        st.markdown("---")
-                        st.markdown("### Template Report")
-                        
-                        # Get machine name
-                        machine_name = next((m.get('machine_name', '') for m in machines if m.get('id') == selected_machine_id), "")
-                        
-                        # Show the report
-                        show_printable_report(
-                            selected_template['template_data'],
-                            machine_name,
-                            selected_template.get('template_type', '')
-                        )
-                        
-                        # Show a reminder about printing
-                        st.info("To print this report, use your browser's print function (CTRL+P) or download the HTML version and open it in a browser.")
-                    else:
-                        st.error("Template data not found or is invalid.")
-                        # Add debugging information
-                        if selected_template:
-                            st.expander("Debug Template Data Issue", expanded=True).write({
-                                "template_id": selected_template_id,
-                                "has_template_data_key": 'template_data' in selected_template,
-                                "template_data_type": type(selected_template.get('template_data', None)).__name__,
-                                "template_data_empty": not selected_template.get('template_data', {}) if 'template_data' in selected_template else True,
-                                "template_data_json_exists": 'template_data_json' in selected_template,
-                                "template_data_json_length": len(selected_template.get('template_data_json', '')) if 'template_data_json' in selected_template else 0
-                            })
-                            
-                            # If we have JSON data but parsing failed, try to fix it
-                            if 'template_data_json' in selected_template and selected_template.get('template_data_json'):
-                                try:
-                                    import json
-                                    template_data = json.loads(selected_template.get('template_data_json'))
-                                    if template_data:
-                                        st.success("Successfully parsed template data from JSON!")
-                                        # Show the report with the parsed data
-                                        machine_name = next((m.get('machine_name', '') for m in machines if m.get('id') == selected_machine_id), "")
-                                        show_printable_report(
-                                            template_data,
-                                            machine_name,
-                                            selected_template.get('template_type', '')
-                                        )
-                                    else:
-                                        st.warning("Parsed template data is empty.")
-                                except Exception as e:
-                                    st.error(f"Failed to parse template_data_json: {str(e)}")
-                        else:
-                            st.warning(f"Selected template ID {selected_template_id} not found in available templates.")
-    
-    # Add a section for batch reports for all machines of a client
+            if goa_template_data:
+                st.markdown("---")
+                st.markdown("### GOA Build Summary") 
+                show_printable_summary_report(goa_template_data, machine_name_for_report, goa_template_type_name)
+                st.info("To print this summary, use your browser's print function (CTRL+P or CMD+P) or download the HTML version and open it in a browser.")
+            else:
+                st.error(f"Valid GOA template data not found for machine: {machine_name_for_report}.")
+                st.info("Please ensure a GOA has been processed for this machine and contains valid data.")
+            # --- End of Streamlined GOA Template Handling (Old SelectBox removed) ---
+
+    # Batch Report section (remains largely unchanged, but will use the detailed report generator)
     st.markdown("---")
     st.markdown("### Generate Batch Report for All Machines")
     
-    # Create client selector for batch report
-    selected_client_id_batch = st.selectbox(
-        "Select client for batch report:",
-        options=[c[0] for c in client_options],
-        format_func=lambda x: next((c[1] for c in client_options if c[0] == x), ""),
-        key="template_report_client_select_batch"
-    )
+    unique_clients_for_batch_processing = {}
+    if processed_machines: # processed_machines is defined at the top of show_template_report_page
+        for machine_record in processed_machines:
+            client_id = machine_record.get('client_id')
+            if client_id and client_id not in unique_clients_for_batch_processing:
+                # Storing client_id as key and display string as value
+                unique_clients_for_batch_processing[client_id] = f"{machine_record.get('client_name', 'N/A')} - {machine_record.get('quote_ref', 'N/A')}"
     
-    if selected_client_id_batch:
-        # Load client info
-        from src.utils.crm_utils import get_client_by_id, load_machines_for_quote
-        client = get_client_by_id(selected_client_id_batch)
+    # Create options for the selectbox: (value_to_return, display_label)
+    batch_client_options_for_selector = [("placeholder_batch", "Select Client for Batch Report...")] + \
+                                        [(cid, name) for cid, name in sorted(unique_clients_for_batch_processing.items(), key=lambda item: item[1])]
+
+    selected_client_id_batch = None
+    if len(batch_client_options_for_selector) > 1: # Check if there are actual clients to select
+        selected_client_id_batch = st.selectbox(
+            "Select client for batch report:",
+            options=[opt[0] for opt in batch_client_options_for_selector], # Pass only the IDs as options
+            format_func=lambda x: dict(batch_client_options_for_selector).get(x, "Invalid client"), # Use the dict for display format
+            index=0, # Default to placeholder
+            key="template_report_client_select_batch"
+        )
+    else:
+        st.info("No clients with processed machine templates available for batch reporting.")
+
+    if selected_client_id_batch and selected_client_id_batch != "placeholder_batch":
+        # selected_client_id_batch is now the actual client_id (integer)
+        from src.utils.crm_utils import get_client_by_id, load_machines_for_quote # Ensure imports are here
+        client_for_batch = get_client_by_id(selected_client_id_batch)
         
-        if client:
-            # Load machines for this client
-            machines = load_machines_for_quote(client.get('quote_ref', ''))
+        if client_for_batch:
+            # Load machines for this client using its primary quote_ref
+            machines_for_batch = load_machines_for_quote(client_for_batch.get('quote_ref', ''))
             
-            if not machines:
-                st.warning(f"No machines found for client {client.get('customer_name', 'Unknown')}.")
-                return
+            if not machines_for_batch:
+                st.warning(f"No machines found for client {client_for_batch.get('customer_name', 'Unknown')} for batch processing.")
+                # return # Optionally return if no machines, or allow to proceed if logic handles empty machines
             
             # Select template type for all machines
             template_type_options = ["GOA", "Packing Slip", "Commercial Invoice", "Certificate of Origin"]
@@ -1461,16 +1417,14 @@ def show_template_report_page():
             # Generate batch report button
             if st.button("Generate Batch Report", key="generate_batch_report_btn"):
                 st.markdown("---")
-                st.markdown(f"### Batch Report: {selected_template_type} for {client.get('customer_name', 'Unknown')}")
+                st.markdown(f"### Batch Report: {selected_template_type} for {client_for_batch.get('customer_name', 'Unknown')}")
                 
-                # Initialize an HTML string for the combined report
-                import datetime
-                
+                import datetime # Ensure datetime is imported
                 combined_html = f"""
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <title>Batch Template Report - {client.get('customer_name', 'Unknown')}</title>
+                    <title>Batch Template Report - {client_for_batch.get('customer_name', 'Unknown')}</title>
                     <style>
                         body {{
                             font-family: Arial, sans-serif;
@@ -1510,8 +1464,8 @@ def show_template_report_page():
                     <h1>Batch Template Report: {selected_template_type}</h1>
                     <div class="client-info">
                         <div class="report-meta">Generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
-                        <div class="report-meta">Client: {client.get('customer_name', 'Unknown')}</div>
-                        <div class="report-meta">Quote Reference: {client.get('quote_ref', 'Unknown')}</div>
+                        <div class="report-meta">Client: {client_for_batch.get('customer_name', 'Unknown')}</div>
+                        <div class="report-meta">Quote Reference: {client_for_batch.get('quote_ref', 'Unknown')}</div>
                     </div>
                 """
                 
@@ -1519,7 +1473,7 @@ def show_template_report_page():
                 machines_with_reports = 0
                 
                 # Process each machine
-                for machine in machines:
+                for machine in machines_for_batch:
                     machine_id = machine.get('id')
                     machine_name = machine.get('machine_name', f"Machine ID: {machine_id}")
                     
@@ -1581,6 +1535,30 @@ def show_template_report_page():
                     st.success(f"Generated reports for {machines_with_reports} machines.")
                 else:
                     st.warning(f"No machines with {selected_template_type} templates found.")
+
+def show_printable_summary_report(template_data, machine_name="", template_type=""):
+    """
+    Shows a printable summary report in a new tab using Streamlit components.
+    
+    Args:
+        template_data: Dictionary of field keys to values from template
+        machine_name: Name of the machine (optional)
+        template_type: Type of template (e.g., "GOA") (optional)
+    """
+    # Generate HTML summary report
+    html_summary_report = generate_machine_build_summary_html(template_data, machine_name, template_type)
+    
+    # Display with html component
+    st.components.v1.html(html_summary_report, height=600, scrolling=True)
+    
+    # Provide a download button for the HTML summary report
+    st.download_button(
+        "Download Summary Report (HTML)",
+        html_summary_report,
+        file_name=f"summary_template_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+        mime="text/html",
+        key="download_summary_report_html"
+    )
 
 def show_quote_processing():
     st.title("📄 Quote Processing")
@@ -2005,3 +1983,332 @@ def render_chat_ui():
         # st.session_state.chat_history.append(("Assistant", response))
         # st.rerun()
     pass # For now, just a pass as the main logic is in app.py's chat handling
+
+def generate_machine_build_summary_html(template_data, machine_name="", template_type=""):
+    """
+    Generates a concise, printable HTML summary of selected template items,
+    optimized for a quick overview for machine building teams.
+    
+    Args:
+        template_data: Dictionary of field keys to values from template
+        machine_name: Name of the machine (optional)
+        template_type: Type of template (e.g., "GOA") (optional)
+        
+    Returns:
+        HTML string for the summary report
+    """
+    from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
+    import datetime
+    import os
+
+    print(f"DEBUG: generate_machine_build_summary_html called. Machine: {machine_name}, Type: {template_type}") # DEBUG
+    if template_data:
+        print(f"DEBUG: Raw template_data (first 5 items): {dict(list(template_data.items())[:5])}") # DEBUG
+        print(f"DEBUG: Total items in template_data: {len(template_data)}") # DEBUG
+    else:
+        print("DEBUG: template_data is None or empty.") # DEBUG
+        # If template_data is empty, we can return early with a message
+        return "<p>No template data provided to generate the report.</p>"
+
+    outline_file_path = "full_fields_outline.md"
+    outline_structure = {}
+    if os.path.exists(outline_file_path):
+        with open(outline_file_path, 'r', encoding='utf-8') as f:
+            outline_content = f.read()
+        outline_structure = parse_full_fields_outline(outline_content)
+        print(f"DEBUG: Outline structure loaded. Top-level sections: {list(outline_structure.keys())}") # DEBUG
+    else:
+        print(f"DEBUG: Outline file not found: {outline_file_path}. Report will list all items under 'Additional Specifications'.")
+
+    # Initialize report_data_by_outline based on the structure of outline_structure
+    report_data_by_outline = {}
+    for section_name_from_outline, section_details_from_outline in outline_structure.items():
+        subs_data_for_report = {}
+        # Assuming section_details_from_outline.get("_subsections_") is a list of subsection names or a dict {name: fields}
+        subsection_config = section_details_from_outline.get("_subsections_", [])
+        if isinstance(subsection_config, list): # list of names
+            for sub_name_str_key in subsection_config:
+                if isinstance(sub_name_str_key, str):
+                    subs_data_for_report[sub_name_str_key] = []
+        elif isinstance(subsection_config, dict): # dict of {name: field_keys_list}
+            for sub_name_key in subsection_config.keys():
+                subs_data_for_report[sub_name_key] = []
+        
+        report_data_by_outline[section_name_from_outline] = {
+            "_direct_fields_": [],
+            "_subsections_": subs_data_for_report
+        }
+    
+    if not outline_structure: 
+        report_data_by_outline["All Specifications"] = {"_direct_fields_": [], "_subsections_": {}}
+        print("DEBUG: Using fallback 'All Specifications' section due to no outline.")
+
+    unmapped_or_additional_fields = []
+    # field_keys_from_template_data_processed_by_outline = set()
+
+    # New Strategy: Iterate through template_data and map to outline_structure
+    print(f"DEBUG: Starting NEW STRATEGY: Iterating template_data ({len(template_data)} items) to map to outline.")
+    for actual_field_key, value in template_data.items():
+        value_str = str(value).strip()
+        is_checked_suffix = actual_field_key.endswith("_check")
+
+        # --- Re-activating and Refining Filters ---
+        # Basic Filter 1: Skip if key is literally "none" or value implies negation/emptiness
+        if actual_field_key.lower() == "none":
+            # print(f"DEBUG: FILTERED (key is none): Key '{actual_field_key}', Value: '{value_str}'")
+            continue
+        if not value_str or value_str.lower() in ["no", "none", "false", "0"]: # Allow "0" if it means quantity 0 but is affirmative, but for now, filter out as per initial request for concise summary
+            # if value_str == "0" and not is_checked_suffix: # Example: allow if it's a quantity like "0 pcs"
+            #     pass # Potentially allow "0" for non-boolean fields if meaningful
+            # else:
+            # print(f"DEBUG: FILTERED (basic value): Key '{actual_field_key}', Value: '{value_str}'")
+            continue
+        
+        # Basic Filter 2: For _check fields, value must be YES or TRUE
+        if is_checked_suffix and not (value_str.upper() == "YES" or value_str.upper() == "TRUE"):
+            # print(f"DEBUG: FILTERED (_check not YES/TRUE): Key '{actual_field_key}', Value: '{value_str}'")
+            continue
+        # --- End of Basic Filters ---
+
+        # Determine display_value (checkmark or original string)
+        display_value = "✔" if (is_checked_suffix and value_str.upper() in ["YES", "TRUE"]) or \
+                                 (not is_checked_suffix and isinstance(value, str) and value_str.upper() == "YES") else value_str
+        
+        # Get descriptive path and final label
+        descriptive_path = explicit_placeholder_mappings.get(actual_field_key, actual_field_key)
+        path_parts = [p.strip() for p in descriptive_path.split(" - ")]
+        final_label_for_item = path_parts[-1]
+
+        # --- Stricter "None Option" Filter (applied AFTER display_value and label are determined) ---
+        # This is critical: if the item is a "None" option, even if its value was "YES" (making display_value "✔"), skip it.
+        current_item_label_lower = final_label_for_item.lower().strip()
+        descriptive_path_lower = descriptive_path.lower()
+
+        if current_item_label_lower == "none" or descriptive_path_lower.endswith(" - none") or descriptive_path_lower.endswith(" - none (checkbox)"):
+            # print(f"DEBUG: FILTERED (is None option): Key '{actual_field_key}', Label: '{final_label_for_item}', Path: '{descriptive_path}', Value: '{value_str}', Display: '{display_value}'")
+            continue
+        # --- End of "None Option" Filter ---
+        
+        # If after all this, display_value became empty (e.g. a boolean False not caught above, or a YES that was a None option)
+        # This check should be mostly redundant if above filters are comprehensive
+        if not display_value:
+            # print(f"DEBUG: FILTERED (empty display_value post-processing): Key '{actual_field_key}', Label: '{final_label_for_item}', Value: '{value_str}'")
+            continue
+            
+        field_info = {
+            "key": actual_field_key,
+            "value": display_value, 
+            "label": final_label_for_item, 
+            "full_path_label": descriptive_path 
+        }
+
+        # Try to map to outline_structure
+        mapped_to_outline = False
+        if outline_structure and path_parts:
+            potential_section_name = path_parts[0]
+            target_section_name_in_outline = None
+            for outline_sec_name in outline_structure.keys():
+                if outline_sec_name.lower() == potential_section_name.lower():
+                    target_section_name_in_outline = outline_sec_name
+                    break
+            
+            if target_section_name_in_outline:
+                # Revised Subsection Mapping Logic
+                if len(path_parts) > 1: # Path has at least a section and a field/first-level-subsection
+                    first_level_item_name_from_path = path_parts[1] # Could be a field or first subsection
+                    
+                    # Check if this first_level_item_name_from_path matches a defined subsection in the outline for this section
+                    target_first_level_subsection_in_outline = None
+                    if target_section_name_in_outline in report_data_by_outline and \
+                       isinstance(report_data_by_outline[target_section_name_in_outline].get("_subsections_"), dict):
+                        for outline_sub_name_key in report_data_by_outline[target_section_name_in_outline]["_subsections_"].keys():
+                            if outline_sub_name_key.lower() == first_level_item_name_from_path.lower():
+                                target_first_level_subsection_in_outline = outline_sub_name_key
+                                break
+                    
+                    if target_first_level_subsection_in_outline:
+                        # Item belongs to this identified first-level subsection
+                        # The label for the item should be the rest of its path parts
+                        field_info["label"] = " - ".join(path_parts[2:]) if len(path_parts) > 2 else final_label_for_item # Use original final_label if no deeper parts
+                        if not field_info["label"]: field_info["label"] = final_label_for_item # safety for cases like "Sec - Sub" (no further parts)
+                        
+                        # print(f"DEBUG: Mapping to Outline SUBN: Key '{actual_field_key}' -> Sec '{target_section_name_in_outline}' -> Sub '{target_first_level_subsection_in_outline}' (Label: {field_info[\"label\"]})")
+                        report_data_by_outline[target_section_name_in_outline]["_subsections_"][target_first_level_subsection_in_outline].append(field_info)
+                        mapped_to_outline = True
+                    elif len(path_parts) >= 2: # Path looked like it had a field/sub-identifier after section, but it didn't match a known subsection
+                        # Treat as a direct field under the section. Label is parts[1:]
+                        field_info["label"] = " - ".join(path_parts[1:]) if len(path_parts) > 1 else final_label_for_item
+                        if not field_info["label"]: field_info["label"] = final_label_for_item
+                        # print(f"DEBUG: Mapping to Outline DIRECT (path >= 2, no sub match): Key '{actual_field_key}' -> Sec '{target_section_name_in_outline}' (Label: {field_info[\"label\"]})")
+                        report_data_by_outline[target_section_name_in_outline]["_direct_fields_"].append(field_info)
+                        mapped_to_outline = True
+                    # If len(path_parts) == 1, it would mean only section name was in path_parts, which is unusual if actual_field_key comes from explicit_mappings
+                    # This case is implicitly handled by falling through to unmapped if not otherwise caught.
+
+                # else: # len(path_parts) <= 1, meaning path was just Section or less.
+                    # This usually implies the descriptive_path was just the actual_field_key itself and didn't match a section.
+                    # This case will be handled by mapped_to_outline remaining False and falling to unmapped_or_additional_fields.
+                    # However, if target_section_name_in_outline was found, and len(path_parts) == 1, it means the key IS the section name? Unlikely.
+                    # For safety, if it was somehow len(path_parts) == 1 AND target_section_name_in_outline matched, it's a direct field.
+                    # This edge case is less critical path than subsection mapping.
+                    # The more common case if only section matched is len(path_parts) == 2 (Section - Field)
+                    # which is covered by the elif len(path_parts) >= 2 above if it doesn't match a subsection.
+            
+        if not mapped_to_outline:
+            # print(f"DEBUG: Adding to unmapped: Key '{actual_field_key}' (Path: {descriptive_path}, Label: {final_label_for_item})")
+            if not outline_structure:
+                report_data_by_outline["All Specifications"]["_direct_fields_"].append(field_info)
+            else:
+                unmapped_or_additional_fields.append(field_info)
+
+    # --- The old iteration logic based on outline_structure first is now removed/replaced by the above --- 
+
+    total_direct_fields = sum(len(s_data.get('_direct_fields_', [])) for s_data in report_data_by_outline.values())
+    total_subsection_fields = sum(sum(len(sublist) for sublist in s_data.get('_subsections_', {}).values()) for s_data in report_data_by_outline.values())
+    print(f"DEBUG: (New Strategy) Total direct fields mapped to outline: {total_direct_fields}") 
+    print(f"DEBUG: (New Strategy) Total subsection fields mapped to outline: {total_subsection_fields}") 
+    print(f"DEBUG: (New Strategy) Total unmapped_or_additional_fields: {len(unmapped_or_additional_fields)}")
+
+    # HTML Generation - Order of sections will come from iterating report_data_by_outline.keys()
+    # To ensure outline order for sections, we should iterate list(outline_structure.keys()) if outline_structure exists
+    # And for fields within sections/subsections, they are appended in the order template_data was iterated.
+    # For true outline order of fields, explicit_placeholder_mappings would need to be sorted by outline, or a post-sort applied.
+
+    # For now, let's preserve the order of how sections were defined in report_data_by_outline (from outline_structure)
+    # And for items within sections/subsections, they are as they came from template_data, grouped by mapping.
+    # A final sort by 'full_path_label' within each list can ensure consistent display if template_data order varies.
+    for section_name_render in report_data_by_outline.keys(): # Iterate based on initialized sections
+        section_content = report_data_by_outline[section_name_render]
+        if section_content.get("_direct_fields_"):
+            section_content["_direct_fields_"] = sorted(section_content["_direct_fields_"], key=lambda x: x["full_path_label"])
+        if section_content.get("_subsections_"):
+            for sub_name_render in section_content["_subsections_"]:
+                if section_content["_subsections_"][sub_name_render]:
+                    section_content["_subsections_"][sub_name_render] = sorted(section_content["_subsections_"][sub_name_render], key=lambda x: x["full_path_label"])
+    
+    unmapped_or_additional_fields = sorted(unmapped_or_additional_fields, key=lambda x: x["full_path_label"])
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Machine Build Summary: {machine_name or 'N/A'}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 15px; color: #333; line-height: 1.3; font-size: 10pt; }}
+            .report-header {{ margin-bottom: 20px; text-align: center; }}
+            h1 {{ color: #2c3e50; font-size: 1.5em; margin-bottom: 5px; }}
+            .report-meta {{ color: #7f8c8d; font-size: 0.85em; margin-bottom: 15px; }}
+            h2 {{ color: #2980b9; font-size: 1.2em; margin-top: 20px; border-bottom: 1px solid #bdc3c7; padding-bottom: 6px; page-break-before: auto; page-break-after: avoid; }}
+            h3 {{ color: #16a085; font-size: 1.05em; margin-top: 15px; margin-bottom: 5px; font-weight: bold; page-break-after: avoid; }}
+            ul.spec-list {{ list-style-type: none; padding-left: 0; margin-left: 5px; page-break-inside: avoid; }}
+            ul.spec-list li {{ margin-bottom: 4px; font-size: 0.95em; }}
+            .spec-label {{ font-weight: normal; color: #283747; }}
+            .spec-value {{ color: #000; margin-left: 8px; font-weight: bold; }}
+            .section-block {{ margin-bottom: 15px; page-break-inside: avoid; }}
+            .print-button {{ position: fixed; top: 10px; right: 10px; z-index: 1000; }}
+            @media print {{
+                body {{ margin: 10mm; font-size: 9pt; }}
+                .print-button {{ display: none !important; }}
+                h1, h2, h3, ul.spec-list li {{ page-break-after: avoid; page-break-inside: avoid !important; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="report-header">
+            <h1>Machine Build Summary</h1>
+            <div class="report-meta">
+                Generated: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+                {f" | Machine: {machine_name}" if machine_name else ""}
+                {f" | Template: {template_type}" if template_type else ""}
+            </div>
+        </div>
+        <div class="print-button no-print">
+            <button onclick="window.print()">Print Summary</button>
+        </div>
+    """
+    
+    # Iterate through sections in the order defined by outline_structure keys for rendering
+    # This ensures the report follows the outline's section sequence.
+    rendered_section_names = list(outline_structure.keys()) if outline_structure else list(report_data_by_outline.keys())
+    has_any_content = False
+
+    for section_name_to_render in rendered_section_names:
+        if section_name_to_render not in report_data_by_outline: continue # Should not happen if initialized from outline
+        
+        section_content = report_data_by_outline[section_name_to_render]
+        direct_fields = section_content.get("_direct_fields_", [])
+        subsections_data_map = section_content.get("_subsections_", {}) # This is e.g. {"HMI": [items], "PLC": [items]}
+        
+        # Check if this section has any content to display
+        section_has_direct_items = bool(direct_fields)
+        section_has_subsection_items = any(bool(fields_list) for fields_list in subsections_data_map.values())
+        
+        if not section_has_direct_items and not section_has_subsection_items:
+            continue
+        
+        has_any_content = True
+        # Use section_name_to_render for headers and IDs
+        html += f'<div class="section-block"><h2 id="{section_name_to_render.replace(" ", "_").replace("/", "_")}">{section_name_to_render}</h2>'
+
+        if section_has_direct_items:
+            html += '<ul class="spec-list">'
+            # Items are already sorted by full_path_label before this HTML generation part
+            for item in direct_fields:
+                display_value = item["value"]
+                if item["key"] == "options_listing" and len(str(display_value)) > 150:
+                    display_value = str(display_value)[:150] + "..."
+                html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
+            html += '</ul>'
+
+        if section_has_subsection_items:
+            # Get the original order of subsection names for this section from outline_structure
+            original_subsection_name_order = []
+            if outline_structure and section_name_to_render in outline_structure:
+                subsection_config_from_outline = outline_structure[section_name_to_render].get("_subsections_", [])
+                if isinstance(subsection_config_from_outline, list):
+                    original_subsection_name_order = [name for name in subsection_config_from_outline if isinstance(name, str)]
+                elif isinstance(subsection_config_from_outline, dict):
+                    original_subsection_name_order = list(subsection_config_from_outline.keys())
+            
+            # Fallback if original order couldn't be determined or for subsections not strictly in outline's list
+            if not original_subsection_name_order:
+                original_subsection_name_order = sorted(list(subsections_data_map.keys())) # Sort by name as fallback
+
+            for sub_name_to_render in original_subsection_name_order:
+                if sub_name_to_render in subsections_data_map:
+                    fields_list_for_subsection = subsections_data_map[sub_name_to_render]
+                    if not fields_list_for_subsection: continue
+
+                    # Use section_name_to_render and sub_name_to_render for IDs
+                    html += f'<h3 id="{section_name_to_render.replace(" ", "_").replace("/", "_")}_{sub_name_to_render.replace(" ", "_").replace("/", "_")}">{sub_name_to_render}</h3>'
+                    html += '<ul class="spec-list">'
+                    # Items are already sorted by full_path_label
+                    for item in fields_list_for_subsection:
+                        display_value = item["value"]
+                        if item["key"] == "options_listing" and len(str(display_value)) > 150:
+                             display_value = str(display_value)[:150] + "..."
+                        html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
+                    html += '</ul>'
+        html += '</div>' 
+
+    # Render unmapped fields if any
+    if unmapped_or_additional_fields: 
+        has_any_content = True
+        html += f'<div class="section-block"><h2 id="unmapped_additional_fields">Additional Specifications</h2>'
+        html += '<ul class="spec-list">'
+        # Items are already sorted by full_path_label
+        for item in unmapped_or_additional_fields: 
+            display_value = item["value"]
+            if item["key"] == "options_listing" and len(str(display_value)) > 150:
+                 display_value = str(display_value)[:150] + "..."
+            html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
+        html += '</ul></div>'
+    
+    if not has_any_content:
+        html += "<p>No items were processed for this summary report based on current criteria (filters are currently off for debugging).</p>"
+
+    html += """
+    </body>
+    </html>
+    """
+    return html
