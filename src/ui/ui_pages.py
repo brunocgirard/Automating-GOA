@@ -18,6 +18,8 @@ from src.workflows.profile_workflow import (
 # Import from utility modules
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, explicit_placeholder_mappings, parse_full_fields_outline
+from src.utils import sortstar_template_utils # Added
+from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings # Added
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.crm_utils import (
@@ -515,7 +517,7 @@ def show_template_summary(template_data, template_contexts=None):
                     st.dataframe(df, use_container_width=True)
     '''
 
-def generate_printable_report(template_data, machine_name="", template_type=""):
+def generate_printable_report(template_data, machine_name="", template_type="", is_sortstar_machine: bool = False):
     """
     Generates a clean, printable HTML report of selected template items,
     optimized for machine building teams with visual organization.
@@ -524,35 +526,34 @@ def generate_printable_report(template_data, machine_name="", template_type=""):
         template_data: Dictionary of field keys to values from template
         machine_name: Name of the machine (optional)
         template_type: Type of template (e.g., "GOA") (optional)
+        is_sortstar_machine: Boolean indicating if the machine is a SortStar machine.
         
     Returns:
         HTML string for the report
     """
-    from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
+    # We've already imported these at the top of the file now
+    # from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
+    # from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings
+    # from src.utils.sortstar_template_utils import parse_full_fields_outline as sortstar_parse_full_fields_outline
     import datetime
-    import os # For reading the outline file
+    import os
 
-    # Define section priorities (can be refined or made dynamic based on outline order later)
-    # For now, we will rely on the order from the parsed outline if possible, or sort alphabetically.
-    # section_priorities = [
-    #     "General Information",
-    #     "Control & Programming Specifications",
-    #     "Mechanical Specifications", # This section isn't explicitly in the outline, might need mapping
-    #     "Electrical Specifications", # This section isn't explicitly in the outline, might need mapping
-    #     "Safety Features", # This section isn't explicitly in the outline, might need mapping
-    #     "Documentation & Validation",
-    #     "Other Specifications"
-    # ]
-
-    # Load and parse the full_fields_outline.md
-    outline_file_path = "full_fields_outline.md"
+    current_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
+    outline_file_to_use = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
+    
     outline_structure = {}
-    if os.path.exists(outline_file_path):
-        with open(outline_file_path, 'r', encoding='utf-8') as f:
+    if os.path.exists(outline_file_to_use):
+        with open(outline_file_to_use, 'r', encoding='utf-8') as f:
             outline_content = f.read()
-        outline_structure = parse_full_fields_outline(outline_content)
-    else:
-        st.warning(f"Outline file not found: {outline_file_path}. Report structure may be less organized.")
+        # ...
+        if os.path.exists(outline_file_to_use):
+            with open(outline_file_to_use, 'r', encoding='utf-8') as f:
+                outline_content = f.read()
+            # Always use parse_full_fields_outline from template_utils (already imported at top of file)
+            outline_structure = parse_full_fields_outline(outline_content)
+        else:
+            st.warning(f"Outline file not found: {outline_file_to_use}. Report structure may be less organized.")
+        # ...
 
     # Building categories remain the same
     building_categories = {
@@ -597,7 +598,7 @@ def generate_printable_report(template_data, machine_name="", template_type=""):
         # Determine building category
         for cat, keywords in building_categories.items():
             # Check against key, explicit mapping path, and eventual label
-            path_from_mapping = explicit_placeholder_mappings.get(field_key, field_key).lower()
+            path_from_mapping = current_mappings.get(field_key, field_key).lower()
             if any(kw in field_key.lower() or kw in path_from_mapping for kw in keywords):
                 field_info["category"] = cat
                 break
@@ -605,8 +606,8 @@ def generate_printable_report(template_data, machine_name="", template_type=""):
         mapped_section_name = None
         mapped_subsection_name = None
 
-        if field_key in explicit_placeholder_mappings:
-            full_path_string = explicit_placeholder_mappings[field_key]
+        if field_key in current_mappings:
+            full_path_string = current_mappings[field_key]
             field_info["path"] = full_path_string
             parts = [p.strip() for p in full_path_string.split(" - ")] 
 
@@ -922,13 +923,14 @@ def show_printable_report(template_data, machine_name="", template_type=""):
         key="download_report_html"
     )
 
-def show_goa_modifications_ui(machine_id: int = None):
+def show_goa_modifications_ui(machine_id: int = None, machine_name: Optional[str] = None):
     """
     Displays and manages GOA template modifications for a specific machine.
     Uses a simpler UI similar to client records.
     
     Args:
         machine_id: Optional ID of the machine to show modifications for
+        machine_name: Optional name of the machine.
     """
     try:
         from src.utils.crm_utils import load_machine_templates_with_modifications, save_goa_modification
@@ -957,21 +959,31 @@ def show_goa_modifications_ui(machine_id: int = None):
             template_tabs = st.tabs([t["template_type"] for t in templates])
             for i, template in enumerate(templates):
                 with template_tabs[i]:
-                    display_template_editor(template)
+                    display_template_editor(template, machine_id, machine_name)
         else:
             # Only one template, no need for tabs
-            display_template_editor(templates[0])
+            display_template_editor(templates[0], machine_id, machine_name)
     except Exception as e:
         st.error(f"Error displaying template modifications: {str(e)}")
         import traceback
         st.exception(e)
         
-def display_template_editor(template):
+def display_template_editor(template, machine_id: Optional[int] = None, machine_name: Optional[str] = None):
     """Helper function to display and edit a single template"""
     try:
         from src.utils.crm_utils import save_goa_modification
-        from src.utils.template_utils import explicit_placeholder_mappings
+        # Imports for explicit_placeholder_mappings are already at the top of the file
+        # from src.utils.template_utils import explicit_placeholder_mappings
+        # from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings
         import re
+        
+        is_sortstar_machine = False
+        if machine_name:
+            sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
+            if any(alias in machine_name.lower() for alias in sortstar_aliases):
+                is_sortstar_machine = True
+        
+        current_explicit_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
         
         template_id = template["id"]
         template_type = template["template_type"]
@@ -1006,19 +1018,19 @@ def display_template_editor(template):
         with edit_tab:
             st.markdown("#### Edit Existing Template Fields")
 
-            # Group fields by hierarchy from explicit_placeholder_mappings
+            # Group fields by hierarchy from current_explicit_mappings
             structured_fields = {}
-            other_fields = [] # For fields in template_data but not in explicit_placeholder_mappings
+            other_fields = [] # For fields in template_data but not in current_explicit_mappings
 
             # Sort template_data items by key for consistent processing order
             sorted_template_data_items = sorted(template_data.items(), key=lambda item: item[0])
 
             for field_key, current_value in sorted_template_data_items:
-                is_boolean = field_key.endswith("_check") or \
-                             (isinstance(current_value, str) and current_value.upper() in ["YES", "NO", "TRUE", "FALSE"])
+                is_boolean = (field_key.endswith("_check") or 
+                             (isinstance(current_value, str) and current_value.upper() in ["YES", "NO", "TRUE", "FALSE"]))
                 
-                if field_key in explicit_placeholder_mappings:
-                    path = explicit_placeholder_mappings[field_key]
+                if field_key in current_explicit_mappings: # Use current_explicit_mappings
+                    path = current_explicit_mappings[field_key] # Use current_explicit_mappings
                     parts = [p.strip() for p in path.split(" - ")]
                     
                     section = parts[0]
@@ -1063,9 +1075,11 @@ def display_template_editor(template):
             sorted_sections_list = sorted(structured_fields.items(), key=lambda item: item[0])
 
             for section_name, subsections_dict in sorted_sections_list:
-                # Determine if the expander should be open by default (e.g., if it contains many items or is critical)
-                # For now, keep all closed by default for brevity
-                expanded_default = False 
+                # Determine if the expander should be open by default
+                expanded_default = False
+                if is_sortstar_machine and section_name.upper() == "BASIC SYSTEMS":
+                    expanded_default = True
+                
                 with st.expander(f"**{section_name}**", expanded=expanded_default):
                     # Sort subsections alphabetically, ensuring "_fields_" (direct fields) comes first or last as desired
                     # Here, sorting normally will place "_fields_" based on its string value.
@@ -1200,7 +1214,7 @@ def display_template_editor(template):
             
             try:
                 # Filter out fields that are already in the template
-                available_fields = {k: v for k, v in explicit_placeholder_mappings.items() 
+                available_fields = {k: v for k, v in current_explicit_mappings.items() # Use current_explicit_mappings
                                    if k not in template_data}
                 
                 if not available_fields:
@@ -1536,7 +1550,7 @@ def show_template_report_page():
                 else:
                     st.warning(f"No machines with {selected_template_type} templates found.")
 
-def show_printable_summary_report(template_data, machine_name="", template_type=""):
+def show_printable_summary_report(template_data, machine_name="", template_type="", is_sortstar_machine: bool = False):
     """
     Shows a printable summary report in a new tab using Streamlit components.
     
@@ -1544,9 +1558,10 @@ def show_printable_summary_report(template_data, machine_name="", template_type=
         template_data: Dictionary of field keys to values from template
         machine_name: Name of the machine (optional)
         template_type: Type of template (e.g., "GOA") (optional)
+        is_sortstar_machine: Boolean, True if it's a SortStar machine.
     """
     # Generate HTML summary report
-    html_summary_report = generate_machine_build_summary_html(template_data, machine_name, template_type)
+    html_summary_report = generate_machine_build_summary_html(template_data, machine_name, template_type, is_sortstar_machine)
     
     # Display with html component
     st.components.v1.html(html_summary_report, height=600, scrolling=True)
@@ -1914,8 +1929,10 @@ def show_crm_management_page():
                         )
                         
                         if selected_machine_id:
+                            # Get the machine name for the selected ID
+                            selected_machine_name = next((m[1] for m in machine_options if m[0] == selected_machine_id), None)
                             # Show template modifications UI for the selected machine
-                            show_goa_modifications_ui(selected_machine_id)
+                            show_goa_modifications_ui(selected_machine_id, machine_name=selected_machine_name) # Pass machine_name
         except Exception as e: st.error(f"Error in CRM client display: {e}"); import traceback; traceback.print_exc()
     else: st.info("Select a client to view/edit details.")
     with st.expander("Manually Add New Client Record"):
@@ -2024,7 +2041,7 @@ def render_chat_ui():
     # Function intentionally left empty to disable quick chat
     pass
 
-def generate_machine_build_summary_html(template_data, machine_name="", template_type=""):
+def generate_machine_build_summary_html(template_data, machine_name="", template_type="", is_sortstar_machine: bool = False):
     """
     Generates a concise, printable HTML summary of selected template items,
     optimized for a quick overview for machine building teams.
@@ -2033,32 +2050,34 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
         template_data: Dictionary of field keys to values from template
         machine_name: Name of the machine (optional)
         template_type: Type of template (e.g., "GOA") (optional)
+        is_sortstar_machine: Boolean indicating if the machine is a SortStar machine.
         
     Returns:
         HTML string for the summary report
     """
-    from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
+    # Imports are at the top of the file
     import datetime
     import os
 
-    print(f"DEBUG: generate_machine_build_summary_html called. Machine: {machine_name}, Type: {template_type}") # DEBUG
-    if template_data:
-        print(f"DEBUG: Raw template_data (first 5 items): {dict(list(template_data.items())[:5])}") # DEBUG
-        print(f"DEBUG: Total items in template_data: {len(template_data)}") # DEBUG
-    else:
-        print("DEBUG: template_data is None or empty.") # DEBUG
-        # If template_data is empty, we can return early with a message
+    # print(f"DEBUG: generate_machine_build_summary_html called. Machine: {machine_name}, Type: {template_type}, IsSortStar: {is_sortstar_machine}") 
+    if not template_data:
+        # print("DEBUG: template_data is None or empty.")
         return "<p>No template data provided to generate the report.</p>"
 
-    outline_file_path = "full_fields_outline.md"
+    current_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
+    outline_file_to_use = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
+
     outline_structure = {}
-    if os.path.exists(outline_file_path):
-        with open(outline_file_path, 'r', encoding='utf-8') as f:
+        # ...
+    if os.path.exists(outline_file_to_use):
+        with open(outline_file_to_use, 'r', encoding='utf-8') as f:
             outline_content = f.read()
+        # Always use parse_full_fields_outline from template_utils (already imported at top of file)
         outline_structure = parse_full_fields_outline(outline_content)
-        print(f"DEBUG: Outline structure loaded. Top-level sections: {list(outline_structure.keys())}") # DEBUG
     else:
-        print(f"DEBUG: Outline file not found: {outline_file_path}. Report will list all items under 'Additional Specifications'.")
+        # print(f"DEBUG: Outline file not found: {outline_file_to_use}. Report will list all items under 'Additional Specifications'.")
+        pass # Keep outline_structure as empty dict
+        # ...
 
     # Initialize report_data_by_outline based on the structure of outline_structure
     report_data_by_outline = {}
@@ -2115,7 +2134,7 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
                                  (not is_checked_suffix and isinstance(value, str) and value_str.upper() == "YES") else value_str
         
         # Get descriptive path and final label
-        descriptive_path = explicit_placeholder_mappings.get(actual_field_key, actual_field_key)
+        descriptive_path = current_mappings.get(actual_field_key, actual_field_key)
         path_parts = [p.strip() for p in descriptive_path.split(" - ")]
         final_label_for_item = path_parts[-1]
 
