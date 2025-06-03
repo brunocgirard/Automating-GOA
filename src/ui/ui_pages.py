@@ -113,7 +113,7 @@ def show_client_dashboard_page():
     """
     Displays the client dashboard interface for browsing and selecting clients
     """
-    st.title("📊 Client Dashboard")
+    st.title("🎯 Client Dashboard")
     
     # Status check for existing client profiles
     if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "action_selection":
@@ -2017,49 +2017,12 @@ def show_chat_page():
 
 def render_chat_ui():
     """
-    Renders the main chat UI components.
-    This function is kept for backward compatibility but will now check
-    if we're already showing the chat page to avoid duplicate elements.
+    This function previously rendered a quick chat component on all pages.
+    It has been disabled as requested to remove the quick chat option
+    while keeping the main Chat page intact.
     """
-    # Check if we're already showing the chat page to avoid duplicate elements
-    if hasattr(st.session_state, 'showing_chat_page') and st.session_state.showing_chat_page:
-        # We're already showing the chat page, so don't render again
-        return
-    
-    # If chat page isn't showing, display a minimal chat interface for the sidebar/floating chat
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    # Display a smaller chat interface
-    with st.container(border=True):
-        st.subheader("Quick Chat")
-        
-        if st.button("Clear History", key="render_chat_ui_clear_btn"):
-            st.session_state.chat_history = []
-            st.rerun()
-    
-        # Display last few messages
-        max_messages = 3
-        recent_messages = st.session_state.chat_history[-max_messages:] if st.session_state.chat_history else []
-        
-        for idx, message in enumerate(recent_messages):
-            with st.chat_message(message["role"], key=f"render_ui_msg_{idx}"):
-                st.markdown(message["content"])
-        
-        if prompt := st.chat_input("Ask a question...", key="render_chat_ui_input"):
-            # Get context from current page
-            from app import get_current_context
-            context_type, context_data = get_current_context()
-            
-            # Process query
-            from app import process_chat_query
-            response = process_chat_query(prompt, context_type, context_data)
-            
-            # Update history
-            st.session_state.chat_history.append({"role": "user", "content": prompt})
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
-            
-            st.rerun()
+    # Function intentionally left empty to disable quick chat
+    pass
 
 def generate_machine_build_summary_html(template_data, machine_name="", template_type=""):
     """

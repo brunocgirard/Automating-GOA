@@ -1,0 +1,86 @@
+GENERAL ORDER ACKNOWLEDGEMENT > Customer: {{customer}}
+GENERAL ORDER ACKNOWLEDGEMENT > Machine: {{machine}}
+GENERAL ORDER ACKNOWLEDGEMENT > Direction: {{direction}}
+
+Order Identification > Quote: {{quote}}
+Order Identification > Production speed: {{production_speed}}
+
+Utility Specifications > Voltage: {{voltage}}
+Utility Specifications > Phases: {{phases}}
+Utility Specifications > Hz: {{hz}}
+Utility Specifications > AMPS: {{amps}}
+Utility Specifications > PSI: {{psi}}
+Utility Specifications > CFM: {{cfm}}
+Utility Specifications > Conformity CSA Check: {{conformity_csa_check}}
+Utility Specifications > CE None Check: {{ce_none_check}}
+Utility Specifications > CE CSA Check: {{ce_csa_check}}
+Utility Specifications > CE Expl Check: {{ce_expl_check}}
+Utility Specifications > Country of destination: {{country}}
+
+BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 220VAC 3 Phases LEFT TO RIGHT: {{bs_984_check}}
+BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 220VAC 3 Phases RIGHT TO LEFT: {{bs_1230_check}}
+BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT: {{bs_985_check}}
+BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 480VAC & 380VAC 3 Phases RIGHT TO LEFT: {{bs_1229_check}}
+BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 24ft3 220VAC 3 Phases LEFT TO RIGHT: {{bs_1264_check}}
+BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 24ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT: {{bs_1265_check}}
+
+OPTIONAL SYSTEMS > Guarding System > Lexan Euroguard Top Cover: {{op_2409_check}}
+OPTIONAL SYSTEMS > Guarding System > Ionized Air System: {{op_ias_check}}
+OPTIONAL SYSTEMS > Guarding System > Requires Cap Kit: {{op_nrck_check}}
+
+OPTIONAL SYSTEMS > Electrical > Stack Light with Buzzer Option: {{el_0369_check}}
+
+OPTIONAL SYSTEMS > Control Specifications > Explosion proof: {{cps_ep_check}}
+OPTIONAL SYSTEMS > Control Specifications > None: {{cps_none_check}}
+OPTIONAL SYSTEMS > Control Specifications > PLC B & R: {{plc_b&r_check}}
+OPTIONAL SYSTEMS > Control Specifications > CompactLogix: {{plc_compactl_check}}
+OPTIONAL SYSTEMS > Control Specifications > ControlLogix: {{plc_controll_check}}
+OPTIONAL SYSTEMS > Control Specifications > HMI B & R: {{hmi_b&r_check}}
+OPTIONAL SYSTEMS > Control Specifications > HMI Allen Bradley: {{hmi_allenb_check}}
+OPTIONAL SYSTEMS > Control Specifications > HMI PC Upgrade: {{hmi_pc_check}}
+OPTIONAL SYSTEMS > Control Specifications > HMI Size 5.7": {{hmi_size5.7_check}}
+OPTIONAL SYSTEMS > Control Specifications > HMI Size 10": {{hmi_size10_check}}
+
+OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 1 Axis: {{cpp_1axis_check}}
+OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 2 Axis – U-shaped: {{cpp_2axis_check}}
+OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 3 Axis: {{cpp_3axis_check}}
+
+OPTIONAL SYSTEMS > Remote Technical Service (Secomea): {{rts_secomea_check}}
+OPTIONAL SYSTEMS > Remote Technical Service > None: {{rts_none_check}}
+OPTIONAL SYSTEMS > Remote Technical Service > Connection Only: {{rts_co_check}}
+
+OPTIONAL SYSTEMS > Euro guarding > None: {{eg_none_check}}
+OPTIONAL SYSTEMS > Euro guarding > Panel material Lexan: {{eg_pnl_check}}
+OPTIONAL SYSTEMS > Euro guarding > Tempered glass: {{eg_pmtg_check}}
+OPTIONAL SYSTEMS > Euro guarding > Switch type Key switch: {{eg_stkw_check}}
+OPTIONAL SYSTEMS > Euro guarding > Switch type Magnetic: {{eg_stm_check}}
+OPTIONAL SYSTEMS > Euro guarding > Other: {{eg_sto_check}}
+OPTIONAL SYSTEMS > Euro guarding > Reject Cover: {{eg_rc_check}}
+OPTIONAL SYSTEMS > Euro guarding > Reject Cover None: {{eg_rcnone_check}}
+
+OPTIONAL SYSTEMS > Validation Documents > FAT: {{vd_f_check}}
+OPTIONAL SYSTEMS > Validation Documents > SAT: {{vd_s_check}}
+OPTIONAL SYSTEMS > Validation Documents > DQ: {{vd_d_check}}
+OPTIONAL SYSTEMS > Validation Documents > HDS/SDS: {{vd_h_check}}
+OPTIONAL SYSTEMS > Validation Documents > FS/DS: {{vd_fd_check}}
+OPTIONAL SYSTEMS > Validation Documents > IQ/OQ: {{vd_i_check}}
+
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Transport charges Capmatic: {{pt_tcc_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Transport charges Customer: {{pt_tccu_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging by Capmatic: {{pt_pbc_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging by Customer / Not Incl.: {{pt_pbcu_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging type Skid: {{pt_pts_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging type Crate: {{pt_ptc_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging type Sea Worthy: {{pt_ptsw_check}}
+
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Warranty 1YR: {{wi_war1_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Warranty 2YR: {{wi_war2_check}}
+
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Spares Kit None: {{sk_none_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Spares Kit 1YR: {{sk_1yr_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Spares Kit 2YR: {{sk_2yr_check}}
+
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Remote Tech. Service None: {{rts_none_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Remote Tech. Service Yes: {{rts_y_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning None: {{stpc_none_check}}
+OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning Yes – no. of days: {{stpc_yes}}

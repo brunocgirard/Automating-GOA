@@ -1002,288 +1002,196 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
                                        template_placeholder_contexts: Dict[str, str],
                                        full_pdf_text: str) -> Dict[str, str]:
     """
-    Constructs a prompt for the LLM focused on a specific machine and its add-ons,
-    plus common items that apply to all machines.
-    
-    Args:
-        machine_data: Dictionary containing machine_name, main_item, and add_ons
-        common_items: List of items common to all machines (warranty, etc.)
-        template_placeholder_contexts: Dictionary of template field contexts or schema
-        full_pdf_text: Full text of the PDF document
-        
-    Returns:
-        Dictionary mapping template placeholders to values from LLM
+    Identifies relevant fields for a specific machine and its add-ons,
+    then uses LLM to fill only those fields based on the machine data,
+    common items, and the full PDF text.
     """
     global GENERATIVE_MODEL
     if GENERATIVE_MODEL is None:
         if not configure_gemini_client():
-            print("LLM client not configured. Returning empty data for machine fields.")
+            print("LLM client not configured. Returning empty data for machine-specific fields.")
             return {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
 
-    # Extract descriptions for the prompt
     machine_name = machine_data.get("machine_name", "Unknown Machine")
     main_item_desc = machine_data.get("main_item", {}).get("description", "")
-    addon_descs = [item.get("description", "") for item in machine_data.get("add_ons", [])]
+    add_on_descs = [item.get("description", "") for item in machine_data.get("add_ons", [])]
     common_item_descs = [item.get("description", "") for item in common_items]
-    
-    # Determine if we're using the old format (string context) or new format (schema)
+
+    # Determine if this is a SortStar machine
+    is_sortstar_machine = False
+    sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
+    if any(alias in machine_name.lower() for alias in sortstar_aliases):
+        is_sortstar_machine = True
+
+    # Simplified prompt focusing on the specific machine and its direct context
+    prompt_parts = [
+        "You are an AI assistant specializing in extracting information from packaging machinery quotes.",
+        f"You are focusing on a specific machine: '{machine_name}'.",
+        "You will be given:",
+        "  1. The 'MAIN ITEM DESCRIPTION' for this machine.",
+        "  2. A list of 'ADD-ON ITEMS' specifically associated with this machine.",
+        "  3. A list of 'COMMON/SHARED ITEMS' that might apply to multiple machines in the quote.",
+        "  4. The 'FULL PDF TEXT' of the entire quote for broader context.",
+        "  5. A list of 'TEMPLATE FIELDS' with their descriptions/contexts that need to be filled for this machine.",
+        
+        "\nFULL PDF TEXT (Refer to this for general project details or if item descriptions are brief. Prioritize the start of document. Max 10,000 chars shown):",
+        (full_pdf_text[:10000] + "... (text truncated)") if len(full_pdf_text) > 10000 else full_pdf_text,
+        
+        f"\nMAIN ITEM DESCRIPTION for {machine_name}:",
+        main_item_desc if main_item_desc else "(No main item description provided for this machine)",
+        
+        "\nADD-ON ITEMS for this machine:"
+    ]
+    if not add_on_descs:
+        prompt_parts.append("  (No specific add-on items listed for this machine)")
+    else:
+        for i, desc in enumerate(add_on_descs):
+            prompt_parts.append(f"  - Add-on {i+1}: {desc}")
+            
+    prompt_parts.append("\nCOMMON/SHARED ITEMS (Consider if relevant to this machine):")
+    if not common_item_descs:
+        prompt_parts.append("  (No common/shared items listed)")
+    else:
+        for i, desc in enumerate(common_item_descs):
+            prompt_parts.append(f"  - Common Item {i+1}: {desc}")
+
+    # Field listing (similar to get_all_fields_via_llm but could be tailored further if needed)
+    # For now, using the same comprehensive listing method
     using_schema_format = isinstance(next(iter(template_placeholder_contexts.values()), ""), dict)
-    
-    # Initialize with default values
-    llm_response_data = {key: ("NO" if isinstance(val, dict) and val.get("type") == "boolean" else "") 
-                        for key, val in template_placeholder_contexts.items()} if using_schema_format else {
-                            key: ("NO" if key.endswith("_check") else "") 
-                            for key in template_placeholder_contexts.keys()
-                        }
-    # Ensure options_listing is initialized if present in contexts
-    if "options_listing" not in llm_response_data and "options_listing" in template_placeholder_contexts:
-        llm_response_data["options_listing"] = ""
-    
-    # Define a function to create the main prompt
-    def build_main_prompt(include_validation_feedback=False, validation_errors=None):
-        prompt_parts = [
-            f"You are an AI assistant tasked with accurately extracting information about a SPECIFIC MACHINE from a PDF quote to fill a structured Word template.",
-            "You will be given:",
-            "  1. A main machine description",
-            "  2. Add-on items specifically for this machine",
-            "  3. Common items that apply to all machines (warranty, shipping, etc.)",
-            "  4. The full PDF text for context",
-            "  5. A structured template schema showing fields to fill",
-            
-            f"\nMAIN MACHINE: {machine_name}",
-            main_item_desc,
-            
-            "\nADD-ON ITEMS SPECIFIC TO THIS MACHINE:"
-        ]
+    if using_schema_format:
+        sections = {}
+        for key, field_info in template_placeholder_contexts.items():
+            section = field_info.get("section", "General")
+            if section not in sections: sections[section] = []
+            sections[section].append((key, field_info))
         
-        if not addon_descs:
-            prompt_parts.append("  (No specific add-on items for this machine)")
-        else:
-            for i, desc in enumerate(addon_descs):
-                prompt_parts.append(f"  - Add-on {i+1}: {desc}")
-        
-        prompt_parts.append("\nCOMMON ITEMS (apply to all machines):")
-        if not common_item_descs:
-            prompt_parts.append("  (No common items identified)")
-        else:
-            for i, desc in enumerate(common_item_descs):
-                prompt_parts.append(f"  - Common Item {i+1}: {desc}")
-        
-        # Include validation feedback if this is a retry
-        if include_validation_feedback and validation_errors:
-            prompt_parts.append("\nVALIDATION ERRORS FROM PREVIOUS RESPONSE:")
-            prompt_parts.append("Please correct the following issues in your response:")
-            for field, field_errors in validation_errors.items():
-                for error in field_errors:
-                    prompt_parts.append(f"  - '{field}': {error}")
-        
-        prompt_parts.append("\nFULL PDF TEXT (for additional context):")
-        prompt_parts.append((full_pdf_text[:10000] + "... (text truncated)") if len(full_pdf_text) > 10000 else full_pdf_text)
-        
-        # Add few-shot examples to show how to extract information
-        prompt_parts.append("\nEXAMPLES OF INFORMATION EXTRACTION:")
-        
-        prompt_parts.append("Example 1: Text Field Extraction")
-        prompt_parts.append("Machine Description: 'LabelStar Model System 1 with high capacity label rolls'")
-        prompt_parts.append("Field: 'machine_model' (description: 'Machine Model Number')")
-        prompt_parts.append("Correct extraction: \"LabelStar Model System 1\"")
-        
-        prompt_parts.append("\nExample 2: Checkbox Field (YES) Extraction")
-        prompt_parts.append("Machine Description: 'LabelStar with integrated barcode scanner'")
-        prompt_parts.append("Add-on: 'Barcode scanner, high resolution'")
-        prompt_parts.append("Field: 'barcode_scanner_check' (description: 'Barcode Scanner Option')")
-        prompt_parts.append("Correct extraction: \"YES\"")
-        
-        prompt_parts.append("\nExample 3: Checkbox Field (NO) Extraction")
-        prompt_parts.append("Machine Description: 'LabelStar with standard conveyor'")
-        prompt_parts.append("Field: 'extended_conveyor_check' (description: 'Extended Conveyor Option')")
-        prompt_parts.append("Correct extraction: \"NO\" (because extended conveyor is not mentioned)")
-        
-        # Structure the field information by section when using schema format
-        if using_schema_format:
-            # Group fields by section
-            sections = {}
-            for key, field_info in template_placeholder_contexts.items():
-                section = field_info.get("section", "General")
-                if section not in sections:
-                    sections[section] = []
-                sections[section].append((key, field_info))
-            
-            prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section):")
-            
-            for section, fields in sorted(sections.items()):
-                prompt_parts.append(f"\n## {section} SECTION:")
-                
-                # Group by field type within section
-                text_fields = [f for f in fields if f[1].get("type") == "string"]
-                checkbox_fields = [f for f in fields if f[1].get("type") == "boolean"]
-                
-                if text_fields:
-                    prompt_parts.append("TEXT FIELDS:")
-                    for key, field_info in text_fields:
-                        desc = field_info.get("description", key)
-                        subsection = field_info.get("subsection", "")
-                        if subsection:
-                            prompt_parts.append(f"  - '{key}': [{subsection}] {desc}")
-                        else:
-                            prompt_parts.append(f"  - '{key}': {desc}")
-                
-                if checkbox_fields:
-                    prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):")
-                    for key, field_info in checkbox_fields:
-                        desc = field_info.get("description", key)
-                        subsection = field_info.get("subsection", "")
-                        
-                        # Include synonyms and positive indicators for checkbox fields
-                        synonyms = field_info.get("synonyms", [])
-                        positive_indicators = field_info.get("positive_indicators", [])
-                        
-                        # Format the synonyms and indicators for the prompt
-                        synonym_text = ""
-                        if synonyms:
-                            synonym_text = f" [Alternative terms: {', '.join(synonyms[:5])}]" if synonyms else ""
-                        
-                        # Add positive indicators only for the first few checkboxes to avoid making the prompt too long
-                        indicator_text = ""
-                        if positive_indicators and len(checkbox_fields) < 20:  # Only if not too many checkboxes
-                            indicator_text = f" [Indicators: {', '.join(positive_indicators[:3])}]" if positive_indicators else ""
-                        
-                        if subsection:
-                            prompt_parts.append(f"  - '{key}': [{subsection}] {desc}{synonym_text}{indicator_text}")
-                        else:
-                            prompt_parts.append(f"  - '{key}': {desc}{synonym_text}{indicator_text}")
-            
-            # Add section-aware instructions when using schema format
-            prompt_parts = add_section_aware_instructions(template_placeholder_contexts, prompt_parts)
-        else:
-            # Use the old flat format
-            prompt_parts.append("\nTEMPLATE FIELDS TO FILL (Placeholder Key: Description from template):")
-            placeholder_list_for_prompt = []
-            for key, context in template_placeholder_contexts.items():
-                placeholder_list_for_prompt.append(f"  - '{key}': '{context}'")
-            
-            if not placeholder_list_for_prompt:
-                prompt_parts.append("  (No template fields provided to evaluate.)")
-                return {}
-            
-            for item_for_prompt in placeholder_list_for_prompt:
-                prompt_parts.append(item_for_prompt)
+        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section):")
+        for section, fields in sorted(sections.items()):
+            prompt_parts.append(f"\n## {section} SECTION:")
+            text_fields = [f for f in fields if f[1].get("type") == "string"]
+            checkbox_fields = [f for f in fields if f[1].get("type") == "boolean"]
+            if text_fields:
+                prompt_parts.append("TEXT FIELDS:")
+                for key, field_info in text_fields:
+                    desc = field_info.get("description", key)
+                    subsection = field_info.get("subsection", "")
+                    prompt_parts.append(f"  - '{key}': [{subsection if subsection else section}] {desc}")
+            if checkbox_fields:
+                prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):")
+                for key, field_info in checkbox_fields:
+                    desc = field_info.get("description", key)
+                    subsection = field_info.get("subsection", "")
+                    prompt_parts.append(f"  - '{key}': [{subsection if subsection else section}] {desc}")
+    else: # Hierarchical context format
+        sections = {}
+        for key, context in template_placeholder_contexts.items():
+            parts = context.split(" - "); section = parts[0] if parts else "General"
+            if section not in sections: sections[section] = {}
+            subsection = parts[1] if len(parts) > 1 else "General"
+            if subsection not in sections[section]: sections[section][subsection] = []
+            sections[section][subsection].append((key, context))
+        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section and subsection):")
+        for section, subsections in sorted(sections.items()):
+            prompt_parts.append(f"\n## {section} SECTION:")
+            for subsection, fields in sorted(subsections.items()):
+                if subsection != "General": prompt_parts.append(f"\n### {subsection} Subsection:")
+                checkbox_fields = [(k, c) for k, c in fields if k.endswith('_check')]
+                text_fields = [(k, c) for k, c in fields if not k.endswith('_check')]
+                if text_fields: prompt_parts.append("TEXT FIELDS:"); [prompt_parts.append(f"  - '{k}': {c.split(' - ')[-1]}") for k,c in text_fields]
+                if checkbox_fields: prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):"); [prompt_parts.append(f"  - '{k}': {c.split(' - ')[-1]}") for k,c in checkbox_fields]
 
-        prompt_parts.append("\nYOUR TASK & RESPONSE FORMAT:")
-        prompt_parts.append(f"Focus ONLY on the specified machine '{machine_name}' and its add-ons, plus common items.")
-        prompt_parts.append("Carefully analyze all provided information.")
-        prompt_parts.append("For each TEMPLATE FIELD:")
-        prompt_parts.append("  - If the field key ends with '_check' (a checkbox): Determine if it is confirmed as selected for THIS SPECIFIC MACHINE. Look for mentions of the term or its synonyms. Value must be \"YES\" or \"NO\".")
-        prompt_parts.append("  - If the field key does NOT end with '_check' (a text field): Extract the specific information relevant to THIS MACHINE.")
-        prompt_parts.append("  - SPECIFIC INSTRUCTION for 'production_speed': Look for both 'Production Speed' and 'Projected Speed' terms - they refer to the same information. Extract the rate at which the machine processes products, typically expressed in units per minute.")
-        prompt_parts.append("Be accurate and conservative. For checkboxes, if unsure, default to \"NO\".")
-        prompt_parts.append("For text fields, if not found, use an empty string.")
-        prompt_parts.append("IMPORTANT: You MUST include ALL the template fields in your response, even if empty.")
-        prompt_parts.append("Respond with a single, valid JSON object. The keys in the JSON MUST be ALL the TEMPLATE PLACEHOLDER KEYS listed above.")
-        prompt_parts.append("  - For the field 'options_listing': After attempting to fill all other standard fields, review the 'MAIN MACHINE' description, 'ADD-ON ITEMS SPECIFIC TO THIS MACHINE', and 'COMMON ITEMS'. Identify any specific features, components, capabilities, or line items mentioned that were NOT captured by other standard fields. Compile these remaining, unmapped items as a bulleted list (e.g., using '*' or '-') and place this complete list into the 'options_listing' field. If all details seem to be covered by other fields, you can leave 'options_listing' blank or write 'All options covered by standard fields'.")
-        
-        # Add example JSON response format
-        prompt_parts.append("\nEXAMPLE JSON RESPONSE FORMAT:")
-        prompt_parts.append("""```json
-{
-  "machine_model": "LabelStar Model System 1", 
-  "production_speed": "60 units per minute",
-  "barcode_scanner_check": "YES",
-  "extended_conveyor_check": "NO",
-  "customer_name": "ACME Corp",
-  ... (other fields)
+    prompt_parts.extend([
+        "\nYOUR TASK & RESPONSE FORMAT:",
+        "Carefully analyze the MAIN ITEM DESCRIPTION, ADD-ON ITEMS, COMMON/SHARED ITEMS, and FULL PDF TEXT.",
+        "For each TEMPLATE FIELD:",
+        "  - If it's a CHECKBOX (_check): Determine if confirmed (YES/NO). Prioritize specific mentions in item descriptions.",
+        "  - If it's a TEXT field: Extract information. If not found, use an empty string (\"\").",
+        "  - Production Speed: Prioritize speeds mentioned in the MAIN ITEM DESCRIPTION over general project speeds.",
+        "Bundled features (e.g., 'Including: Feature X') mean corresponding _check fields are YES.",
+        "If unsure for a checkbox, default to NO. If a category (e.g., 'Validation Documents') is entirely unmentioned, set its checkboxes to NO.",
+    ])
+
+    if is_sortstar_machine:
+        prompt_parts.extend([
+            "\nIMPORTANT FOR SORTSTAR BASIC SYSTEMS CONFIGURATION:",
+            "The template contains several checkboxes for 'BASIC SYSTEMS > Mechanical Basic Machine configuration' like:",
+            "  - 'bs_984_check': Sortstar 18ft3 220VAC 3 Phases LEFT TO RIGHT",
+            "  - 'bs_1230_check': Sortstar 18ft3 220VAC 3 Phases RIGHT TO LEFT",
+            "  - 'bs_985_check': Sortstar 18ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
+            "  - (and similar for 24ft3 models)",
+            "These options are MUTUALLY EXCLUSIVE. Only ONE of these 'bs_XXXX_check' fields should be YES.",
+            "Determine the correct configuration (size, voltage, and direction) for THIS SPECIFIC SORTSTAR from the quote details (especially the MAIN ITEM DESCRIPTION) and set only the corresponding checkbox to YES. All other 'bs_XXXX_check' fields in this group must be NO.",
+            "For example, if the quote specifies a 'Sortstar 24ft3 220VAC Left to Right', then 'bs_1264_check' should be YES and all other bs_..._check for basic configuration should be NO."
+        ])
+
+    prompt_parts.extend([
+        "Respond with a single, valid JSON object. Keys MUST be ALL the TEMPLATE PLACEHOLDER KEYS, values their extracted text or YES/NO.",
+        "\nEXAMPLE JSON RESPONSE FORMAT:",
+        '''{
+  "machine_model": "SortStar 18ft3", 
+  "production_speed": "Not Specified for this item",
+  "bs_984_check": "YES",
+  "bs_1230_check": "NO",
+  "op_2409_check": "NO",
+  ... (all other fields listed in TEMPLATE FIELDS section)
 }
-```""")
-        
-        prompt_parts.append("\nYour JSON Response:")
-        
-        return "\n".join(prompt_parts)
-
-    # First attempt
-    prompt = build_main_prompt()
-    max_retries = 2
-    retries = 0
-    validation_errors = {}
+''',
+        "\nYour JSON Response:"
+    ])
     
-    while retries <= max_retries:
+    prompt = "\n".join(prompt_parts)
+
+    # print("\n----- LLM PROMPT (machine-specific fields) -----") 
+    # print(prompt)
+    # print("--------------------------------------------\n")
+
+    # Initialize with default values based on all template placeholders
+    llm_response_data = {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
+
+    try:
+        print("Sending machine-specific prompt to Gemini API...")
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
+        
+        cleaned_response_text = response.text.strip()
+        if cleaned_response_text.startswith("```json"):
+            cleaned_response_text = cleaned_response_text[7:]
+            if cleaned_response_text.endswith("```"):
+                cleaned_response_text = cleaned_response_text[:-3]
+        cleaned_response_text = cleaned_response_text.strip()
+        
         try:
-            print(f"Sending machine-specific prompt for '{machine_name}' to Gemini API (attempt {retries + 1})...")
-            safety_settings = [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-            ]
-            response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
-            
-            cleaned_response_text = response.text.strip()
-            if cleaned_response_text.startswith("```json"):
-                cleaned_response_text = cleaned_response_text[7:]
-                if cleaned_response_text.endswith("```"):
-                    cleaned_response_text = cleaned_response_text[:-3]
-            cleaned_response_text = cleaned_response_text.strip()
-            
-            try:
-                parsed_llm_output = json.loads(cleaned_response_text)
-                if isinstance(parsed_llm_output, dict):
-                    # Validate the response if using schema format
-                    if using_schema_format:
-                        validation_errors = validate_llm_response(parsed_llm_output, template_placeholder_contexts)
-                        if validation_errors and retries < max_retries:
-                            print(f"Validation errors found in LLM response, retrying ({retries + 1}/{max_retries}):")
-                            for field, errors in validation_errors.items():
-                                print(f"  - '{field}': {', '.join(errors)}")
-                            retries += 1
-                            prompt = build_main_prompt(include_validation_feedback=True, validation_errors=validation_errors)
-                            continue
-                    
-                    # Update the response data with validated values
-                    for key, value in parsed_llm_output.items():
-                        if key in llm_response_data: # Only update keys that were expected
-                            is_checkbox = (using_schema_format and 
-                                         isinstance(template_placeholder_contexts.get(key), dict) and 
-                                         template_placeholder_contexts.get(key, {}).get("type") == "boolean") or \
-                                         (not using_schema_format and key.endswith("_check"))
-                            
-                            if is_checkbox:
-                                if isinstance(value, str) and value.upper() in ["YES", "NO"]:
-                                    llm_response_data[key] = value.upper()
-                                # else: keep default "NO"
-                            else: # It's a text field
-                                llm_response_data[key] = str(value) # Assign extracted text
-                    
-                    # If we got here without validation errors or we're at max retries, break the loop
-                    break
-                else:
-                    print(f"Warning: LLM response for machine '{machine_name}' was not a JSON dictionary: {parsed_llm_output}")
-                    if retries < max_retries:
-                        retries += 1
-                        prompt = build_main_prompt(include_validation_feedback=True, 
-                                                 validation_errors={"format": ["Response was not a valid JSON object"]})
-                        continue
-                    else:
-                        break
-            except json.JSONDecodeError as e:
-                print(f"Error decoding LLM JSON response for machine '{machine_name}': {e}")
-                print(f"LLM Response Text was: {repr(cleaned_response_text)}")
-                if retries < max_retries:
-                    retries += 1
-                    prompt = build_main_prompt(include_validation_feedback=True, 
-                                             validation_errors={"format": ["Response was not valid JSON: " + str(e)]})
-                    continue
-                else:
-                    break
-        except Exception as e:
-            print(f"Error getting LLM data for machine '{machine_name}': {e}")
-            if retries < max_retries:
-                retries += 1
-                continue
+            parsed_llm_output = json.loads(cleaned_response_text)
+            if isinstance(parsed_llm_output, dict):
+                for key, value in parsed_llm_output.items():
+                    if key in llm_response_data: # Only update keys that were expected
+                        is_checkbox = (using_schema_format and 
+                                     isinstance(template_placeholder_contexts.get(key), dict) and 
+                                     template_placeholder_contexts.get(key, {}).get("type") == "boolean") or \
+                                     (not using_schema_format and key.endswith("_check"))
+                        
+                        if is_checkbox:
+                            if isinstance(value, str) and value.upper() in ["YES", "NO"]:
+                                llm_response_data[key] = value.upper()
+                            # else: keep default "NO"
+                        else: # It's a text field
+                            llm_response_data[key] = str(value) # Assign extracted text
             else:
-                break
+                print(f"Warning: LLM response was not a JSON dictionary: {parsed_llm_output}")
+        except json.JSONDecodeError as e:
+            print(f"Error decoding LLM JSON response: {e}")
+            print(f"LLM Response Text was: {repr(cleaned_response_text)}")
+    except Exception as e:
+        print(f"Error communicating with Gemini API or processing response: {e}")
+        traceback.print_exc()
     
     # Apply post-processing rules to improve the data
     corrected_data = apply_post_processing_rules(llm_response_data, template_placeholder_contexts)
-    
     return corrected_data
 
 # Example Usage:
