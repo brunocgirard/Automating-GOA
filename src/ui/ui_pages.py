@@ -8,6 +8,13 @@ import shutil
 from datetime import datetime
 import uuid
 import re
+import numpy as np
+import time
+import random
+from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
+from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings
+# Import SortStar parsing function
+from src.utils.sortstar_template_utils import extract_placeholder_context_hierarchical as sortstar_extract_placeholder_context
 
 # Import from other modules
 from src.workflows.profile_workflow import (
@@ -17,9 +24,6 @@ from src.workflows.profile_workflow import (
 
 # Import from utility modules
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
-from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, explicit_placeholder_mappings, parse_full_fields_outline
-from src.utils import sortstar_template_utils # Added
-from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings # Added
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.crm_utils import (
@@ -531,29 +535,56 @@ def generate_printable_report(template_data, machine_name="", template_type="", 
     Returns:
         HTML string for the report
     """
-    # We've already imported these at the top of the file now
-    # from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
-    # from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings
-    # from src.utils.sortstar_template_utils import parse_full_fields_outline as sortstar_parse_full_fields_outline
     import datetime
     import os
 
+    # Select the appropriate mappings and outline file based on machine type
     current_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
     outline_file_to_use = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
     
+    # Initialize outline structure
     outline_structure = {}
+    
+    # Function to convert SortStar mappings to proper outline structure
+    def build_sortstar_outline_from_mappings(mappings):
+        """Convert SortStar explicit mappings to a proper outline structure"""
+        outline = {}
+        for key, value_path in mappings.items():
+            parts = [p.strip() for p in value_path.split(" > ")]
+            if len(parts) >= 1:
+                section = parts[0]
+                if section not in outline:
+                    outline[section] = {"_direct_fields_": [], "_subsections_": {}}
+                
+                # Handle subsections
+                if len(parts) >= 3:  # Section > Subsection > Field
+                    subsection = parts[1]
+                    if subsection not in outline[section]["_subsections_"]:
+                        outline[section]["_subsections_"][subsection] = []
+                    # Add the field key to track later
+                    outline[section]["_subsections_"][subsection].append(key)
+                elif len(parts) == 2:  # Section > Field (no subsection)
+                    outline[section]["_direct_fields_"].append(key)
+        return outline
+    
+    # Read and parse the outline file if it exists
     if os.path.exists(outline_file_to_use):
         with open(outline_file_to_use, 'r', encoding='utf-8') as f:
             outline_content = f.read()
-        # ...
-        if os.path.exists(outline_file_to_use):
-            with open(outline_file_to_use, 'r', encoding='utf-8') as f:
-                outline_content = f.read()
-            # Always use parse_full_fields_outline from template_utils (already imported at top of file)
+        
+        # Use appropriate parsing function based on machine type
+        if is_sortstar_machine:
+            # For SortStar, build proper outline structure from mappings
+            outline_structure = build_sortstar_outline_from_mappings(current_mappings)
+        else:
+            # For regular templates, use the standard outline parser
             outline_structure = parse_full_fields_outline(outline_content)
+    else:
+        # If outline file doesn't exist but we have SortStar machine
+        if is_sortstar_machine:
+            outline_structure = build_sortstar_outline_from_mappings(current_mappings)
         else:
             st.warning(f"Outline file not found: {outline_file_to_use}. Report structure may be less organized.")
-        # ...
 
     # Building categories remain the same
     building_categories = {
@@ -609,14 +640,25 @@ def generate_printable_report(template_data, machine_name="", template_type="", 
         if field_key in current_mappings:
             full_path_string = current_mappings[field_key]
             field_info["path"] = full_path_string
-            parts = [p.strip() for p in full_path_string.split(" - ")] 
+            
+            # Handle different delimiters based on machine type
+            if is_sortstar_machine:
+                parts = [p.strip() for p in full_path_string.split(" > ")]
+            else:
+                parts = [p.strip() for p in full_path_string.split(" - ")]
 
             if parts:
                 field_info["label"] = parts[-1] # Last part is usually the most specific label
                 potential_section = parts[0]
                 potential_subsection = None
+                
                 if len(parts) > 2:
-                    potential_subsection = " - ".join(parts[1:-1])
+                    if is_sortstar_machine:
+                        # For SortStar, use just the second part as subsection
+                        potential_subsection = parts[1]
+                    else:
+                        # For regular templates, join everything between section and label
+                        potential_subsection = " - ".join(parts[1:-1])
                 elif len(parts) == 2: # Section - Field, no explicit subsection in mapping
                     potential_subsection = None
                 
@@ -771,8 +813,33 @@ def generate_printable_report(template_data, machine_name="", template_type="", 
     
     # --- Table of Contents --- 
     html += '<div class="toc no-print"><h2>Table of Contents</h2><ul>'
-    # Use the order from outline_structure if available, otherwise sorted keys of report_data_by_outline
-    toc_section_keys = list(outline_structure.keys()) if outline_structure else sorted(list(report_data_by_outline.keys()))
+    
+    # Determine section order based on machine type
+    if is_sortstar_machine:
+        # Define SortStar section ordering
+        sortstar_section_order = [
+            "GENERAL ORDER ACKNOWLEDGEMENT", 
+            "BASIC SYSTEMS", 
+            "OPTIONAL SYSTEMS", 
+            "Order Identification", 
+            "Utility Specifications"
+        ]
+        
+        # Create ordered list of sections based on SortStar priority
+        toc_section_keys = []
+        
+        # First add sections in the predefined order if they exist
+        for ordered_section in sortstar_section_order:
+            if ordered_section in report_data_by_outline:
+                toc_section_keys.append(ordered_section)
+        
+        # Then add any remaining sections from report_data_by_outline that weren't in the predefined order
+        for section in report_data_by_outline.keys():
+            if section not in toc_section_keys:
+                toc_section_keys.append(section)
+    else:
+        # Use the order from outline_structure if available, otherwise sorted keys of report_data_by_outline
+        toc_section_keys = list(outline_structure.keys()) if outline_structure else sorted(list(report_data_by_outline.keys()))
 
     for section_name in toc_section_keys:
         if section_name not in report_data_by_outline: continue # Skip if section from outline has no data
@@ -794,7 +861,8 @@ def generate_printable_report(template_data, machine_name="", template_type="", 
     html += '</ul></div>'
     
     # --- Main Report Content --- 
-    report_section_keys = list(outline_structure.keys()) if outline_structure else sorted(list(report_data_by_outline.keys()))
+    # Use the same section order as TOC
+    report_section_keys = toc_section_keys
 
     for section_name in report_section_keys:
         if section_name not in report_data_by_outline: continue
@@ -973,8 +1041,6 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
     try:
         from src.utils.crm_utils import save_goa_modification
         # Imports for explicit_placeholder_mappings are already at the top of the file
-        # from src.utils.template_utils import explicit_placeholder_mappings
-        # from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings
         import re
         
         is_sortstar_machine = False
@@ -982,6 +1048,7 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
             sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
             if any(alias in machine_name.lower() for alias in sortstar_aliases):
                 is_sortstar_machine = True
+                st.info(f"SortStar machine template editor active for: {machine_name}")
         
         current_explicit_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
         
@@ -994,6 +1061,125 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
             return
             
         template_data = template["template_data"]
+        
+        # Check if options_listing field exists and show its value
+        if "options_listing" in template_data:
+            options_value = template_data["options_listing"]
+            with st.expander("Debug: Options Listing Field", expanded=False):
+                st.markdown("**Current Options Listing Value:**")
+                st.text(options_value)
+                st.markdown("**Machine Type:** " + ("SortStar" if is_sortstar_machine else "Regular"))
+                st.markdown(f"**Mapping for options_listing:** {current_explicit_mappings.get('options_listing', 'Not found in mappings')}")
+
+        # Make sure options_listing is properly handled for SortStar machines
+        if is_sortstar_machine and "options_listing" in template_data:
+            # For SortStar machines, we always regenerate the options_listing
+            # to ensure it shows the actual selections instead of placeholder structure
+            selected_details = []
+            
+            # First try to find the machine record to get its add-ons
+            machine_record = None
+            machine_add_ons = []
+            
+            if machine_id:
+                # Load machine data from the database to get add-ons
+                from src.utils.crm_utils import load_machines_for_quote
+                
+                # First find the quote_ref for this machine
+                for client in st.session_state.all_crm_clients:
+                    machines = load_machines_for_quote(client.get('quote_ref', ''))
+                    for m in machines:
+                        if m.get('id') == machine_id:
+                            machine_record = m
+                            # Try to get add-ons from machine_data
+                            machine_data_content = machine_record.get("machine_data")
+                            if isinstance(machine_data_content, str):
+                                try:
+                                    import json
+                                    machine_data_content = json.loads(machine_data_content)
+                                    if "add_ons" in machine_data_content:
+                                        machine_add_ons = machine_data_content["add_ons"]
+                                except json.JSONDecodeError:
+                                    st.warning(f"Could not parse machine_data JSON for add-ons")
+                            elif isinstance(machine_data_content, dict) and "add_ons" in machine_data_content:
+                                machine_add_ons = machine_data_content["add_ons"]
+                            break
+                    if machine_record:
+                        break
+            
+            # Add actual add-ons from the machine data (like regular template)
+            if machine_add_ons:
+                for i, addon in enumerate(machine_add_ons, 1):
+                    if "description" in addon and addon["description"]:
+                        # Format description nicely
+                        desc_lines = addon["description"].split('\n')
+                        main_desc = desc_lines[0] if desc_lines else addon["description"]
+                        selected_details.append(f"- Add-on {i}: {main_desc}")
+            
+            # If no add-ons were found, fall back to template fields
+            if not selected_details:
+                # Process each field in the template to generate selections list
+                for field_key, value in template_data.items():
+                    if field_key != "options_listing" and value:
+                        is_checkbox = field_key.endswith("_check")
+                        
+                        # Skip fields with 'none', 'not selected', or similar values
+                        if isinstance(value, str) and any(term in value.lower() for term in ["none", "not selected", "not specified"]):
+                            continue
+                            
+                        # Get a user-friendly description for the field
+                        if field_key in current_explicit_mappings:
+                            field_path = current_explicit_mappings[field_key]
+                            
+                            # For SortStar, extract just the field name without the full hierarchy
+                            if ">" in field_path:
+                                parts = field_path.split(" > ")
+                                if len(parts) > 1:
+                                    # Use only the most specific part (last part) as the field description
+                                    # This matches how regular templates display options
+                                    field_description = parts[-1].strip()
+                                else:
+                                    field_description = field_path.strip()
+                            else:
+                                field_description = field_path.strip()
+                        else:
+                            field_description = field_key.replace("_", " ").capitalize()
+                        
+                        # Skip if the field description contains "none" or similar
+                        if any(term in field_description.lower() for term in ["none", "not selected", "not specified"]):
+                            continue
+                        
+                        # Add selected checkboxes and meaningful text fields
+                        if is_checkbox and str(value).upper() == "YES":
+                            selected_details.append(f"• {field_description}")
+                        elif not is_checkbox and field_key not in ["customer", "machine", "quote"]:
+                            # Only add non-checkbox fields if they have meaningful content
+                            if isinstance(value, str) and value.strip() and value.lower() not in ["no", "false", "0"]:
+                                selected_details.append(f"• {field_description}: {value}")
+            
+            # Create the new options_listing content
+            if selected_details:
+                new_options_listing = "Selected Options and Specifications:\n" + "\n".join(selected_details)
+            else:
+                new_options_listing = "No options or specifications selected for this machine."
+            
+            # Compare with current value to see if update needed
+            current_options_listing = template_data["options_listing"]
+            if current_options_listing != new_options_listing:
+                # Content needs updating - save the change
+                template_data["options_listing"] = new_options_listing
+                try:
+                    save_goa_modification(
+                        template_id, "options_listing", 
+                        current_options_listing, 
+                        new_options_listing,
+                        "Auto-regenerated for SortStar machine", "System"
+                    )
+                    st.success("Updated options_listing field with actual selections")
+                    # Force reload to display the updated content
+                    st.rerun()
+                except Exception as e:
+                    st.warning(f"Could not save regenerated options_listing: {e}")
         
         # Display template info
         st.markdown(f"**Template ID:** {template_id}")
@@ -1030,23 +1216,36 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                              (isinstance(current_value, str) and current_value.upper() in ["YES", "NO", "TRUE", "FALSE"]))
                 
                 if field_key in current_explicit_mappings: # Use current_explicit_mappings
-                    path = current_explicit_mappings[field_key] # Use current_explicit_mappings
-                    parts = [p.strip() for p in path.split(" - ")]
+                    path = current_explicit_mappings[field_key]
+                    
+                    # Handle the difference in delimiters: SortStar uses ">" while regular templates use "-"
+                    if is_sortstar_machine:
+                        parts = [p.strip() for p in path.split(" > ")]
+                    else:
+                        parts = [p.strip() for p in path.split(" - ")]
                     
                     section = parts[0]
                     subsection = None
                     field_label = parts[-1]
 
-                    if len(parts) > 2: # Section - Subsection - Field
-                        subsection = " - ".join(parts[1:-1])
-                    elif len(parts) == 2: # Section - Field
+                    if len(parts) > 2: # Section > Subsection > Field
+                        subsection = parts[1]  # For SortStar, use first subsection only
+                    elif len(parts) == 2: # Section > Field
                         pass # subsection remains None, field_label is parts[1]
-                    # else: # Only section or malformed, treat as field label under section (field_label already set to parts[-1])
 
                     if not section: # Should not happen if mappings are correct
                         section = "Uncategorized"
                     if not field_label: # Should not happen
                         field_label = field_key
+
+                    # Special handling for options_listing field to ensure it's in the correct section
+                    if field_key == "options_listing":
+                        if is_sortstar_machine:
+                            section = "Option Listing"
+                            subsection = None
+                        else:
+                            section = "Option Listing"
+                            subsection = None
 
                     if section not in structured_fields:
                         structured_fields[section] = {}
@@ -1061,36 +1260,104 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                         "key": field_key, 
                         "label": field_label, 
                         "value": current_value, 
-                        "is_boolean": is_boolean
+                        "is_boolean": is_boolean,
+                        "path": path  # Store full path for reference
                     })
                 else:
-                    other_fields.append({
-                        "key": field_key, 
-                        "label": field_key, # Use key as label if not in mappings
-                        "value": current_value, 
-                        "is_boolean": is_boolean
-                    })
+                    # Special handling for options_listing even if not in mappings
+                    if field_key == "options_listing":
+                        if "Option Listing" not in structured_fields:
+                            structured_fields["Option Listing"] = {"_fields_": []}
+                        
+                        structured_fields["Option Listing"]["_fields_"].append({
+                            "key": field_key,
+                            "label": "Additional Quoted Options",
+                            "value": current_value,
+                            "is_boolean": False,
+                            "path": "Option Listing > Additional Quoted Options" if is_sortstar_machine else "Option Listing - Additional Quoted Options"
+                        })
+                    else:
+                        other_fields.append({
+                            "key": field_key, 
+                            "label": field_key, # Use key as label if not in mappings
+                            "value": current_value, 
+                            "is_boolean": is_boolean
+                        })
 
-            # Sort sections alphabetically by name
-            sorted_sections_list = sorted(structured_fields.items(), key=lambda item: item[0])
+            # For SortStar machines, use a specific order for main sections
+            if is_sortstar_machine:
+                # Define SortStar section ordering
+                sortstar_section_order = [
+                    "GENERAL ORDER ACKNOWLEDGEMENT", 
+                    "BASIC SYSTEMS", 
+                    "OPTIONAL SYSTEMS", 
+                    "Order Identification", 
+                    "Utility Specifications"
+                ]
+                
+                # Create a sorting key function that respects this order
+                def sortstar_section_sort_key(section_item):
+                    section_name = section_item[0]
+                    if section_name in sortstar_section_order:
+                        return (sortstar_section_order.index(section_name), section_name)
+                    return (len(sortstar_section_order), section_name)
+                
+                sorted_sections_list = sorted(structured_fields.items(), key=sortstar_section_sort_key)
+            else:
+                # For regular templates, just sort alphabetically
+                sorted_sections_list = sorted(structured_fields.items(), key=lambda item: item[0])
 
             for section_name, subsections_dict in sorted_sections_list:
                 # Determine if the expander should be open by default
                 expanded_default = False
-                if is_sortstar_machine and section_name.upper() == "BASIC SYSTEMS":
+                if is_sortstar_machine and section_name in ["BASIC SYSTEMS", "GENERAL ORDER ACKNOWLEDGEMENT"]:
+                    expanded_default = True
+                # Also expand Option Listing section by default for both machine types
+                if section_name == "Option Listing" or (is_sortstar_machine and section_name == "Option Listing"):
                     expanded_default = True
                 
                 with st.expander(f"**{section_name}**", expanded=expanded_default):
-                    # Sort subsections alphabetically, ensuring "_fields_" (direct fields) comes first or last as desired
-                    # Here, sorting normally will place "_fields_" based on its string value.
-                    sorted_subsections_list = sorted(subsections_dict.items(), key=lambda item: item[0] if item[0] != "_fields_" else "")
+                    # Special sorting for SortStar subsections
+                    if is_sortstar_machine:
+                        # For SortStar, keep direct fields first, then sort subsections
+                        sorted_subsections_list = []
+                        if "_fields_" in subsections_dict:
+                            sorted_subsections_list.append(("_fields_", subsections_dict["_fields_"]))
+                        
+                        # Add other subsections sorted alphabetically
+                        other_subsections = [(k, v) for k, v in subsections_dict.items() if k != "_fields_"]
+                        sorted_subsections_list.extend(sorted(other_subsections, key=lambda item: item[0]))
+                    else:
+                        # For regular templates, sort subsections normally
+                        sorted_subsections_list = sorted(subsections_dict.items(), key=lambda item: item[0] if item[0] != "_fields_" else "")
                     
                     for subsection_name, fields_list in sorted_subsections_list:
                         if subsection_name != "_fields_":
                             st.markdown(f"##### {subsection_name}")
                         
-                        # Sort fields within the subsection/section alphabetically by label
-                        sorted_fields_list = sorted(fields_list, key=lambda x: x["label"])
+                        # Sort fields within the subsection/section by position in mappings
+                        if is_sortstar_machine:
+                            # Sort fields based on priority for SortStar
+                            def get_sortstar_field_priority(field_info):
+                                # Give options_listing highest priority for SortStar
+                                if field_info["key"] == "options_listing":
+                                    return -1
+                                # Otherwise use the mapping index as before
+                                keys_list = list(current_explicit_mappings.keys())
+                                try:
+                                    return keys_list.index(field_info["key"])
+                                except ValueError:
+                                    return len(keys_list)
+                            
+                            sorted_fields_list = sorted(fields_list, key=get_sortstar_field_priority)
+                        else:
+                            # For regular templates, prioritize options_listing and then sort by label
+                            def get_regular_field_priority(field_info):
+                                if field_info["key"] == "options_listing":
+                                    return -1
+                                return 0
+                                
+                            sorted_fields_list = sorted(fields_list, key=lambda x: (get_regular_field_priority(x), x["label"]))
 
                         for field_info in sorted_fields_list:
                             field_key = field_info["key"]
@@ -1350,6 +1617,14 @@ def show_template_report_page():
             goa_template_data = None
             goa_template_type_name = "GOA"
             machine_name_for_report = next((m.get('machine_name', '') for m in machines_for_client if m.get('id') == selected_machine_id), "Unknown Machine")
+            
+            # Check if this is a SortStar machine based on the machine name
+            is_sortstar_machine = False
+            if machine_name_for_report:
+                sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
+                if any(alias in machine_name_for_report.lower() for alias in sortstar_aliases):
+                    is_sortstar_machine = True
+                    st.info(f"SortStar machine detected: {machine_name_for_report}")
 
             for t in templates:
                 if str(t.get('template_type', '')).lower() == "goa":
@@ -1372,7 +1647,7 @@ def show_template_report_page():
             if goa_template_data:
                 st.markdown("---")
                 st.markdown("### GOA Build Summary") 
-                show_printable_summary_report(goa_template_data, machine_name_for_report, goa_template_type_name)
+                show_printable_summary_report(goa_template_data, machine_name_for_report, goa_template_type_name, is_sortstar_machine)
                 st.info("To print this summary, use your browser's print function (CTRL+P or CMD+P) or download the HTML version and open it in a browser.")
             else:
                 st.error(f"Valid GOA template data not found for machine: {machine_name_for_report}.")
@@ -1491,6 +1766,13 @@ def show_template_report_page():
                     machine_id = machine.get('id')
                     machine_name = machine.get('machine_name', f"Machine ID: {machine_id}")
                     
+                    # Check if this is a SortStar machine
+                    is_sortstar_machine = False
+                    if machine_name:
+                        sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
+                        if any(alias in machine_name.lower() for alias in sortstar_aliases):
+                            is_sortstar_machine = True
+                    
                     # Load templates for this machine
                     templates_data = load_machine_templates_with_modifications(machine_id)
                     templates = templates_data.get('templates', [])
@@ -1503,7 +1785,8 @@ def show_template_report_page():
                         machine_report = generate_printable_report(
                             template['template_data'],
                             machine_name,
-                            selected_template_type
+                            selected_template_type,
+                            is_sortstar_machine
                         )
                         
                         # Extract the body content (between <body> and </body>)
@@ -1935,6 +2218,15 @@ def show_crm_management_page():
                             show_goa_modifications_ui(selected_machine_id, machine_name=selected_machine_name) # Pass machine_name
         except Exception as e: st.error(f"Error in CRM client display: {e}"); import traceback; traceback.print_exc()
     else: st.info("Select a client to view/edit details.")
+    
+    st.markdown("---"); st.subheader("All Client Records Table")
+    if st.session_state.all_crm_clients:
+        df_all_clients = pd.DataFrame(st.session_state.all_crm_clients)
+        all_clients_cols = ['id', 'quote_ref', 'customer_name', 'machine_model', 'country_destination', 'sold_to_address', 'ship_to_address', 'telephone', 'customer_contact_person', 'customer_po', 'processing_date']
+        df_all_clients_final = df_all_clients[[c for c in all_clients_cols if c in df_all_clients.columns]]
+        st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
+    else: st.info("No client records found.")
+    
     with st.expander("Manually Add New Client Record"):
         with st.form(key=f"crm_add_new_form_{st.session_state.run_key}"):
             st.markdown("**Enter New Client Details:**")
@@ -1953,13 +2245,6 @@ def show_crm_management_page():
                     new_client_data = {'quote_ref': new_quote_ref, 'customer_name': new_cust_name, 'machine_model': new_machine_model, 'country_destination': new_country, 'sold_to_address': new_sold_addr, 'ship_to_address': new_ship_addr, 'telephone': new_tel, 'customer_contact_person': new_contact, 'customer_po': new_po}
                     if save_client_info(new_client_data): st.success("New client added!"); load_crm_data(); st.rerun()
                     else: st.error("Failed to add new client.")
-    st.markdown("---"); st.subheader("All Client Records Table")
-    if st.session_state.all_crm_clients:
-        df_all_clients = pd.DataFrame(st.session_state.all_crm_clients)
-        all_clients_cols = ['id', 'quote_ref', 'customer_name', 'machine_model', 'country_destination', 'sold_to_address', 'ship_to_address', 'telephone', 'customer_contact_person', 'customer_po', 'processing_date']
-        df_all_clients_final = df_all_clients[[c for c in all_clients_cols if c in df_all_clients.columns]]
-        st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
-    else: st.info("No client records found.")
 
 def show_chat_page():
     """
@@ -2068,16 +2353,48 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
     outline_file_to_use = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
 
     outline_structure = {}
-        # ...
+    
+    # Function to convert SortStar mappings to proper outline structure
+    def build_sortstar_outline_from_mappings(mappings):
+        """Convert SortStar explicit mappings to a proper outline structure"""
+        outline = {}
+        for key, value_path in mappings.items():
+            parts = [p.strip() for p in value_path.split(" > ")]
+            if len(parts) >= 1:
+                section = parts[0]
+                if section not in outline:
+                    outline[section] = {"_direct_fields_": [], "_subsections_": {}}
+                
+                # Handle subsections
+                if len(parts) >= 3:  # Section > Subsection > Field
+                    subsection = parts[1]
+                    if subsection not in outline[section]["_subsections_"]:
+                        outline[section]["_subsections_"][subsection] = []
+                    # Add the field key to track later
+                    outline[section]["_subsections_"][subsection].append(key)
+                elif len(parts) == 2:  # Section > Field (no subsection)
+                    outline[section]["_direct_fields_"].append(key)
+        return outline
+    
+    # Read and parse the outline file if it exists
     if os.path.exists(outline_file_to_use):
         with open(outline_file_to_use, 'r', encoding='utf-8') as f:
             outline_content = f.read()
-        # Always use parse_full_fields_outline from template_utils (already imported at top of file)
-        outline_structure = parse_full_fields_outline(outline_content)
+        
+        # Use appropriate parsing function based on machine type
+        if is_sortstar_machine:
+            # For SortStar, build proper outline structure from mappings
+            outline_structure = build_sortstar_outline_from_mappings(current_mappings)
+        else:
+            # For regular templates, use the standard outline parser
+            outline_structure = parse_full_fields_outline(outline_content)
     else:
-        # print(f"DEBUG: Outline file not found: {outline_file_to_use}. Report will list all items under 'Additional Specifications'.")
-        pass # Keep outline_structure as empty dict
-        # ...
+        # If outline file doesn't exist but we have SortStar machine
+        if is_sortstar_machine:
+            outline_structure = build_sortstar_outline_from_mappings(current_mappings)
+        else:
+            # print(f"DEBUG: Outline file not found: {outline_file_to_use}. Report will list all items under 'Additional Specifications'.")
+            pass # Keep outline_structure as empty dict
 
     # Initialize report_data_by_outline based on the structure of outline_structure
     report_data_by_outline = {}
@@ -2135,7 +2452,13 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
         
         # Get descriptive path and final label
         descriptive_path = current_mappings.get(actual_field_key, actual_field_key)
-        path_parts = [p.strip() for p in descriptive_path.split(" - ")]
+        
+        # Handle different delimiters based on machine type
+        if is_sortstar_machine:
+            path_parts = [p.strip() for p in descriptive_path.split(" > ")]
+        else:
+            path_parts = [p.strip() for p in descriptive_path.split(" - ")]
+            
         final_label_for_item = path_parts[-1]
 
         # --- Stricter "None Option" Filter (applied AFTER display_value and label are determined) ---
@@ -2143,9 +2466,20 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
         current_item_label_lower = final_label_for_item.lower().strip()
         descriptive_path_lower = descriptive_path.lower()
 
-        if current_item_label_lower == "none" or descriptive_path_lower.endswith(" - none") or descriptive_path_lower.endswith(" - none (checkbox)"):
-            # print(f"DEBUG: FILTERED (is None option): Key '{actual_field_key}', Label: '{final_label_for_item}', Path: '{descriptive_path}', Value: '{value_str}', Display: '{display_value}'")
+        # Check for "None" options considering different delimiters based on machine type
+        if current_item_label_lower == "none":
+            # print(f"DEBUG: FILTERED (is None option - label): Key '{actual_field_key}', Label: '{final_label_for_item}'")
             continue
+            
+        # Check path endings with the correct delimiter
+        if is_sortstar_machine:
+            if descriptive_path_lower.endswith(" > none") or descriptive_path_lower.endswith(" > none (checkbox)"):
+                # print(f"DEBUG: FILTERED (is None option - SortStar path): Key '{actual_field_key}', Path: '{descriptive_path}'")
+                continue
+        else:
+            if descriptive_path_lower.endswith(" - none") or descriptive_path_lower.endswith(" - none (checkbox)"):
+                # print(f"DEBUG: FILTERED (is None option - regular path): Key '{actual_field_key}', Path: '{descriptive_path}'")
+                continue
         # --- End of "None Option" Filter ---
         
         # If after all this, display_value became empty (e.g. a boolean False not caught above, or a YES that was a None option)
@@ -2188,7 +2522,13 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
                     if target_first_level_subsection_in_outline:
                         # Item belongs to this identified first-level subsection
                         # The label for the item should be the rest of its path parts
-                        field_info["label"] = " - ".join(path_parts[2:]) if len(path_parts) > 2 else final_label_for_item # Use original final_label if no deeper parts
+                        if is_sortstar_machine and len(path_parts) > 2:
+                            # For SortStar, join with " > " as that's the delimiter used
+                            field_info["label"] = " > ".join(path_parts[2:]) if len(path_parts) > 2 else final_label_for_item
+                        else:
+                            # For regular templates, join with " - "
+                            field_info["label"] = " - ".join(path_parts[2:]) if len(path_parts) > 2 else final_label_for_item
+                            
                         if not field_info["label"]: field_info["label"] = final_label_for_item # safety for cases like "Sec - Sub" (no further parts)
                         
                         # print(f"DEBUG: Mapping to Outline SUBN: Key '{actual_field_key}' -> Sec '{target_section_name_in_outline}' -> Sub '{target_first_level_subsection_in_outline}' (Label: {field_info[\"label\"]})")
@@ -2196,7 +2536,13 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
                         mapped_to_outline = True
                     elif len(path_parts) >= 2: # Path looked like it had a field/sub-identifier after section, but it didn't match a known subsection
                         # Treat as a direct field under the section. Label is parts[1:]
-                        field_info["label"] = " - ".join(path_parts[1:]) if len(path_parts) > 1 else final_label_for_item
+                        if is_sortstar_machine:
+                            # For SortStar, join with " > "
+                            field_info["label"] = " > ".join(path_parts[1:]) if len(path_parts) > 1 else final_label_for_item
+                        else:
+                            # For regular templates, join with " - "
+                            field_info["label"] = " - ".join(path_parts[1:]) if len(path_parts) > 1 else final_label_for_item
+                            
                         if not field_info["label"]: field_info["label"] = final_label_for_item
                         # print(f"DEBUG: Mapping to Outline DIRECT (path >= 2, no sub match): Key '{actual_field_key}' -> Sec '{target_section_name_in_outline}' (Label: {field_info[\"label\"]})")
                         report_data_by_outline[target_section_name_in_outline]["_direct_fields_"].append(field_info)
@@ -2288,7 +2634,32 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
     
     # Iterate through sections in the order defined by outline_structure keys for rendering
     # This ensures the report follows the outline's section sequence.
-    rendered_section_names = list(outline_structure.keys()) if outline_structure else list(report_data_by_outline.keys())
+    if is_sortstar_machine:
+        # Define SortStar section ordering
+        sortstar_section_order = [
+            "GENERAL ORDER ACKNOWLEDGEMENT", 
+            "BASIC SYSTEMS", 
+            "OPTIONAL SYSTEMS", 
+            "Order Identification", 
+            "Utility Specifications"
+        ]
+        
+        # Create ordered list of sections based on SortStar priority
+        rendered_section_names = []
+        
+        # First add sections in the predefined order if they exist
+        for ordered_section in sortstar_section_order:
+            if ordered_section in report_data_by_outline:
+                rendered_section_names.append(ordered_section)
+        
+        # Then add any remaining sections from report_data_by_outline that weren't in the predefined order
+        for section in report_data_by_outline.keys():
+            if section not in rendered_section_names:
+                rendered_section_names.append(section)
+    else:
+        # For regular templates, use outline structure order or alphabetical
+        rendered_section_names = list(outline_structure.keys()) if outline_structure else list(report_data_by_outline.keys())
+    
     has_any_content = False
 
     for section_name_to_render in rendered_section_names:
@@ -2314,9 +2685,31 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
             # Items are already sorted by full_path_label before this HTML generation part
             for item in direct_fields:
                 display_value = item["value"]
-                if item["key"] == "options_listing" and len(str(display_value)) > 150:
-                    display_value = str(display_value)[:150] + "..."
-                html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
+                # Special handling for options_listing - show as bullet points
+                if item["key"] == "options_listing":
+                    # Remove "Selected Options and Specifications:" header if present
+                    cleaned_value = display_value
+                    if isinstance(cleaned_value, str) and "Selected Options and Specifications:" in cleaned_value:
+                        cleaned_value = cleaned_value.replace("Selected Options and Specifications:", "").strip()
+                    
+                    # Format as nested bullet list instead of truncating
+                    html += f'<li><span class="spec-label">{item["label"]}:</span></li>'
+                    html += '<li><ul style="list-style-type: disc; margin-left: 30px;">'
+                    
+                    # Split by lines and create bullet points
+                    if isinstance(cleaned_value, str):
+                        lines = cleaned_value.split('\n')
+                        for line in lines:
+                            line = line.strip()
+                            if line:  # Skip empty lines
+                                html += f'<li>{line}</li>'
+                    else:
+                        html += f'<li>{cleaned_value}</li>'
+                        
+                    html += '</ul></li>'
+                else:
+                    # Normal field handling
+                    html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
             html += '</ul>'
 
         if section_has_subsection_items:
@@ -2344,9 +2737,31 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
                     # Items are already sorted by full_path_label
                     for item in fields_list_for_subsection:
                         display_value = item["value"]
-                        if item["key"] == "options_listing" and len(str(display_value)) > 150:
-                             display_value = str(display_value)[:150] + "..."
-                        html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
+                        # Special handling for options_listing - show as bullet points
+                        if item["key"] == "options_listing":
+                            # Remove "Selected Options and Specifications:" header if present
+                            cleaned_value = display_value
+                            if isinstance(cleaned_value, str) and "Selected Options and Specifications:" in cleaned_value:
+                                cleaned_value = cleaned_value.replace("Selected Options and Specifications:", "").strip()
+                            
+                            # Format as nested bullet list instead of truncating
+                            html += f'<li><span class="spec-label">{item["label"]}:</span></li>'
+                            html += '<li><ul style="list-style-type: disc; margin-left: 30px;">'
+                            
+                            # Split by lines and create bullet points
+                            if isinstance(cleaned_value, str):
+                                lines = cleaned_value.split('\n')
+                                for line in lines:
+                                    line = line.strip()
+                                    if line:  # Skip empty lines
+                                        html += f'<li>{line}</li>'
+                            else:
+                                html += f'<li>{cleaned_value}</li>'
+                                
+                            html += '</ul></li>'
+                        else:
+                            # Normal field handling
+                            html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
                     html += '</ul>'
         html += '</div>' 
 
@@ -2358,9 +2773,31 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
         # Items are already sorted by full_path_label
         for item in unmapped_or_additional_fields: 
             display_value = item["value"]
-            if item["key"] == "options_listing" and len(str(display_value)) > 150:
-                 display_value = str(display_value)[:150] + "..."
-            html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
+            # Special handling for options_listing - show as bullet points
+            if item["key"] == "options_listing":
+                # Remove "Selected Options and Specifications:" header if present
+                cleaned_value = display_value
+                if isinstance(cleaned_value, str) and "Selected Options and Specifications:" in cleaned_value:
+                    cleaned_value = cleaned_value.replace("Selected Options and Specifications:", "").strip()
+                
+                # Format as nested bullet list instead of truncating
+                html += f'<li><span class="spec-label">{item["label"]}:</span></li>'
+                html += '<li><ul style="list-style-type: disc; margin-left: 30px;">'
+                
+                # Split by lines and create bullet points
+                if isinstance(cleaned_value, str):
+                    lines = cleaned_value.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line:  # Skip empty lines
+                            html += f'<li>{line}</li>'
+                else:
+                    html += f'<li>{cleaned_value}</li>'
+                    
+                html += '</ul></li>'
+            else:
+                # Normal field handling
+                html += f'<li><span class="spec-label">{item["label"]}:</span> <span class="spec-value">{display_value}</span></li>'
         html += '</ul></div>'
     
     if not has_any_content:

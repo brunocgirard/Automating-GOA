@@ -290,6 +290,38 @@ def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dic
                 print(f"Setting {field} to NO due to explosion proof environment")
                 corrected_data[field] = "NO"
     
+    # Rule 11: SortStar Basic Machine Configuration - ensure only one is YES
+    sortstar_basic_config_fields = [
+        "bs_984_check", "bs_1230_check", "bs_985_check", 
+        "bs_1229_check", "bs_1264_check", "bs_1265_check"
+    ]
+    # Filter to only fields present in the current data
+    active_sortstar_config_fields = [f for f in sortstar_basic_config_fields if f in corrected_data]
+    
+    if active_sortstar_config_fields: # Only run if any of these fields are actually in the data
+        yes_sortstar_configs = [f for f in active_sortstar_config_fields if corrected_data.get(f) == "YES"]
+        
+        if len(yes_sortstar_configs) > 1:
+            print(f"Warning: Multiple SortStar basic configurations selected: {yes_sortstar_configs}. Enforcing single selection.")
+            # Keep the first one found as YES, set others to NO
+            # A more sophisticated priority could be defined if needed, but for now, first encountered wins.
+            first_yes_found = False
+            for field_name in sortstar_basic_config_fields: # Iterate in defined order to ensure some consistency
+                if field_name in corrected_data:
+                    if corrected_data[field_name] == "YES":
+                        if not first_yes_found:
+                            first_yes_found = True
+                            # This one stays YES
+                        else:
+                            corrected_data[field_name] = "NO" # Subsequent ones become NO
+            print(f"Corrected SortStar basic configurations. Kept: {[f for f in active_sortstar_config_fields if corrected_data.get(f) == 'YES']}")
+        elif not yes_sortstar_configs and any(f in checkbox_fields for f in active_sortstar_config_fields):
+            # This case is tricky: if a sortstar machine is being processed, one of these *should* be yes.
+            # However, this rule is for post-processing LLM output. If LLM says all are NO, this rule won't force one to YES.
+            # That level of correction would require more context (knowing for sure it's a SortStar and which one).
+            # For now, we just ensure there isn't *more than one* YES.
+            pass 
+
     return corrected_data
 
 def get_all_fields_via_llm(selected_pdf_descriptions: List[str], 
@@ -1118,7 +1150,9 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
             "  - 'bs_984_check': Sortstar 18ft3 220VAC 3 Phases LEFT TO RIGHT",
             "  - 'bs_1230_check': Sortstar 18ft3 220VAC 3 Phases RIGHT TO LEFT",
             "  - 'bs_985_check': Sortstar 18ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
-            "  - (and similar for 24ft3 models)",
+            "  - 'bs_1229_check': Sortstar 18ft3 480VAC & 380VAC 3 Phases RIGHT TO LEFT",
+            "  - 'bs_1264_check': Sortstar 24ft3 220VAC 3 Phases LEFT TO RIGHT",
+            "  - 'bs_1265_check': Sortstar 24ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
             "These options are MUTUALLY EXCLUSIVE. Only ONE of these 'bs_XXXX_check' fields should be YES.",
             "Determine the correct configuration (size, voltage, and direction) for THIS SPECIFIC SORTSTAR from the quote details (especially the MAIN ITEM DESCRIPTION) and set only the corresponding checkbox to YES. All other 'bs_XXXX_check' fields in this group must be NO.",
             "For example, if the quote specifies a 'Sortstar 24ft3 220VAC Left to Right', then 'bs_1264_check' should be YES and all other bs_..._check for basic configuration should be NO."

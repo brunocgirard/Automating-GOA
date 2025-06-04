@@ -5,11 +5,13 @@ import os # Added for __main__ example
 
 # Define explicit placeholder mappings for SortStar
 explicit_placeholder_mappings = {
+    # Basic Information mappings
     "customer": "GENERAL ORDER ACKNOWLEDGEMENT > Customer",
     "machine": "GENERAL ORDER ACKNOWLEDGEMENT > Machine",
     "direction": "GENERAL ORDER ACKNOWLEDGEMENT > Direction",
     "quote": "Order Identification > Quote",
     "production_speed": "Order Identification > Production speed",
+    #Utility Specifications mappings
     "voltage": "Utility Specifications > Voltage",
     "phases": "Utility Specifications > Phases",
     "hz": "Utility Specifications > Hz",
@@ -21,12 +23,14 @@ explicit_placeholder_mappings = {
     "ce_csa_check": "Utility Specifications > CE CSA Check",
     "ce_expl_check": "Utility Specifications > CE Expl Check",
     "country": "Utility Specifications > Country of destination",
+    # Basic Systems mappings
     "bs_984_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 220VAC 3 Phases LEFT TO RIGHT",
     "bs_1230_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 220VAC 3 Phases RIGHT TO LEFT",
     "bs_985_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
     "bs_1229_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 480VAC & 380VAC 3 Phases RIGHT TO LEFT",
     "bs_1264_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 24ft3 220VAC 3 Phases LEFT TO RIGHT",
     "bs_1265_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 24ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
+    # Optional Systems mappings
     "op_2409_check": "OPTIONAL SYSTEMS > Guarding System > Lexan Euroguard Top Cover",
     "op_ias_check": "OPTIONAL SYSTEMS > Guarding System > Ionized Air System",
     "op_nrck_check": "OPTIONAL SYSTEMS > Guarding System > Requires Cap Kit",
@@ -81,7 +85,8 @@ explicit_placeholder_mappings = {
     # "rts_none_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Remote Tech. Service None",
     "rts_y_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Remote Tech. Service Yes",
     "stpc_none_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning None",
-    "stpc_yes": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning Yes – no. of days"
+    "stpc_yes": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning Yes – no. of days",
+    "options_listing": "Option Listing > Additional Quoted Options"
 }
 
 def extract_placeholders(template_path: str) -> List[str]:

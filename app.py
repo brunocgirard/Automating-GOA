@@ -20,7 +20,8 @@ from src.workflows.profile_workflow import (
 
 # Import from existing utility modules
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
-from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, extract_placeholder_schema, template_utils
+from src.utils import template_utils # Import the module itself
+from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, extract_placeholder_schema # Import specific functions
 from src.utils import sortstar_template_utils
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
@@ -430,9 +431,68 @@ def process_machine_specific_data(machine_data, template_file_path):
             st.session_state.machine_specific_filled_data = machine_filled_data
 
             machine_name = machine_data.get('machine_name', 'machine')
-            clean_name = re.sub(r'[\\/*?:"<>|]', "_", machine_name.replace(' ', '_')) # Sanitize name more robustly
+            clean_name = re.sub(r'[\\/*?মুখের<>|]', "_", machine_name.replace(' ', '_')) # Sanitize name more robustly
             
-            # Adjust output path if it's a SortStar machine
+            # Generate options_listing for both regular and SortStar machines using the same logic
+            selected_details = []
+            
+            # First, include actual add-ons from the PDF for both template types
+            # This is what's shown in the regular template in the picture
+            if machine_data and "add_ons" in machine_data and machine_data["add_ons"]:
+                for i, addon in enumerate(machine_data["add_ons"], 1):
+                    if "description" in addon and addon["description"]:
+                        # Format description nicely
+                        desc_lines = addon["description"].split('\n')
+                        main_desc = desc_lines[0] if desc_lines else addon["description"]
+                        selected_details.append(f"- Add-on {i}: {main_desc}")
+            
+            # If no add-ons were found, fall back to template fields (original behavior)
+            if not selected_details and st.session_state.template_contexts and st.session_state.machine_specific_filled_data:
+                using_schema_format_local = isinstance(next(iter(st.session_state.template_contexts.values()), {}), dict)
+                for field_key, context_info in st.session_state.template_contexts.items():
+                    if field_key == "options_listing":
+                        continue # Skip the options_listing field itself
+
+                    field_value = st.session_state.machine_specific_filled_data.get(field_key, "")
+                    is_checkbox_field = False
+                    description = ""
+
+                    if using_schema_format_local:
+                        is_checkbox_field = context_info.get("type") == "boolean"
+                        description = context_info.get("description", field_key)
+                    else: # Hierarchical context (dict of str:str) or basic fallback
+                        is_checkbox_field = field_key.endswith("_check")
+                        description = str(context_info) # context_info is the description string
+                        
+                        # Special handling for SortStar hierarchical paths
+                        if is_sortstar_machine and ">" in description:
+                            # Extract the most specific part of the description (last part after ">")
+                            parts = [p.strip() for p in description.split(" > ")]
+                            if len(parts) > 1:
+                                description = parts[-1]  # Use only the most specific part
+                    
+                    # Skip fields with 'none' or similar values
+                    if any(term in str(field_value).lower() for term in ["none", "not selected", "not specified"]):
+                        continue
+                        
+                    # Skip if the description contains "none" or similar
+                    if any(term in str(description).lower() for term in ["none", "not selected", "not specified"]):
+                        continue
+
+                    # Include selected items
+                    if is_checkbox_field and str(field_value).upper() == "YES":
+                        selected_details.append(f"• {description}")
+                    elif not is_checkbox_field and field_value and field_key not in ["customer", "machine", "quote", "options_listing"]:
+                        # Only add non-checkbox fields if they have meaningful content
+                        if isinstance(field_value, str) and field_value.strip() and field_value.lower() not in ["no", "false", "0"]:
+                            selected_details.append(f"• {description}: {field_value}")
+            
+            if selected_details:
+                st.session_state.machine_specific_filled_data["options_listing"] = "Selected Options and Specifications:\n" + "\n".join(selected_details)
+            else:
+                st.session_state.machine_specific_filled_data["options_listing"] = "No options or specifications selected for this machine."
+            
+            # Set the output path based on machine type
             if is_sortstar_machine:
                 machine_specific_output_path = f"output_SORTSTAR_{clean_name}_GOA.docx"
             else:
@@ -723,6 +783,59 @@ def get_current_context():
     elif st.session_state.current_page == "CRM Management": return ("crm", None)
     return ("general", None)
 
+def get_contexts_for_machine(machine_record: Dict[str, Any]) -> Dict[str, Any]:
+    """Loads and returns the correct template contexts for a given machine record."""
+    machine_name_lower = machine_record.get("machine_name", "").lower()
+    is_sortstar_machine = False
+    sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
+    if any(alias in machine_name_lower for alias in sortstar_aliases):
+        is_sortstar_machine = True
+
+    active_template_file = SORTSTAR_TEMPLATE_FILE if is_sortstar_machine else TEMPLATE_FILE
+    active_template_utils = sortstar_template_utils if is_sortstar_machine else template_utils
+    outline_filename = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
+    # Assuming outline_path is relative to the root or a known location, adjust if necessary.
+    outline_path = outline_filename 
+
+    contexts = {}
+    if os.path.exists(active_template_file):
+        try:
+            if is_sortstar_machine:
+                contexts = active_template_utils.extract_placeholder_context_hierarchical(
+                    active_template_file,
+                    enhance_with_outline=os.path.exists(outline_path),
+                    outline_path=outline_path
+                )
+                if not contexts: # Fallback
+                    contexts = active_template_utils.extract_placeholder_schema(active_template_file)
+            elif os.path.exists(outline_path): # General template with outline
+                contexts = active_template_utils.extract_placeholder_context_hierarchical(
+                    active_template_file, 
+                    enhance_with_outline=True,
+                    outline_path=outline_path
+                )
+                if not contexts: # Fallback
+                    contexts = active_template_utils.extract_placeholder_schema(active_template_file)
+            else: # General template without outline
+                contexts = active_template_utils.extract_placeholder_schema(active_template_file)
+            
+            if not contexts: # Ultimate fallback if all methods fail
+                all_placeholders = active_template_utils.extract_placeholders(active_template_file)
+                contexts = {ph: ph for ph in all_placeholders}
+            
+            print(f"Loaded contexts for {machine_record.get('machine_name')} using {active_template_file} ({len(contexts)} fields).")
+        except Exception as e:
+            st.error(f"Error loading template contexts for {machine_record.get('machine_name')} in get_contexts_for_machine: {e}")
+            # Basic fallback in case of error
+            try:
+                all_placeholders = active_template_utils.extract_placeholders(active_template_file)
+                contexts = {ph: ph for ph in all_placeholders}
+            except: contexts = {} # Final fallback
+    else:
+        st.warning(f"Template file {active_template_file} not found for {machine_record.get('machine_name')}.")
+        contexts = {}
+    return contexts
+
 def process_chat_query(query, context_type, context_data=None):
     if not query: return "Please enter a question."
     if context_type == "quote" and context_data:
@@ -779,38 +892,6 @@ def main():
     initialize_session_state()
     init_db() 
     if not st.session_state.crm_data_loaded: load_crm_data()
-    
-    # Initialize template contexts if needed for Template Reports page
-    if st.session_state.current_page == "Machine Build Reports" and not st.session_state.get("template_contexts"):
-        # For template reports, we might want to allow selection or default to the general one
-        # For now, let's default to the general template, but this could be enhanced
-        active_template_file = TEMPLATE_FILE # Default to general template for reports
-        active_template_utils = template_utils
-        
-        # A simple check: if a SortStar output file exists, maybe default to SortStar template?
-        # This is a heuristic and might need refinement.
-        # For now, keeping it simple: default to general for reports unless explicitly changed.
-
-        if os.path.exists(active_template_file):
-            try:
-                # Determine if we need SortStar or general context for reports.
-                # This logic could be based on a selection in the UI later.
-                # For now, assuming general.
-                outline_path = "full_fields_outline.md" # General outline
-                if os.path.exists(outline_path):
-                    st.session_state.template_contexts = active_template_utils.extract_placeholder_context_hierarchical(
-                        active_template_file, 
-                        enhance_with_outline=True,
-                        outline_path=outline_path
-                    )
-                else:
-                    st.session_state.template_contexts = active_template_utils.extract_placeholder_schema(active_template_file)
-                
-                if not st.session_state.template_contexts:
-                    st.session_state.template_contexts = active_template_utils.extract_placeholder_context_hierarchical(active_template_file)
-                st.info(f"Template contexts for reports loaded using {active_template_file} ({len(st.session_state.template_contexts)} fields).")
-            except Exception as e:
-                st.error(f"Error loading template contexts for reports: {e}")
     
     if st.session_state.error_message: st.error(st.session_state.error_message); st.session_state.error_message = ""
 

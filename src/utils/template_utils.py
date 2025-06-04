@@ -406,7 +406,7 @@ explicit_placeholder_mappings = {
     "psi": "Utility Specifications - PSI",
     "voltage": "Utility Specifications - Voltage",
 
-    "options_listing": "Option Listing - All Additional Quoted Options"
+    "options_listing": "Option Listing - Additional Quoted Options"
 }
 
 def extract_placeholders(template_path: str) -> List[str]:
