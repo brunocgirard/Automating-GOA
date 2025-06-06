@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional
 import json
 import traceback # For more detailed error logging
+import re
 from src.utils.template_utils import add_section_aware_instructions # Import the new function
 
 # Global variable for the model, initialized once
@@ -1051,8 +1052,9 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
 
     # Determine if this is a SortStar machine
     is_sortstar_machine = False
-    sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
-    if any(alias in machine_name.lower() for alias in sortstar_aliases):
+    # Use regex for whole-word matching to avoid matching "monostar"
+    sortstar_pattern = r'\b(sortstar|unscrambler|bottle unscrambler)\b'
+    if re.search(sortstar_pattern, machine_name.lower()):
         is_sortstar_machine = True
 
     # Simplified prompt focusing on the specific machine and its direct context

@@ -2071,7 +2071,7 @@ def show_quote_processing():
             with col2:
                 if st.button("Process This Machine for GOA", type="primary", key=f"process_machine_btn_{st.session_state.run_key}"):
                     with st.spinner(f"Processing {selected_machine.get('machine_name')} for GOA..."):
-                        success = process_machine_specific_data(selected_machine, TEMPLATE_FILE)
+                        success = process_machine_specific_data(selected_machine)
                         if success:
                             st.success(f"Machine '{selected_machine.get('machine_name')}' processed successfully!")
                             st.session_state.selected_machine_id = selected_machine.get('id')
