@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 import json
 import traceback # For more detailed error logging
 import re
-from src.utils.template_utils import add_section_aware_instructions # Import the new function
+from src.utils.template_utils import add_section_aware_instructions, DEFAULT_EXPLICIT_MAPPINGS, SORTSTAR_EXPLICIT_MAPPINGS
 
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
@@ -316,12 +316,12 @@ def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dic
                         else:
                             corrected_data[field_name] = "NO" # Subsequent ones become NO
             print(f"Corrected SortStar basic configurations. Kept: {[f for f in active_sortstar_config_fields if corrected_data.get(f) == 'YES']}")
-        elif not yes_sortstar_configs and any(f in checkbox_fields for f in active_sortstar_config_fields):
+        elif not yes_sortstar_configs and any(f in corrected_data and corrected_data.get(f) is not None for f in active_sortstar_config_fields):
             # This case is tricky: if a sortstar machine is being processed, one of these *should* be yes.
             # However, this rule is for post-processing LLM output. If LLM says all are NO, this rule won't force one to YES.
             # That level of correction would require more context (knowing for sure it's a SortStar and which one).
             # For now, we just ensure there isn't *more than one* YES.
-            pass 
+            pass
 
     return corrected_data
 

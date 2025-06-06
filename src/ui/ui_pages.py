@@ -11,10 +11,8 @@ import re
 import numpy as np
 import time
 import random
-from src.utils.template_utils import explicit_placeholder_mappings, parse_full_fields_outline
-from src.utils.sortstar_template_utils import explicit_placeholder_mappings as sortstar_explicit_placeholder_mappings
-# Import SortStar parsing function
-from src.utils.sortstar_template_utils import extract_placeholder_context_hierarchical as sortstar_extract_placeholder_context
+from src.utils.template_utils import DEFAULT_EXPLICIT_MAPPINGS, SORTSTAR_EXPLICIT_MAPPINGS, parse_full_fields_outline
+
 
 # Import from other modules
 from src.workflows.profile_workflow import (
@@ -356,7 +354,7 @@ def show_template_items_table(template_data, template_contexts=None):
         template_data: Dictionary of field keys to values from template
         template_contexts: Optional dictionary of field keys to their context/description
     """
-    from src.utils.template_utils import explicit_placeholder_mappings
+    from src.utils.template_utils import DEFAULT_EXPLICIT_MAPPINGS
     
     if not template_data:
         st.info("No items selected in this template.")
@@ -379,8 +377,8 @@ def show_template_items_table(template_data, template_contexts=None):
         subsection = ""
         full_path = ""
         
-        if field_key in explicit_placeholder_mappings:
-            mapping = explicit_placeholder_mappings[field_key]
+        if field_key in DEFAULT_EXPLICIT_MAPPINGS:
+            mapping = DEFAULT_EXPLICIT_MAPPINGS[field_key]
             full_path = mapping
             
             # Extract section and subsection from the mapping
@@ -402,8 +400,8 @@ def show_template_items_table(template_data, template_contexts=None):
             friendly_name = field_key[:-6].replace("_", " ").title()
             
         # If we have explicit mapping, use it for the friendly name
-        if field_key in explicit_placeholder_mappings:
-            mapping_parts = explicit_placeholder_mappings[field_key].split(" - ")
+        if field_key in DEFAULT_EXPLICIT_MAPPINGS:
+            mapping_parts = DEFAULT_EXPLICIT_MAPPINGS[field_key].split(" - ")
             if len(mapping_parts) > 0:
                 # Use the last part as the friendly name
                 friendly_name = mapping_parts[-1]
@@ -539,7 +537,7 @@ def generate_printable_report(template_data, machine_name="", template_type="", 
     import os
 
     # Select the appropriate mappings and outline file based on machine type
-    current_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
+    current_mappings = SORTSTAR_EXPLICIT_MAPPINGS if is_sortstar_machine else DEFAULT_EXPLICIT_MAPPINGS
     outline_file_to_use = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
     
     # Initialize outline structure
@@ -1045,12 +1043,12 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
         
         is_sortstar_machine = False
         if machine_name:
-            sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
-            if any(alias in machine_name.lower() for alias in sortstar_aliases):
+            sortstar_pattern = r'\b(sortstar|unscrambler|bottle unscrambler)\b'
+            if re.search(sortstar_pattern, machine_name.lower()):
                 is_sortstar_machine = True
                 st.info(f"SortStar machine template editor active for: {machine_name}")
         
-        current_explicit_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
+        current_explicit_mappings = SORTSTAR_EXPLICIT_MAPPINGS if is_sortstar_machine else DEFAULT_EXPLICIT_MAPPINGS
         
         template_id = template["id"]
         template_type = template["template_type"]
@@ -1621,8 +1619,8 @@ def show_template_report_page():
             # Check if this is a SortStar machine based on the machine name
             is_sortstar_machine = False
             if machine_name_for_report:
-                sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
-                if any(alias in machine_name_for_report.lower() for alias in sortstar_aliases):
+                sortstar_pattern = r'\b(sortstar|unscrambler|bottle unscrambler)\b'
+                if re.search(sortstar_pattern, machine_name_for_report.lower()):
                     is_sortstar_machine = True
                     st.info(f"SortStar machine detected: {machine_name_for_report}")
 
@@ -1769,8 +1767,8 @@ def show_template_report_page():
                     # Check if this is a SortStar machine
                     is_sortstar_machine = False
                     if machine_name:
-                        sortstar_aliases = ["sortstar", "unscrambler", "bottle unscrambler"]
-                        if any(alias in machine_name.lower() for alias in sortstar_aliases):
+                        sortstar_pattern = r'\b(sortstar|unscrambler|bottle unscrambler)\b'
+                        if re.search(sortstar_pattern, machine_name.lower()):
                             is_sortstar_machine = True
                     
                     # Load templates for this machine
@@ -2349,7 +2347,7 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
         # print("DEBUG: template_data is None or empty.")
         return "<p>No template data provided to generate the report.</p>"
 
-    current_mappings = sortstar_explicit_placeholder_mappings if is_sortstar_machine else explicit_placeholder_mappings
+    current_mappings = SORTSTAR_EXPLICIT_MAPPINGS if is_sortstar_machine else DEFAULT_EXPLICIT_MAPPINGS
     outline_file_to_use = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
 
     outline_structure = {}

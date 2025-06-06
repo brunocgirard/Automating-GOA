@@ -3,8 +3,8 @@ from typing import List, Set, Dict, Optional
 from docx import Document
 import os # Added for __main__ example
 
-# Define explicit placeholder mappings
-explicit_placeholder_mappings = {
+# Define explicit placeholder mappings for the default template
+DEFAULT_EXPLICIT_MAPPINGS = {
     # Euro Guarding specific mappings
     "eg_none_check": "Euro Guarding - None",
     "eg_pmtg_check": "Euro Guarding - Panel material - Tempered glass",
@@ -409,6 +409,86 @@ explicit_placeholder_mappings = {
     "options_listing": "Option Listing - Additional Quoted Options"
 }
 
+# Define explicit placeholder mappings for SortStar
+SORTSTAR_EXPLICIT_MAPPINGS = {
+    # Basic Information mappings
+    "customer": "GENERAL ORDER ACKNOWLEDGEMENT > Customer",
+    "machine": "GENERAL ORDER ACKNOWLEDGEMENT > Machine",
+    "direction": "GENERAL ORDER ACKNOWLEDGEMENT > Direction",
+    "quote": "Order Identification > Quote",
+    "production_speed": "Order Identification > Production speed",
+    #Utility Specifications mappings
+    "voltage": "Utility Specifications > Voltage",
+    "phases": "Utility Specifications > Phases",
+    "hz": "Utility Specifications > Hz",
+    "amps": "Utility Specifications > AMPS",
+    "psi": "Utility Specifications > PSI",
+    "cfm": "Utility Specifications > CFM",
+    "conformity_csa_check": "Utility Specifications > Conformity CSA Check",
+    "ce_none_check": "Utility Specifications > CE None Check",
+    "ce_csa_check": "Utility Specifications > CE CSA Check",
+    "ce_expl_check": "Utility Specifications > CE Expl Check",
+    "country": "Utility Specifications > Country of destination",
+    # Basic Systems mappings
+    "bs_984_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 220VAC 3 Phases LEFT TO RIGHT",
+    "bs_1230_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 220VAC 3 Phases RIGHT TO LEFT",
+    "bs_985_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
+    "bs_1229_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 18ft3 480VAC & 380VAC 3 Phases RIGHT TO LEFT",
+    "bs_1264_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 24ft3 220VAC 3 Phases LEFT TO RIGHT",
+    "bs_1265_check": "BASIC SYSTEMS > Mechanical Basic Machine configuration > Sortstar 24ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
+    # Optional Systems mappings
+    "op_2409_check": "OPTIONAL SYSTEMS > Guarding System > Lexan Euroguard Top Cover",
+    "op_ias_check": "OPTIONAL SYSTEMS > Guarding System > Ionized Air System",
+    "op_nrck_check": "OPTIONAL SYSTEMS > Guarding System > Requires Cap Kit",
+    "el_0369_check": "OPTIONAL SYSTEMS > Electrical > Stack Light with Buzzer Option",
+    "cps_ep_check": "OPTIONAL SYSTEMS > Control Specifications > Explosion proof",
+    "cps_none_check": "OPTIONAL SYSTEMS > Control Specifications > None",
+    "plc_b&r_check": "OPTIONAL SYSTEMS > Control Specifications > PLC B & R",
+    "plc_compactl_check": "OPTIONAL SYSTEMS > Control Specifications > CompactLogix",
+    "plc_controll_check": "OPTIONAL SYSTEMS > Control Specifications > ControlLogix",
+    "hmi_b&r_check": "OPTIONAL SYSTEMS > Control Specifications > HMI B & R",
+    "hmi_allenb_check": "OPTIONAL SYSTEMS > Control Specifications > HMI Allen Bradley",
+    "hmi_pc_check": "OPTIONAL SYSTEMS > Control Specifications > HMI PC Upgrade",
+    "hmi_size5.7_check": "OPTIONAL SYSTEMS > Control Specifications > HMI Size 5.7\"",
+    "hmi_size10_check": "OPTIONAL SYSTEMS > Control Specifications > HMI Size 10\"",
+    "cpp_1axis_check": "OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 1 Axis",
+    "cpp_2axis_check": "OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 2 Axis – U-shaped",
+    "cpp_3axis_check": "OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 3 Axis",
+    "rts_secomea_check": "OPTIONAL SYSTEMS > Remote Technical Service (Secomea)",
+    "rts_none_check": "OPTIONAL SYSTEMS > Remote Technical Service > None",
+    "rts_co_check": "OPTIONAL SYSTEMS > Remote Technical Service > Connection Only",
+    "eg_none_check": "OPTIONAL SYSTEMS > Euro guarding > None",
+    "eg_pnl_check": "OPTIONAL SYSTEMS > Euro guarding > Panel material Lexan",
+    "eg_pmtg_check": "OPTIONAL SYSTEMS > Euro guarding > Tempered glass",
+    "eg_stkw_check": "OPTIONAL SYSTEMS > Euro guarding > Switch type Key switch",
+    "eg_stm_check": "OPTIONAL SYSTEMS > Euro guarding > Switch type Magnetic",
+    "eg_sto_check": "OPTIONAL SYSTEMS > Euro guarding > Other",
+    "eg_rc_check": "OPTIONAL SYSTEMS > Euro guarding > Reject Cover",
+    "eg_rcnone_check": "OPTIONAL SYSTEMS > Euro guarding > Reject Cover None",
+    "vd_f_check": "OPTIONAL SYSTEMS > Validation Documents > FAT",
+    "vd_s_check": "OPTIONAL SYSTEMS > Validation Documents > SAT",
+    "vd_d_check": "OPTIONAL SYSTEMS > Validation Documents > DQ",
+    "vd_h_check": "OPTIONAL SYSTEMS > Validation Documents > HDS/SDS",
+    "vd_fd_check": "OPTIONAL SYSTEMS > Validation Documents > FS/DS",
+    "vd_i_check": "OPTIONAL SYSTEMS > Validation Documents > IQ/OQ",
+    "pt_tcc_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Transport charges Capmatic",
+    "pt_tccu_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Transport charges Customer",
+    "pt_pbc_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging by Capmatic",
+    "pt_pbcu_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging by Customer / Not Incl.",
+    "pt_pts_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging type Skid",
+    "pt_ptc_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging type Crate",
+    "pt_ptsw_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Packaging type Sea Worthy",
+    "wi_war1_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Warranty 1YR",
+    "wi_war2_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Warranty 2YR",
+    "sk_none_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Spares Kit None",
+    "sk_1yr_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Spares Kit 1YR",
+    "sk_2yr_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Spares Kit 2YR",
+    "wrts_y_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Remote Tech. Service Yes",
+    "stpc_none_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning None",
+    "stpc_yes": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning Yes – no. of days",
+    "options_listing": "Option Listing > Additional Quoted Options"
+}
+
 def extract_placeholders(template_path: str) -> List[str]:
     """Reads the template and extracts all unique, cleaned placeholder keys."""
     print(f"Extracting placeholders from: {template_path}")
@@ -470,19 +550,23 @@ def is_likely_section_header(paragraph) -> bool:
     return False
 
 def extract_placeholder_context_hierarchical(template_path: str, 
+                                            explicit_placeholder_mappings: Dict[str, str],
                                             enhance_with_outline: bool = True,
                                             outline_path: str = "full_fields_outline.md",
-                                            check_if_all_mapped: bool = True) -> Dict[str, str]:
+                                            check_if_all_mapped: bool = True,
+                                            is_sortstar: bool = False) -> Dict[str, str]:
     """
     Parses the template to extract placeholders and attempts to build hierarchical context
     by identifying section headers. Optionally enhances with outline file.
     
     Args:
         template_path: Path to the Word document template
+        explicit_placeholder_mappings: The explicit mappings for the given template type.
         enhance_with_outline: Whether to enhance context with outline file
         outline_path: Path to the outline file
         check_if_all_mapped: If True, checks if all placeholders are already in explicit_placeholder_mappings
-                             and skips extraction if they are
+                             and skips extraction if they are.
+        is_sortstar: Flag to handle SortStar specific logic.
     """
     print(f"Extracting hierarchical placeholder context from: {template_path}")
     
@@ -493,15 +577,19 @@ def extract_placeholder_context_hierarchical(template_path: str,
             all_mapped = all(ph in explicit_placeholder_mappings for ph in all_placeholders)
             
             if all_mapped:
-                print(f"All {len(all_placeholders)} placeholders are explicitly mapped. Skipping extraction.")
-                return {ph: explicit_placeholder_mappings[ph] for ph in all_placeholders}
+                print(f"All {len(all_placeholders)} placeholders are explicitly mapped. Skipping dynamic extraction.")
+                return {ph: explicit_placeholder_mappings[ph] for ph in all_placeholders if ph in explicit_placeholder_mappings}
             else:
                 unmapped = [ph for ph in all_placeholders if ph not in explicit_placeholder_mappings]
                 print(f"Found {len(unmapped)} unmapped placeholders out of {len(all_placeholders)}. Proceeding with extraction.")
                 if len(unmapped) <= 10:  # Only show the unmapped placeholders if there are few of them
                     print(f"Unmapped placeholders: {', '.join(unmapped)}")
-    
+
     context_map: Dict[str, str] = {}
+    # For Sortstar, we start with the explicit mappings and only add the unmapped ones.
+    if is_sortstar:
+        context_map.update(explicit_placeholder_mappings)
+        
     try:
         doc = Document(template_path)
         regex = re.compile(r"{{\s*(.*?)\s*}}")
@@ -533,6 +621,11 @@ def extract_placeholder_context_hierarchical(template_path: str,
 
             for r_match in regex.finditer(para_text):
                 ph_key = r_match.group(1).strip()
+                
+                # If it's a sortstar template, only process unmapped placeholders.
+                if is_sortstar and ph_key in explicit_placeholder_mappings:
+                    continue
+
                 if ph_key and ph_key not in placeholder_details:
                     preceding_text = para_text[:r_match.start()].strip()
                     preceding_text = regex.sub("", preceding_text).strip().replace(":","").strip()
@@ -561,6 +654,11 @@ def extract_placeholder_context_hierarchical(template_path: str,
                     cell_text = cell.text.strip()
                     for r_match in regex.finditer(cell_text):
                         ph_key = r_match.group(1).strip()
+
+                        # If it's a sortstar template, only process unmapped placeholders.
+                        if is_sortstar and ph_key in explicit_placeholder_mappings:
+                            continue
+
                         if ph_key and ph_key not in placeholder_details: # Prioritize paragraph context if already found
                             immediate_label = ""
                             if c_idx > 0: # Label to the left
@@ -588,7 +686,7 @@ def extract_placeholder_context_hierarchical(template_path: str,
             
             if parts:
                 context_map[ph_key] = " - ".join(filter(None, parts))
-            else:
+            elif ph_key not in context_map: # Add only if not already there (for sortstar)
                 context_map[ph_key] = ph_key # Fallback
 
         # Ensure all placeholders from extract_placeholders have some context
@@ -601,8 +699,8 @@ def extract_placeholder_context_hierarchical(template_path: str,
         else: print(f"Generated hierarchical context for {len(context_map)} placeholders.")
         
         # Enhance with outline file if requested
-        if enhance_with_outline and os.path.exists(outline_path):
-            context_map = enhance_placeholder_context_with_outline(context_map, outline_path)
+        if enhance_with_outline and os.path.exists(outline_path) and not is_sortstar:
+            context_map = enhance_placeholder_context_with_outline(context_map, explicit_placeholder_mappings, outline_path)
         
         return context_map
 
@@ -612,10 +710,15 @@ def extract_placeholder_context_hierarchical(template_path: str,
         traceback.print_exc()
         return {}
 
-def extract_placeholder_schema(template_path: str) -> Dict[str, Dict]:
+def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[Dict[str, str]] = None, is_sortstar: bool = False) -> Dict[str, Dict]:
     """
     Creates a structured JSON schema from the template with rich metadata about each field.
     
+    Args:
+        template_path: The path to the Word document template.
+        explicit_mappings: The explicit mappings for the given template type.
+        is_sortstar: Flag to handle SortStar specific logic.
+
     Returns a dictionary where:
     - Each key is a placeholder name
     - Each value is a dictionary with:
@@ -634,6 +737,29 @@ def extract_placeholder_schema(template_path: str) -> Dict[str, Dict]:
     # First, use the existing function to get the placeholder details
     placeholder_details = {}
     schema = {}
+
+    # Populate schema with explicitly mapped placeholders first if they are provided
+    if explicit_mappings:
+        for ph_key, description in explicit_mappings.items():
+            field_type = "boolean" if ph_key.endswith("_check") else "string"
+            # Basic section/subsection parsing from description string
+            delimiter = " > " if is_sortstar else " - "
+            parts = description.split(delimiter)
+            section = parts[0] if len(parts) > 0 else "General"
+            subsection = parts[1] if len(parts) > 1 else ""
+            
+            schema[ph_key] = {
+                "type": field_type,
+                "section": section,
+                "subsection": subsection,
+                "description": description, # Use full path as description
+                "location": "unknown" # Location is harder to determine from flat list
+            }
+            if field_type == "boolean":
+                # Simplified synonym/indicator generation for explicitly mapped items
+                synonyms = [description.lower(), ph_key.replace("_check","").replace("_"," ")]
+                schema[ph_key]["synonyms"] = list(set(synonyms))
+                schema[ph_key]["positive_indicators"] = [f"with {s}" for s in synonyms] + ["yes", "selected", description.lower()]
     
     try:
         doc = Document(template_path)
@@ -657,7 +783,7 @@ def extract_placeholder_schema(template_path: str) -> Dict[str, Dict]:
 
             for r_match in regex.finditer(para_text):
                 ph_key = r_match.group(1).strip()
-                if ph_key and ph_key not in placeholder_details:
+                if ph_key and ph_key not in schema: # Only process if not already in schema from explicit map
                     preceding_text = para_text[:r_match.start()].strip()
                     preceding_text = regex.sub("", preceding_text).strip().replace(":","").strip()
                     placeholder_details[ph_key] = {
@@ -685,7 +811,7 @@ def extract_placeholder_schema(template_path: str) -> Dict[str, Dict]:
                     cell_text = cell.text.strip()
                     for r_match in regex.finditer(cell_text):
                         ph_key = r_match.group(1).strip()
-                        if ph_key and ph_key not in placeholder_details: # Prioritize paragraph context if already found
+                        if ph_key and ph_key not in schema: # Only process if not already in schema from explicit map
                             immediate_label = ""
                             if c_idx > 0: # Label to the left
                                 label_cell_text = row.cells[c_idx-1].text.strip().replace(":","").strip()
@@ -1113,12 +1239,13 @@ def add_section_aware_instructions(template_schema: Dict[str, Dict], prompt_part
     
     return prompt_parts
 
-def enhance_placeholder_context_with_outline(context_map: Dict[str, str], outline_path: str = "full_fields_outline.md") -> Dict[str, str]:
+def enhance_placeholder_context_with_outline(context_map: Dict[str, str], explicit_placeholder_mappings: Dict[str, str], outline_path: str = "full_fields_outline.md") -> Dict[str, str]:
     """
     Enhances the extracted placeholder context by cross-referencing with the structured outline file.
     
     Args:
         context_map: The existing context map from extract_placeholder_context_hierarchical
+        explicit_placeholder_mappings: The dictionary of explicit mappings for the template.
         outline_path: Path to the full_fields_outline.md file
         
     Returns:
@@ -1926,7 +2053,7 @@ if __name__ == '__main__':
             print("No placeholders found.")
 
         print("\n--- Placeholder Context (Hierarchical Test) ---")
-        context = extract_placeholder_context_hierarchical(test_template_path)
+        context = extract_placeholder_context_hierarchical(test_template_path, explicit_placeholder_mappings=DEFAULT_EXPLICIT_MAPPINGS)
         if context:
             count = 0
             for p_holder, desc in sorted(context.items()): 

@@ -22,7 +22,6 @@ from src.workflows.profile_workflow import (
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils import template_utils # Import the module itself
 from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, extract_placeholder_schema # Import specific functions
-from src.utils import sortstar_template_utils
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.crm_utils import (
@@ -38,6 +37,23 @@ from src.utils.crm_utils import (
 # Define Template File Constants
 TEMPLATE_FILE = os.path.join("templates", "template.docx")
 SORTSTAR_TEMPLATE_FILE = os.path.join("templates", "goa_sortstar_temp.docx")
+
+# --- Template Configuration Hub ---
+# This dictionary centralizes the configuration for different template types.
+TEMPLATE_CONFIGS = {
+    "default": {
+        "template_file": os.path.join("templates", "template.docx"),
+        "explicit_mappings": template_utils.DEFAULT_EXPLICIT_MAPPINGS,
+        "outline_file": "full_fields_outline.md",
+        "is_sortstar": False
+    },
+    "sortstar": {
+        "template_file": os.path.join("templates", "goa_sortstar_temp.docx"),
+        "explicit_mappings": template_utils.SORTSTAR_EXPLICIT_MAPPINGS,
+        "outline_file": "sortstar_fields_outline.md",
+        "is_sortstar": True
+    }
+}
 
 # --- App State Initialization ---
 def initialize_session_state(is_new_processing_run=False):
@@ -293,7 +309,7 @@ def process_machine_specific_data(machine_data):
              common_items = st.session_state.identified_machines_data.get("common_items", [])
 
         with st.spinner(f"Processing GOA for: {machine_data.get('machine_name')}..."):
-            template_contexts, template_file_path = get_contexts_for_machine(machine_data)
+            template_contexts, template_file_path, is_sortstar_template = get_contexts_for_machine(machine_data)
             
             if not template_contexts:
                 st.error(f"Could not load template contexts for machine: {machine_data.get('machine_name')}")
@@ -340,7 +356,7 @@ def process_machine_specific_data(machine_data):
                         description = str(context_info) # context_info is the description string
                         
                         # Special handling for SortStar hierarchical paths
-                        is_sortstar_machine = "sortstar" in template_file_path
+                        is_sortstar_machine = is_sortstar_template
                         if is_sortstar_machine and ">" in description:
                             # Extract the most specific part of the description (last part after ">")
                             parts = [p.strip() for p in description.split(" > ")]
@@ -369,7 +385,7 @@ def process_machine_specific_data(machine_data):
                 st.session_state.machine_specific_filled_data["options_listing"] = "No options or specifications selected for this machine."
             
             # Set the output path based on machine type
-            is_sortstar_machine = "sortstar" in template_file_path
+            is_sortstar_machine = is_sortstar_template
             if is_sortstar_machine:
                 machine_specific_output_path = f"output_SORTSTAR_{clean_name}_GOA.docx"
             else:
@@ -609,63 +625,61 @@ def get_current_context():
     elif st.session_state.current_page == "CRM Management": return ("crm", None)
     return ("general", None)
 
-def get_contexts_for_machine(machine_record: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
-    """Loads and returns the correct template contexts and file path for a given machine record."""
+def get_contexts_for_machine(machine_record: Dict[str, Any]) -> Tuple[Dict[str, Any], str, bool]:
+    """
+    Loads and returns the correct template contexts, file path, and a boolean indicating
+    if it's a SortStar machine.
+    """
     machine_name_lower = machine_record.get("machine_name", "").lower()
-    is_sortstar_machine = False
-    # Use regex for whole-word matching to avoid matching "monostar"
+    
+    # Determine which configuration to use
+    config_key = "default"
     sortstar_pattern = r'\b(sortstar|unscrambler|bottle unscrambler)\b'
     if re.search(sortstar_pattern, machine_name_lower):
-        is_sortstar_machine = True
-
-    active_template_file = SORTSTAR_TEMPLATE_FILE if is_sortstar_machine else TEMPLATE_FILE
-    active_template_utils = sortstar_template_utils if is_sortstar_machine else template_utils
-    outline_filename = "sortstar_fields_outline.md" if is_sortstar_machine else "full_fields_outline.md"
-    # Assuming outline_path is relative to the root or a known location, adjust if necessary.
-    outline_path = outline_filename 
-
+        config_key = "sortstar"
+        
+    config = TEMPLATE_CONFIGS[config_key]
+    
+    active_template_file = config["template_file"]
     contexts = {}
+
     if os.path.exists(active_template_file):
         try:
-            if is_sortstar_machine:
-                contexts = active_template_utils.extract_placeholder_context_hierarchical(
-                    active_template_file,
-                    enhance_with_outline=os.path.exists(outline_path),
-                    outline_path=outline_path
-                )
-                if not contexts: # Fallback
-                    contexts = active_template_utils.extract_placeholder_schema(active_template_file)
-            elif os.path.exists(outline_path):
-                st.write(f"Using enhanced context extraction with outline file: {outline_path}")
-                contexts = active_template_utils.extract_placeholder_context_hierarchical(
-                    active_template_file, 
-                    enhance_with_outline=True,
-                    outline_path=outline_path
-                )
-                if not contexts: # Fallback
-                    contexts = active_template_utils.extract_placeholder_schema(active_template_file)
-            else: # General template without outline
-                st.info(f"Outline file '{outline_path}' not found, using standard schema extraction for {active_template_file}")
-                contexts = active_template_utils.extract_placeholder_schema(active_template_file)
-            
+            # Use the unified function from template_utils
+            # The schema extraction is more robust and suitable for both types
+            contexts = template_utils.extract_placeholder_schema(
+                template_path=active_template_file,
+                explicit_mappings=config["explicit_mappings"],
+                is_sortstar=config["is_sortstar"]
+            )
+
             if not contexts:
-                st.warning(f"Could not extract template contexts from {active_template_file} using available methods.")
-                # Basic fallback:
-                all_placeholders = active_template_utils.extract_placeholders(active_template_file)
+                st.warning(f"Could not extract any contexts from {active_template_file}. Trying hierarchical extraction as fallback.")
+                # Fallback to hierarchical context extraction if schema fails
+                contexts = template_utils.extract_placeholder_context_hierarchical(
+                    template_path=active_template_file,
+                    explicit_placeholder_mappings=config["explicit_mappings"],
+                    enhance_with_outline=os.path.exists(config["outline_file"]),
+                    outline_path=config["outline_file"],
+                    is_sortstar=config["is_sortstar"]
+                )
+
+            if not contexts:
+                st.error(f"All context extraction methods failed for {active_template_file}. Falling back to basic placeholders.")
+                all_placeholders = template_utils.extract_placeholders(active_template_file)
                 contexts = {ph: ph for ph in all_placeholders}
             
-            print(f"Loaded contexts for {machine_record.get('machine_name')} using {active_template_file} ({len(contexts)} fields).")
+            print(f"Loaded contexts for {machine_record.get('machine_name')} using '{config_key}' config ({len(contexts)} fields).")
+
         except Exception as e:
-            st.error(f"Error extracting template schema/context in get_contexts_for_machine: {e}")
-            # Basic fallback in case of error
-            try:
-                all_placeholders = active_template_utils.extract_placeholders(active_template_file)
-                contexts = {ph: ph for ph in all_placeholders}
-            except: contexts = {} # Final fallback
+            st.error(f"Error extracting template schema/context for {config_key}: {e}")
+            traceback.print_exc()
+            contexts = {} # Final fallback on error
     else:
-        st.warning(f"Template file {active_template_file} not found for {machine_record.get('machine_name')}.")
+        st.warning(f"Template file {active_template_file} not found for '{config_key}' config.")
         contexts = {}
-    return contexts, active_template_file
+
+    return contexts, active_template_file, config["is_sortstar"]
 
 def process_chat_query(query, context_type, context_data=None):
     if not query: return "Please enter a question."
