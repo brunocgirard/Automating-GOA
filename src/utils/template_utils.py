@@ -77,12 +77,12 @@ DEFAULT_EXPLICIT_MAPPINGS = {
     "pt_tccu_check": "Packaging & Transport - Transport charges - customer",
     
     # Validation Documents mappings
-    "vd_d_check": "Validation Documents - dq",
-    "vd_f_check": "Validation Documents - fat",
-    "vd_fd_check": "Validation Documents - fs/ds",
-    "vd_h_check": "Validation Documents - hds/sds",
-    "vd_i_check": "Validation Documents - iq/oq",
-    "vd_s_check": "Validation Documents - sat",
+    "vd_d_check": "Validation Documents - Design Qualification (DQ) Documentation",
+    "vd_f_check": "Validation Documents - Factory Acceptance Test (FAT) Protocol Package - Includes documentation, support, and customer review",
+    "vd_fd_check": "Validation Documents - Functional/Design Specification (FS/DS)",
+    "vd_h_check": "Validation Documents - Hardware/Software Design Specification (HDS/SDS)",
+    "vd_i_check": "Validation Documents - Installation/Operational Qualification (IQ/OQ)",
+    "vd_s_check": "Validation Documents - Site Acceptance Test (SAT) Protocol Package - Includes documentation, support, and customer review",
     
     # Labeling System Specifications mappings
     "ls_a3p_check": "Labeling System Specifications - Application sys - 3-panel",
@@ -553,7 +553,7 @@ def extract_placeholder_context_hierarchical(template_path: str,
                                             explicit_placeholder_mappings: Dict[str, str],
                                             enhance_with_outline: bool = True,
                                             outline_path: str = "full_fields_outline.md",
-                                            check_if_all_mapped: bool = True,
+                                            check_if_all_mapped: bool = True,  # Changed back to True as default
                                             is_sortstar: bool = False) -> Dict[str, str]:
     """
     Parses the template to extract placeholders and attempts to build hierarchical context
@@ -564,32 +564,33 @@ def extract_placeholder_context_hierarchical(template_path: str,
         explicit_placeholder_mappings: The explicit mappings for the given template type.
         enhance_with_outline: Whether to enhance context with outline file
         outline_path: Path to the outline file
-        check_if_all_mapped: If True, checks if all placeholders are already in explicit_placeholder_mappings
-                             and skips extraction if they are.
+        check_if_all_mapped: If True, uses explicit mappings as base and enhances with dynamic extraction
         is_sortstar: Flag to handle SortStar specific logic.
     """
     print(f"Extracting hierarchical placeholder context from: {template_path}")
     
-    # Optimization: Check if all placeholders are already explicitly mapped
-    if check_if_all_mapped:
-        all_placeholders = extract_placeholders(template_path)
-        if all_placeholders:
-            all_mapped = all(ph in explicit_placeholder_mappings for ph in all_placeholders)
-            
-            if all_mapped:
-                print(f"All {len(all_placeholders)} placeholders are explicitly mapped. Skipping dynamic extraction.")
-                return {ph: explicit_placeholder_mappings[ph] for ph in all_placeholders if ph in explicit_placeholder_mappings}
-            else:
-                unmapped = [ph for ph in all_placeholders if ph not in explicit_placeholder_mappings]
-                print(f"Found {len(unmapped)} unmapped placeholders out of {len(all_placeholders)}. Proceeding with extraction.")
-                if len(unmapped) <= 10:  # Only show the unmapped placeholders if there are few of them
-                    print(f"Unmapped placeholders: {', '.join(unmapped)}")
-
+    # Start with explicit mappings as the base
     context_map: Dict[str, str] = {}
-    # For Sortstar, we start with the explicit mappings and only add the unmapped ones.
-    if is_sortstar:
+    if explicit_placeholder_mappings:
         context_map.update(explicit_placeholder_mappings)
+        print(f"Using {len(explicit_placeholder_mappings)} explicit mappings as base")
+    
+    # Get all placeholders from the template
+    all_placeholders = extract_placeholders(template_path)
+    if not all_placeholders:
+        print("No placeholders found in template")
+        return context_map
         
+    # If check_if_all_mapped is True, we'll still do dynamic extraction but use it to enhance existing mappings
+    if check_if_all_mapped:
+        unmapped = [ph for ph in all_placeholders if ph not in explicit_placeholder_mappings]
+        if unmapped:
+            print(f"Found {len(unmapped)} unmapped placeholders. Will enhance with dynamic extraction.")
+            if len(unmapped) <= 10:
+                print(f"Unmapped placeholders: {', '.join(unmapped)}")
+        else:
+            print("All placeholders are explicitly mapped. Will still perform dynamic extraction for enhancement.")
+    
     try:
         doc = Document(template_path)
         regex = re.compile(r"{{\s*(.*?)\s*}}")
@@ -598,34 +599,23 @@ def extract_placeholder_context_hierarchical(template_path: str,
         current_subsection_header = ""
 
         # First pass: Identify all placeholders and their immediate cell/paragraph text
-        # Store as: {placeholder: {"immediate": "text", "table_rc": (table_idx, r, c) or None, "para_idx": p_idx or None}}
         placeholder_details = {}
 
         for p_idx, para in enumerate(doc.paragraphs):
             para_text = para.text.strip()
             if is_likely_section_header(para):
-                # Very basic subsection detection: if a new header is found while a section header is active
-                # This doesn't handle deep nesting well without style checks.
-                # For now, let's assume one level of sectioning for simplicity of header capture.
-                # A more robust way would be to check styles (Heading 1, Heading 2, etc.)
                 current_section_header = para_text.replace(":","").strip()
-                current_subsection_header = "" # Reset subsection on new main section
-                # print(f"DEBUG: New Section Header: {current_section_header}")
-                continue # Don't look for placeholders in headers themselves
+                current_subsection_header = ""
+                continue
             
-            # Heuristic for subsection: If text is bold and short but not ALL CAPS
             elif para.runs and para.runs[0].bold and len(para_text.split()) < 5 and not para_text.isupper() and para_text.endswith(":"):
                 current_subsection_header = para_text.replace(":","").strip()
-                # print(f"DEBUG: New Sub-Section Header: {current_subsection_header}")
                 continue
 
             for r_match in regex.finditer(para_text):
                 ph_key = r_match.group(1).strip()
                 
-                # If it's a sortstar template, only process unmapped placeholders.
-                if is_sortstar and ph_key in explicit_placeholder_mappings:
-                    continue
-
+                # Always process the placeholder, but respect existing mappings
                 if ph_key and ph_key not in placeholder_details:
                     preceding_text = para_text[:r_match.start()].strip()
                     preceding_text = regex.sub("", preceding_text).strip().replace(":","").strip()
@@ -636,18 +626,16 @@ def extract_placeholder_context_hierarchical(template_path: str,
                         "type": "paragraph"
                     }
 
+        # Process tables similarly...
         for t_idx, table in enumerate(doc.tables):
-            current_table_group_label = "" # For labels like HMI, PLC in the first column spanning rows
+            current_table_group_label = ""
             for r_idx, row in enumerate(table.rows):
-                # Try to detect a group label in the first column if it spans or is consistent
                 if len(row.cells) > 0:
                     first_cell_text = row.cells[0].text.strip()
                     if first_cell_text and not regex.search(first_cell_text) and len(first_cell_text.split()) < 4:
-                        # Heuristic: if this cell is different from the one above it in the same column, 
-                        # or if it's the first row, it might be a new group label for subsequent rows.
                         if r_idx == 0 or (r_idx > 0 and table.cell(r_idx,0).text != table.cell(r_idx-1,0).text):
                             current_table_group_label = first_cell_text.replace(":","").strip()
-                        elif not current_table_group_label: # If still no group label, take from first row, first cell
+                        elif not current_table_group_label:
                             current_table_group_label = first_cell_text.replace(":","").strip()
                 
                 for c_idx, cell in enumerate(row.cells):
@@ -655,28 +643,24 @@ def extract_placeholder_context_hierarchical(template_path: str,
                     for r_match in regex.finditer(cell_text):
                         ph_key = r_match.group(1).strip()
 
-                        # If it's a sortstar template, only process unmapped placeholders.
-                        if is_sortstar and ph_key in explicit_placeholder_mappings:
-                            continue
-
-                        if ph_key and ph_key not in placeholder_details: # Prioritize paragraph context if already found
+                        if ph_key and ph_key not in placeholder_details:
                             immediate_label = ""
-                            if c_idx > 0: # Label to the left
+                            if c_idx > 0:
                                 label_cell_text = row.cells[c_idx-1].text.strip().replace(":","").strip()
                                 if label_cell_text and not regex.search(label_cell_text):
                                     immediate_label = label_cell_text
-                            if not immediate_label: # Text before in current cell
+                            if not immediate_label:
                                 immediate_label = cell_text[:r_match.start()].strip().replace(":","").strip()
                             
                             placeholder_details[ph_key] = {
                                 "immediate_label": immediate_label if immediate_label else ph_key,
                                 "section": current_section_header,
-                                "subsection": current_subsection_header, # Could be overridden by table group
+                                "subsection": current_subsection_header,
                                 "table_group": current_table_group_label if current_table_group_label != immediate_label else "",
                                 "type": "table"
                             }
 
-        # Construct final context strings
+        # Enhance existing mappings with dynamic context
         for ph_key, details in placeholder_details.items():
             parts = []
             if details.get("section") and details["section"] != "General": parts.append(details["section"])
@@ -685,18 +669,25 @@ def extract_placeholder_context_hierarchical(template_path: str,
             if details.get("immediate_label") and details["immediate_label"] != ph_key: parts.append(details["immediate_label"])
             
             if parts:
-                context_map[ph_key] = " - ".join(filter(None, parts))
-            elif ph_key not in context_map: # Add only if not already there (for sortstar)
-                context_map[ph_key] = ph_key # Fallback
+                dynamic_context = " - ".join(filter(None, parts))
+                # If we have an existing mapping, enhance it with dynamic context if it adds value
+                if ph_key in context_map:
+                    existing_context = context_map[ph_key]
+                    # Only update if dynamic context provides additional information
+                    if len(dynamic_context) > len(existing_context) or " - " in dynamic_context:
+                        context_map[ph_key] = dynamic_context
+                else:
+                    context_map[ph_key] = dynamic_context
 
-        # Ensure all placeholders from extract_placeholders have some context
-        all_phs = extract_placeholders(template_path)
-        for ph in all_phs:
+        # Ensure all placeholders have some context
+        for ph in all_placeholders:
             if ph not in context_map:
-                context_map[ph] = ph # Default if missed
+                context_map[ph] = ph
 
-        if not context_map: print(f"Warning: No placeholder context generated for {template_path}")
-        else: print(f"Generated hierarchical context for {len(context_map)} placeholders.")
+        if not context_map: 
+            print(f"Warning: No placeholder context generated for {template_path}")
+        else: 
+            print(f"Generated hierarchical context for {len(context_map)} placeholders.")
         
         # Enhance with outline file if requested
         if enhance_with_outline and os.path.exists(outline_path) and not is_sortstar:
@@ -1156,7 +1147,7 @@ def add_section_aware_instructions(template_schema: Dict[str, Dict], prompt_part
             
             "Euro Guarding": "Specifies machine guarding requirements including panel material, switch type, and covers.",
             
-            "Validation Documents": "Identifies required documentation (FAT, SAT, DQ, IQ/OQ) and languages.",
+            "Validation Documents": "Identifies required documentation (FAT, SAT, DQ, IQ/OQ) and languages. Includes Factory Acceptance Test (FAT) and Site Acceptance Test (SAT) protocol packages with documentation, support, and customer review. Also covers Design Qualification (DQ), Hardware/Software Design Specifications (HDS/SDS), Functional/Design Specifications (FS/DS), and Installation/Operational Qualification (IQ/OQ) documentation in specified languages.",
             
             "Warranty & Install & Spares": "Specifies warranty period, spare parts kit requirements, and commissioning services."
         }
@@ -1400,12 +1391,21 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], explic
             "validation": "Validation Documents",
             "fat": "Validation Documents",
             "sat": "Validation Documents",
+            "protocol": "Validation Documents",
+            "acceptance test": "Validation Documents",
+            "customer review": "Validation Documents",
+            "documentation": "Validation Documents",
+            "factory acceptance": "Validation Documents",
+            "site acceptance": "Validation Documents",
+            "test protocol": "Validation Documents",
+            "support": "Validation Documents",
+            "commissioning": "Validation Documents",
+            "start-up": "Validation Documents",
             "manual": "Manual Specifications",
             "language": "Manual Specifications",
             "warranty": "Warranty & Install & Spares",
             "install": "Warranty & Install & Spares",
             "spares": "Warranty & Install & Spares",
-            "commissioning": "Warranty & Install & Spares",
             "packaging": "Packaging & Transport",
             "transport": "Packaging & Transport",
             "tablet counter": "Street Fighter Tablet Counter",
@@ -1682,14 +1682,12 @@ def enhance_placeholder_context_with_outline(context_map: Dict[str, str], explic
             "c_cy_check": "Cottoner - Cotton Bin - Yes",
             
             # Validation and documentation
-            "val_fat_check": "Validation Documents - FAT",
-            "val_sat_check": "Validation Documents - SAT",
-            "val_dq_check": "Validation Documents - DQ",
-            "val_hds_check": "Validation Documents - HDS/SDS",
-            "val_fs_check": "Validation Documents - FS/DS",
-            "val_iq_check": "Validation Documents - IQ/OQ",
-            "val_e_check": "Validation Documents - English",
-            "val_f_check": "Validation Documents - French",
+            "vd_d_check": "Validation Documents - Design Qualification (DQ) Documentation",
+            "vd_f_check": "Validation Documents - Factory Acceptance Test (FAT) Protocol Package - Includes documentation, support, and customer review",
+            "vd_fd_check": "Validation Documents - Functional/Design Specification (FS/DS)",
+            "vd_h_check": "Validation Documents - Hardware/Software Design Specification (HDS/SDS)",
+            "vd_i_check": "Validation Documents - Installation/Operational Qualification (IQ/OQ)",
+            "vd_s_check": "Validation Documents - Site Acceptance Test (SAT) Protocol Package - Includes documentation, support, and customer review",
             
             # Guarding
             "eg_pnl_check": "Euro Guarding - Panel material - Lexan",
