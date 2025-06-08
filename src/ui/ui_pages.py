@@ -1620,9 +1620,15 @@ def show_template_report_page():
             is_sortstar_machine = False
             if machine_name_for_report:
                 sortstar_pattern = r'\b(sortstar|unscrambler|bottle unscrambler)\b'
-                if re.search(sortstar_pattern, machine_name_for_report.lower()):
-                    is_sortstar_machine = True
-                    st.info(f"SortStar machine detected: {machine_name_for_report}")
+                try:
+                    if re.search(sortstar_pattern, machine_name_for_report.lower()):
+                        is_sortstar_machine = True
+                        st.info(f"SortStar machine detected: {machine_name_for_report}")
+                except NameError:
+                    import re
+                    if re.search(sortstar_pattern, machine_name_for_report.lower()):
+                        is_sortstar_machine = True
+                        st.info(f"SortStar machine detected: {machine_name_for_report}")
 
             for t in templates:
                 if str(t.get('template_type', '')).lower() == "goa":
