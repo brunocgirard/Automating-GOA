@@ -4,11 +4,11 @@ import json
 from typing import Dict, List
 import traceback
 
-from src.utils.pdf_utils import extract_selected_item_descriptions, extract_full_pdf_text
-from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical
-from src.utils.llm_handler import configure_gemini_client, get_all_fields_via_llm, get_llm_chat_update
-from src.utils.doc_filler import fill_word_document_from_llm_data
-from src.utils.crm_utils import init_db, save_client_info
+from pdf_utils import extract_line_item_details, extract_full_pdf_text
+from template_utils import extract_placeholders, extract_placeholder_context_hierarchical
+from llm_handler import configure_gemini_client, get_all_fields_via_llm, get_llm_chat_update
+from doc_filler import fill_word_document_from_llm_data
+from crm_utils import init_db, save_client_info
 
 def main():
     parser = argparse.ArgumentParser(description="Extract info from PDF, use LLM to map to template, and fill Word doc.")
@@ -42,7 +42,12 @@ def main():
 
         # 1. Extract data from PDF
         print(f"Processing PDF: {args.pdf}...")
-        selected_descriptions = extract_selected_item_descriptions(args.pdf)
+        line_items = extract_line_item_details(args.pdf)
+        selected_descriptions = [
+            item.get("description")
+            for item in line_items
+            if item.get("description")
+        ]
         full_text_data = extract_full_pdf_text(args.pdf)
         if not selected_descriptions:
             print("Warning: No selected item descriptions were extracted from PDF tables.")
@@ -92,9 +97,7 @@ def main():
         if not crm_data_to_save["quote_ref"]:
             print("Warning: Quote Reference (quote_ref) is missing. Cannot save to CRM without it.")
         else:
-            selected_descs_json = json.dumps(selected_descriptions)
-            llm_data_json = json.dumps(final_data) # Save the entire filled data
-            if save_client_info(crm_data_to_save, selected_descs_json, llm_data_json):
+            if save_client_info(crm_data_to_save):
                 print(f"CRM data for quote '{crm_data_to_save['quote_ref']}' saved/updated.")
             else:
                 print(f"Failed to save CRM data for quote '{crm_data_to_save['quote_ref']}'.")
