@@ -263,8 +263,13 @@ def get_client_by_id(client_id: int, db_path: str = DB_PATH) -> Optional[Dict]:
 def update_client_record(client_id: int, data_to_update: Dict[str, str], db_path: str = DB_PATH) -> bool:
     """
     Updates specific fields of an existing client record identified by ID.
-    Does not update quote_ref, full_llm_data_json, or selected_pdf_items_json.
-    Processing_date is updated.
+    
+    Only the following columns may be changed: ``customer_name``,
+    ``machine_model``, ``country_destination``, ``sold_to_address``,
+    ``ship_to_address``, ``telephone``, ``customer_contact_person``,
+    ``customer_po``, ``incoterm`` and ``quote_date``. The ``processing_date``
+    timestamp is always refreshed to the current time. ``quote_ref`` and other
+    data columns are not modified.
     """
     if not data_to_update:
         print("No data provided to update.")
