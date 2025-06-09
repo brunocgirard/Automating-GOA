@@ -42,40 +42,42 @@ def find_table_headers(table: List[List[Optional[str]]]) -> Optional[Dict[str, i
     return None
 
 def is_row_selected(row: List[Optional[str]], headers: Dict[str, int]) -> bool:
-    """
-    Checks if a row represents a selected item based on selection/price column content.
-    """
+    """Determine if a table row should be treated as a selected line item."""
     selection_idx = headers.get("selection")
-    if selection_idx is None: # Should not happen if find_table_headers returned a dict
-        return False 
+    qty_idx = headers.get("quantity", -1)
 
-    # These are the textual values we don't want to misinterpret as selected if they appear in data rows
-    header_like_texts_in_selection_column = ["selected item", "price", "cost", "qty", "quantity", "montant", "prix", "total"]
+    if selection_idx is None:
+        return False
 
+    header_like_texts_in_selection_column = [
+        "selected item", "price", "cost", "qty", "quantity", "montant", "prix", "total"
+    ]
+
+    selection_value_str = ""
     if len(row) > selection_idx and row[selection_idx] is not None:
         selection_value_str = str(row[selection_idx]).strip()
+
+    if selection_value_str:
         selection_value_lower = selection_value_str.lower()
 
-        if not selection_value_str: # Empty string is not selected
-            return False
-
-        # If the cell value is exactly one of the common header texts, it's not a selection
         if selection_value_lower in header_like_texts_in_selection_column:
             return False
 
-        # Contains digits (likely a price or quantity)
-        if re.search(r'\d', selection_value_str):
+        if re.search(r"\d", selection_value_str):
             return True
-        
-        # Explicit selection keywords
-        if selection_value_lower in ['included', 'standard', 'yes']:
+
+        if selection_value_lower in ["included", "standard", "yes"]:
             return True
-        
-        # If it's not an explicit non-selection marker like 'no', 'none', '-', '0' (for numeric interpretation)
-        # and it's not empty (already checked), consider it selected. This is a lenient catch-all.
-        if selection_value_lower not in ['no', 'none', '-', '0']:
+
+        if selection_value_lower not in ["no", "none", "-", "0"]:
             return True
-            
+
+    # Fallback: if price cell empty but quantity column shows a number, treat as selected
+    if (not selection_value_str) and qty_idx != -1 and len(row) > qty_idx and row[qty_idx] is not None:
+        qty_value_str = str(row[qty_idx]).strip()
+        if qty_value_str and re.search(r"\d", qty_value_str):
+            return True
+
     return False
 
 def get_description_from_row(row: List[Optional[str]], headers: Dict[str, int]) -> Optional[str]:
@@ -109,6 +111,8 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
                     qty_col_idx = headers.get("quantity", -1) # Get quantity index, default to -1 if not found
                     
                     headers_for_selection_check = {"description": desc_col_idx, "selection": sel_text_col_idx}
+                    if qty_col_idx != -1:
+                        headers_for_selection_check["quantity"] = qty_col_idx
 
                     for row in table_data[1:]: # Skip header row
                         if is_row_selected(row, headers_for_selection_check):

@@ -1,5 +1,6 @@
 import pytest
 import os
+pytest.importorskip("docx")
 from src.utils.template_utils import extract_placeholders, generate_synonyms_for_checkbox
 
 # Test functions will be added here 
