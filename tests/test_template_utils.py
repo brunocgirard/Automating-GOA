@@ -58,6 +58,18 @@ def test_generate_synonyms_special_chars():
     assert "5.7 hmi" in synonyms
     assert "5.7 inch hmi" in synonyms # common addition for size
 
+def test_generate_synonyms_fat_sat():
+    fat_desc = "Validation Documents - Factory Acceptance Test (FAT) Protocol Package - Includes documentation, support, and customer review"
+    sat_desc = "Validation Documents - Site Acceptance Test (SAT) Protocol Package - Includes documentation, support, and customer review"
+
+    synonyms_fat = generate_synonyms_for_checkbox("vd_f_check", fat_desc)
+    synonyms_sat = generate_synonyms_for_checkbox("vd_s_check", sat_desc)
+
+    assert "factory acceptance test" in synonyms_fat
+    assert "site acceptance test" in synonyms_sat
+    assert "fat/sat" in synonyms_fat
+    assert "fat/sat" in synonyms_sat
+
 def test_extract_placeholders_from_main_template():
     template_file = os.path.join("tests", "template.docx")
     # Ensure the test template actually exists where expected
