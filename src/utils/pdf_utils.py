@@ -129,17 +129,23 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
         print(f"Error in extract_line_item_details for '{pdf_path}': {e}"); traceback.print_exc()
     return extracted_items
 
-def extract_full_pdf_text(pdf_path: str) -> str:
+def extract_full_pdf_text(pdf_path: str,
+                          x_tol: float = 1.5,
+                          y_tol: float = 3) -> str:
     """
-    Extracts all text content from all pages of the PDF.
+    Extract all text from every page of a PDF.
+
+    The ``x_tol`` and ``y_tol`` parameters control the horizontal and vertical
+    tolerance values passed to ``page.extract_text`` for cleaner text flow.
     """
     full_text = ""
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
-                page_text = page.extract_text()
+                page_text = page.extract_text(x_tolerance=x_tol,
+                                             y_tolerance=y_tol)
                 if page_text:
-                    full_text += page_text + "\n" 
+                    full_text += page_text + "\n"
     except Exception as e:
         print(f"Error extracting full text from PDF '{pdf_path}': {e}")
     return full_text
