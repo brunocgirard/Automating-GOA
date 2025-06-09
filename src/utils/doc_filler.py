@@ -1,4 +1,5 @@
 import re
+import logging
 from typing import Dict
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -37,23 +38,30 @@ def fill_word_document_from_llm_data(template_path: str, data: Dict[str, str], o
                         placeholder_regex_str = r"{{\s*" + re.escape(key) + r"\s*}}"
                         placeholder_regex = re.compile(placeholder_regex_str)
                         
-                        if placeholder_regex.search(modified_cell_text):
-                            replacement = ""
-                            is_check_field = key.endswith("_check")
-                            is_checked_yes = is_check_field and value_str.upper() == "YES"
+                        replacement = ""
+                        is_check_field = key.endswith("_check")
+                        is_checked_yes = is_check_field and value_str.upper() == "YES"
 
-                            if is_check_field:
-                                replacement = checked_symbol if is_checked_yes else unchecked_symbol
-                            else:
-                                replacement = str(value_str) # For non-checkbox placeholders
-                            
-                            new_text, num_subs = placeholder_regex.subn(replacement, modified_cell_text)
-                            if num_subs > 0:
-                                modified_cell_text = new_text
-                                if is_checked_yes: # Only flag for highlight if it became a checked box
-                                    cell_was_modified_to_checked = True 
-                                elif not is_check_field and value_str: # Also consider non-empty text fields as modified for formatting
-                                     cell_was_modified_to_checked = True # Re-using flag, but logic is for any content change
+                        if is_check_field:
+                            replacement = checked_symbol if is_checked_yes else unchecked_symbol
+                        else:
+                            replacement = str(value_str)  # For non-checkbox placeholders
+
+                        new_text, num_subs = placeholder_regex.subn(replacement, modified_cell_text)
+                        if num_subs == 0:
+                            logging.warning(
+                                "Placeholder '%s' not found in table %d row %d column %d",
+                                key,
+                                i,
+                                r,
+                                c,
+                            )
+                        else:
+                            modified_cell_text = new_text
+                            if is_checked_yes:  # Only flag for highlight if it became a checked box
+                                cell_was_modified_to_checked = True
+                            elif not is_check_field and value_str:  # Also consider non-empty text fields as modified for formatting
+                                cell_was_modified_to_checked = True  # Re-using flag, but logic is for any content change
                     
                     if original_cell_text != modified_cell_text: # If any text change occurred
                         cell.text = modified_cell_text 
