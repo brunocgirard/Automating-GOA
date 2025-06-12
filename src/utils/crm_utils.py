@@ -31,18 +31,40 @@ def init_db(db_path: str = DB_PATH):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             quote_ref TEXT UNIQUE NOT NULL, 
             customer_name TEXT,
-            machine_model TEXT,          -- Comma-separated list of machine names from machines_data
-            country_destination TEXT,    -- This seems to be missing from client_info, might need to add to extraction/form
-            sold_to_address TEXT,        -- Maps to client_info.billing_address
-            ship_to_address TEXT,        -- Maps to client_info.shipping_address
-            telephone TEXT,              -- Maps to client_info.phone
-            customer_contact_person TEXT, -- Maps to client_info.contact_person
-            customer_po TEXT,            -- Maps to client_info.customer_po
+            machine_model TEXT,
+            sold_to_address TEXT,
+            ship_to_address TEXT,
+            telephone TEXT,
+            customer_contact_person TEXT,
+            customer_po TEXT,
             processing_date TEXT NOT NULL,
-            incoterm TEXT,               -- Maps to client_info.incoterm
-            quote_date TEXT              -- Maps to client_info.quote_date
+            incoterm TEXT,
+            company TEXT,
+            serial_number TEXT,
+            ax TEXT,
+            ox TEXT,
+            via TEXT,
+            tax_id TEXT,
+            hs_code TEXT,
+            customer_number TEXT,
+            order_date TEXT
         )
         """)
+
+        # Schema migration for existing databases
+        cursor.execute("PRAGMA table_info(clients)")
+        existing_columns = [row[1] for row in cursor.fetchall()]
+        
+        new_columns = {
+            "company": "TEXT", "serial_number": "TEXT", "ax": "TEXT",
+            "ox": "TEXT", "via": "TEXT", "tax_id": "TEXT", "hs_code": "TEXT",
+            "customer_number": "TEXT", "order_date": "TEXT"
+        }
+        
+        for col_name, col_type in new_columns.items():
+            if col_name not in existing_columns:
+                cursor.execute(f"ALTER TABLE clients ADD COLUMN {col_name} {col_type}")
+                print(f"Added column '{col_name}' to 'clients' table.")
 
         # Create priced_items table with item_quantity
         cursor.execute("""
@@ -189,15 +211,22 @@ def save_client_info(client_data: Dict[str, any], db_path: str = DB_PATH) -> boo
         # Note: machine_model is derived in app.py before calling this
         db_field_mapping = {
             "customer_name": client_data.get("customer_name"),
-            "machine_model": client_data.get("machine_model"), # Passed directly now
-            "country_destination": client_data.get("country_destination"), # Assuming it might be added to client_data
+            "machine_model": client_data.get("machine_model"),
             "sold_to_address": client_data.get("sold_to_address"),
             "ship_to_address": client_data.get("ship_to_address"),
             "telephone": client_data.get("telephone"),
             "customer_contact_person": client_data.get("customer_contact_person"),
             "customer_po": client_data.get("customer_po"),
             "incoterm": client_data.get("incoterm"),
-            "quote_date": client_data.get("quote_date")
+            "company": client_data.get("company"),
+            "serial_number": client_data.get("serial_number"),
+            "ax": client_data.get("ax"),
+            "ox": client_data.get("ox"),
+            "via": client_data.get("via"),
+            "tax_id": client_data.get("tax_id"),
+            "hs_code": client_data.get("hs_code"),
+            "customer_number": client_data.get("customer_number"),
+            "order_date": client_data.get("order_date"),
         }
         
         cursor.execute("SELECT id FROM clients WHERE quote_ref = ?", (client_data['quote_ref'],))
@@ -283,9 +312,11 @@ def update_client_record(client_id: int, data_to_update: Dict[str, str], db_path
         fields = []
         params = []
         allowed_fields = [
-            "customer_name", "machine_model", "country_destination", 
+            "customer_name", "machine_model",
             "sold_to_address", "ship_to_address", "telephone", 
-            "customer_contact_person", "customer_po", "incoterm", "quote_date"
+            "customer_contact_person", "customer_po", "incoterm",
+            "company", "serial_number", "ax", "ox", "via", "tax_id",
+            "hs_code", "customer_number", "order_date"
         ]
         for key, value in data_to_update.items():
             if key in allowed_fields:
@@ -333,9 +364,10 @@ def load_all_clients(db_path: str = DB_PATH) -> List[Dict]:
         cursor = conn.cursor()
         # Select all relevant fields for client list display
         cursor.execute("""
-        SELECT id, quote_ref, customer_name, machine_model, country_destination, 
+        SELECT id, quote_ref, customer_name, machine_model, 
                sold_to_address, ship_to_address, telephone, customer_contact_person, 
-               customer_po, processing_date, incoterm, quote_date 
+               customer_po, processing_date, incoterm, company, serial_number,
+               ax, ox, via, tax_id, hs_code, customer_number, order_date
         FROM clients ORDER BY processing_date DESC
         """)
         rows = cursor.fetchall()

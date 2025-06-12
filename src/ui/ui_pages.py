@@ -2178,19 +2178,117 @@ def show_crm_management_page():
                 with client_tab1:
                     with client_detail_editor_placeholder.container():
                         st.markdown("**Edit Client Details:**")
-                        client_detail_list = [{'id': client_to_display_and_edit.get('id'), 'quote_ref': client_to_display_and_edit.get('quote_ref',''), 'customer_name': client_to_display_and_edit.get('customer_name',''), 'machine_model': client_to_display_and_edit.get('machine_model',''), 'country_destination': client_to_display_and_edit.get('country_destination',''), 'sold_to_address': client_to_display_and_edit.get('sold_to_address',''), 'ship_to_address': client_to_display_and_edit.get('ship_to_address',''), 'telephone': client_to_display_and_edit.get('telephone',''), 'customer_contact_person': client_to_display_and_edit.get('customer_contact_person',''), 'customer_po': client_to_display_and_edit.get('customer_po','')}]
-                        df_for_editor = pd.DataFrame(client_detail_list)
-                        edited_df_output = st.data_editor(df_for_editor, key=f"client_detail_editor_{client_to_display_and_edit.get('id', 'new')}", num_rows="fixed", hide_index=True, use_container_width=True, column_config={ "id": None, "quote_ref": st.column_config.TextColumn("Quote Ref (Required)", required=True), "sold_to_address": st.column_config.TextColumn("Sold To Address", width="medium"), "ship_to_address": st.column_config.TextColumn("Ship To Address", width="medium"), })
+                        
+                        client_data = client_to_display_and_edit
+                        
+                        # Split addresses into 3 parts, padding with empty strings if needed
+                        sold_addr_parts = (client_data.get('sold_to_address', '') or '').split('\n')
+                        ship_addr_parts = (client_data.get('ship_to_address', '') or '').split('\n')
+                        sold_addr_parts += [''] * (3 - len(sold_addr_parts))
+                        ship_addr_parts += [''] * (3 - len(ship_addr_parts))
+
+                        client_detail_for_df = {
+                            'id': client_data.get('id'),
+                            'Ax': client_data.get('ax', ''),
+                            'Company': client_data.get('company', ''),
+                            'Customer': client_data.get('customer_name', ''),
+                            'Machine': client_data.get('machine_model', ''),
+                            'Quote No': client_data.get('quote_ref', ''),
+                            'Serial Number': client_data.get('serial_number', ''),
+                            'Sold to/Address 1': sold_addr_parts[0],
+                            'Sold to/Address 2': sold_addr_parts[1],
+                            'Sold to/Address 3': sold_addr_parts[2],
+                            'Ship to/Address 1': ship_addr_parts[0],
+                            'Ship to/Address 2': ship_addr_parts[1],
+                            'Ship to/Address 3': ship_addr_parts[2],
+                            'Telefone': client_data.get('telephone', ''),
+                            'Customer PO': client_data.get('customer_po', ''),
+                            'Order date': client_data.get('order_date', ''),
+                            'Ox': client_data.get('ox', ''),
+                            'Via': client_data.get('via', ''),
+                            'Incoterm': client_data.get('incoterm', ''),
+                            'Tax ID': client_data.get('tax_id', ''),
+                            'H.S': client_data.get('hs_code', ''),
+                            'Customer Number': client_data.get('customer_number', ''),
+                            'Customer contact': client_data.get('customer_contact_person', ''),
+                        }
+                        
+                        df_for_editor = pd.DataFrame([client_detail_for_df])
+                        
+                        column_order = [
+                            'Ax', 'Company', 'Customer', 'Machine', 'Quote No', 'Serial Number',
+                            'Sold to/Address 1', 'Sold to/Address 2', 'Sold to/Address 3',
+                            'Ship to/Address 1', 'Ship to/Address 2', 'Ship to/Address 3',
+                            'Telefone', 'Customer PO', 'Order date', 'Ox', 'Via', 'Incoterm',
+                            'Tax ID', 'H.S', 'Customer Number', 'Customer contact'
+                        ]
+
+                        edited_df_output = st.data_editor(
+                            df_for_editor,
+                            key=f"client_detail_editor_{client_to_display_and_edit.get('id', 'new')}",
+                            num_rows="fixed",
+                            hide_index=True,
+                            use_container_width=True,
+                            column_order=column_order,
+                            column_config={
+                                "id": None,  # Hide ID column
+                                "Quote No": st.column_config.TextColumn(required=True),
+                            }
+                        )
+
                         st.session_state.edited_client_details_df = edited_df_output
+
                     with save_button_placeholder.container():
                         if st.button("💾 Save Client Detail Changes", key=f"save_details_btn_{client_to_display_and_edit.get('id', 'new')}"):
                             if not st.session_state.edited_client_details_df.empty:
                                 updated_row = st.session_state.edited_client_details_df.iloc[0].to_dict()
-                                client_id_to_update = client_to_display_and_edit.get('id'); update_payload = { k: v for k, v in updated_row.items() if k != 'id' }
-                                if not update_payload.get('quote_ref'): st.error("Quote Reference is required!")
-                                elif update_client_record(client_id_to_update, update_payload): st.success("Client details updated!"); load_crm_data(); st.session_state.selected_client_for_detail_edit = get_client_by_id(client_id_to_update); st.rerun()
-                                else: st.error("Failed to update client details.")
-                            else: st.warning("No client data in editor to save.")
+                                
+                                # Combine address parts back into single fields
+                                sold_to_address = "\n".join([
+                                    str(updated_row.get('Sold to/Address 1', '')),
+                                    str(updated_row.get('Sold to/Address 2', '')),
+                                    str(updated_row.get('Sold to/Address 3', ''))
+                                ]).strip()
+                                
+                                ship_to_address = "\n".join([
+                                    str(updated_row.get('Ship to/Address 1', '')),
+                                    str(updated_row.get('Ship to/Address 2', '')),
+                                    str(updated_row.get('Ship to/Address 3', ''))
+                                ]).strip()
+
+                                client_id_to_update = client_to_display_and_edit.get('id')
+                                update_payload = {
+                                    'ax': updated_row.get('Ax'),
+                                    'company': updated_row.get('Company'),
+                                    'customer_name': updated_row.get('Customer'),
+                                    'machine_model': updated_row.get('Machine'),
+                                    'quote_ref': updated_row.get('Quote No'),
+                                    'serial_number': updated_row.get('Serial Number'),
+                                    'sold_to_address': sold_to_address,
+                                    'ship_to_address': ship_to_address,
+                                    'telephone': updated_row.get('Telefone'),
+                                    'customer_po': updated_row.get('Customer PO'),
+                                    'order_date': updated_row.get('Order date'),
+                                    'ox': updated_row.get('Ox'),
+                                    'via': updated_row.get('Via'),
+                                    'incoterm': updated_row.get('Incoterm'),
+                                    'tax_id': updated_row.get('Tax ID'),
+                                    'hs_code': updated_row.get('H.S'),
+                                    'customer_number': updated_row.get('Customer Number'),
+                                    'customer_contact_person': updated_row.get('Customer contact'),
+                                }
+
+                                if not update_payload.get('quote_ref'):
+                                    st.error("Quote No is required!")
+                                elif update_client_record(client_id_to_update, update_payload):
+                                    st.success("Client details updated!")
+                                    load_crm_data()
+                                    st.session_state.selected_client_for_detail_edit = get_client_by_id(client_id_to_update)
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to update client details.")
+                            else:
+                                st.warning("No client data in editor to save.")
                     with delete_section_placeholder.container():
                         st.markdown("--- Delete Record ---")
                         current_client_id = client_to_display_and_edit.get('id'); current_quote_ref = client_to_display_and_edit.get('quote_ref')
@@ -2259,7 +2357,12 @@ def show_crm_management_page():
     st.markdown("---"); st.subheader("All Client Records Table")
     if st.session_state.all_crm_clients:
         df_all_clients = pd.DataFrame(st.session_state.all_crm_clients)
-        all_clients_cols = ['id', 'quote_ref', 'customer_name', 'machine_model', 'country_destination', 'sold_to_address', 'ship_to_address', 'telephone', 'customer_contact_person', 'customer_po', 'processing_date']
+        all_clients_cols = [
+            'id', 'ax', 'company', 'customer_name', 'machine_model', 'quote_ref', 'serial_number',
+            'sold_to_address', 'ship_to_address', 'telephone', 'customer_po', 'order_date',
+            'ox', 'via', 'incoterm', 'tax_id', 'hs_code', 'customer_number',
+            'customer_contact_person', 'processing_date'
+        ]
         df_all_clients_final = df_all_clients[[c for c in all_clients_cols if c in df_all_clients.columns]]
         st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
     else: st.info("No client records found.")
@@ -2267,21 +2370,64 @@ def show_crm_management_page():
     with st.expander("Manually Add New Client Record"):
         with st.form(key=f"crm_add_new_form_{st.session_state.run_key}"):
             st.markdown("**Enter New Client Details:**")
-            new_quote_ref = st.text_input("Quote Ref (Req)", key=f"new_qr_{st.session_state.run_key}")
-            new_cust_name = st.text_input("Customer Name", key=f"new_cn_{st.session_state.run_key}")
-            new_machine_model = st.text_input("Machine Model", key=f"new_mm_{st.session_state.run_key}")
-            new_country = st.text_input("Country Destination", key=f"new_cd_{st.session_state.run_key}")
-            new_sold_addr = st.text_area("Sold To Address", key=f"new_sta_{st.session_state.run_key}")
-            new_ship_addr = st.text_area("Ship To Address", key=f"new_shipta_{st.session_state.run_key}")
-            new_tel = st.text_input("Telephone", key=f"new_tel_{st.session_state.run_key}")
-            new_contact = st.text_input("Customer Contact", key=f"new_ccp_{st.session_state.run_key}")
-            new_po = st.text_input("Customer PO", key=f"new_cpo_{st.session_state.run_key}")
+            
+            # Using columns for a better layout
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                new_quote_ref = st.text_input("Quote No (Required)", key=f"new_qr_{st.session_state.run_key}")
+                new_cust_name = st.text_input("Customer", key=f"new_cn_{st.session_state.run_key}")
+                new_company = st.text_input("Company", key=f"new_comp_{st.session_state.run_key}")
+                new_machine_model = st.text_input("Machine", key=f"new_mm_{st.session_state.run_key}")
+                new_serial_number = st.text_input("Serial Number", key=f"new_sn_{st.session_state.run_key}")
+                new_customer_number = st.text_input("Customer Number", key=f"new_cnum_{st.session_state.run_key}")
+                new_contact = st.text_input("Customer contact", key=f"new_ccp_{st.session_state.run_key}")
+                new_tel = st.text_input("Telefone", key=f"new_tel_{st.session_state.run_key}")
+
+            with col2:
+                new_po = st.text_input("Customer PO", key=f"new_cpo_{st.session_state.run_key}")
+                new_order_date = st.text_input("Order date", key=f"new_od_{st.session_state.run_key}")
+                new_via = st.text_input("Via", key=f"new_via_{st.session_state.run_key}")
+                new_incoterm = st.text_input("Incoterm", key=f"new_inco_{st.session_state.run_key}")
+                new_tax_id = st.text_input("Tax ID", key=f"new_tax_{st.session_state.run_key}")
+                new_hs_code = st.text_input("H.S", key=f"new_hs_{st.session_state.run_key}")
+                new_ax = st.text_input("Ax", key=f"new_ax_{st.session_state.run_key}")
+                new_ox = st.text_input("Ox", key=f"new_ox_{st.session_state.run_key}")
+
+            with col3:
+                new_sold_addr = st.text_area("Sold to Address", key=f"new_sta_{st.session_state.run_key}", placeholder="Line 1\nLine 2\nLine 3")
+                new_ship_addr = st.text_area("Ship to Address", key=f"new_shipta_{st.session_state.run_key}", placeholder="Line 1\nLine 2\nLine 3")
+
             if st.form_submit_button("➕ Add New Client"):
-                if not new_quote_ref: st.error("Quote Reference is required.")
+                if not new_quote_ref: 
+                    st.error("Quote No is required.")
                 else: 
-                    new_client_data = {'quote_ref': new_quote_ref, 'customer_name': new_cust_name, 'machine_model': new_machine_model, 'country_destination': new_country, 'sold_to_address': new_sold_addr, 'ship_to_address': new_ship_addr, 'telephone': new_tel, 'customer_contact_person': new_contact, 'customer_po': new_po}
-                    if save_client_info(new_client_data): st.success("New client added!"); load_crm_data(); st.rerun()
-                    else: st.error("Failed to add new client.")
+                    new_client_data = {
+                        'quote_ref': new_quote_ref, 
+                        'customer_name': new_cust_name, 
+                        'company': new_company,
+                        'machine_model': new_machine_model, 
+                        'serial_number': new_serial_number,
+                        'customer_number': new_customer_number,
+                        'customer_contact_person': new_contact,
+                        'telephone': new_tel,
+                        'customer_po': new_po,
+                        'order_date': new_order_date,
+                        'via': new_via,
+                        'incoterm': new_incoterm,
+                        'tax_id': new_tax_id,
+                        'hs_code': new_hs_code,
+                        'ax': new_ax,
+                        'ox': new_ox,
+                        'sold_to_address': new_sold_addr, 
+                        'ship_to_address': new_ship_addr,
+                    }
+                    if save_client_info(new_client_data): 
+                        st.success("New client added!")
+                        load_crm_data()
+                        st.rerun()
+                    else: 
+                        st.error("Failed to add new client.")
 
 def show_chat_page():
     """Displays the chat interface page with robust state management."""
