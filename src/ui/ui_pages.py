@@ -122,9 +122,48 @@ def show_client_dashboard_page():
     # Status check for existing client profiles
     if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "action_selection":
         if "confirmed_profile" in st.session_state and st.session_state.confirmed_profile:
-            action = show_action_selection(st.session_state.confirmed_profile)
-            if action:
-                handle_selected_action(action, st.session_state.confirmed_profile)
+            profile = st.session_state.confirmed_profile
+            action = show_action_selection(profile)
+
+            # --- Explicitly handle chat navigation ---
+            if action and "chat" in action.lower():
+                # Correctly get client_info from the profile's "client_info" key
+                client_info = profile.get("client_info", {})
+                quote_ref = client_info.get("quote_ref")
+
+                if not quote_ref:
+                    st.error("Cannot start chat. Client profile is missing a quote reference.")
+                    return
+
+                # The full profile should already contain the document content
+                doc_content = profile.get("document_content", {})
+                full_text = doc_content.get("full_pdf_text", "")
+
+                # If for some reason it's missing, try to load it directly as a fallback
+                if not full_text:
+                    from src.utils.crm_utils import load_document_content
+                    loaded_doc = load_document_content(quote_ref)
+                    full_text = loaded_doc.get("full_pdf_text", "") if loaded_doc else ""
+
+                st.session_state.chat_context = {
+                    "client_data": client_info,
+                    "quote_ref": quote_ref,
+                    "full_pdf_text": full_text
+                }
+                # Also set the ID for the selectbox to stay in sync
+                st.session_state.chat_context_id = client_info.get("id")
+                
+                # Verify that the necessary data is present before switching pages
+                if st.session_state.chat_context.get("full_pdf_text"):
+                    st.session_state.current_page = "Chat"
+                    st.session_state.profile_extraction_step = None 
+                    st.rerun()
+                else:
+                    st.error(f"Cannot start chat. The document content for quote '{quote_ref}' is missing.")
+
+            elif action:
+                # Handle other actions using the existing workflow
+                handle_selected_action(action, profile)
                 st.rerun()
             return
     
@@ -2252,74 +2291,136 @@ def show_crm_management_page():
 
 def show_chat_page():
     """
-    Displays the chat interface page.
+    Displays the chat interface page with robust state management.
     """
-    # Set a flag in session state to indicate we're showing the chat page
-    st.session_state.showing_chat_page = True
-    
     st.title("💬 Chat with Document Assistant")
-    
-    # Initialize chat history if not exists
+
+    # Initialize state variables
+    if "chat_context" not in st.session_state:
+        st.session_state.chat_context = None
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+    # This key tracks the ID of the client currently loaded in the context.
+    # It's used to detect when the user selects a new client from the dropdown.
+    if "chat_context_id" not in st.session_state:
+        st.session_state.chat_context_id = None
+
+    # --- Context Selection Dropdown ---
+    st.subheader("Select Document to Chat About")
     
-    # Sidebar controls
-    with st.sidebar:
-        st.subheader("Chat Controls")
-        if st.button("Clear Chat History", key="chat_page_clear_history_btn"):
-            st.session_state.chat_history = []
+    # Prepare dropdown options
+    client_options = [("placeholder", "Select a client/quote...")]
+    if "all_crm_clients" in st.session_state and st.session_state.all_crm_clients:
+        client_options.extend([(c.get('id'), f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')}") for c in st.session_state.all_crm_clients])
+
+    # Set default index for the selectbox based on the currently loaded context ID
+    default_index = 0
+    if st.session_state.chat_context_id:
+        option_ids = [opt[0] for opt in client_options]
+        if st.session_state.chat_context_id in option_ids:
+            default_index = option_ids.index(st.session_state.chat_context_id)
+
+    selected_client_id = st.selectbox(
+        "Client/Quote:",
+        options=[opt[0] for opt in client_options],
+        format_func=lambda x: dict(client_options).get(x, ""),
+        index=default_index,
+        key="chat_page_selector"
+    )
+
+    # --- Core State Logic: Detect if context needs to be reloaded ---
+    if selected_client_id != st.session_state.chat_context_id:
+        # User has selected a new client, or the page is loading and syncing state.
+        st.session_state.chat_context_id = selected_client_id
+        st.session_state.chat_history = []  # Clear history on any context switch
+
+        if selected_client_id and selected_client_id != "placeholder":
+            from src.utils.crm_utils import get_client_by_id, load_document_content
+            with st.spinner(f"Loading document for client ID {selected_client_id}..."):
+                client_data = get_client_by_id(selected_client_id)
+                if client_data:
+                    quote_ref = client_data.get('quote_ref')
+                    doc_content = load_document_content(quote_ref)
+                    if doc_content and doc_content.get("full_pdf_text"):
+                        st.session_state.chat_context = {
+                            "client_data": client_data,
+                            "quote_ref": quote_ref,
+                            "full_pdf_text": doc_content.get("full_pdf_text", "")
+                        }
+                    else:
+                        st.session_state.chat_context = None
+                        st.warning(f"No document content found for quote '{quote_ref}'.")
+                else:
+                    st.session_state.chat_context = None
+                    st.error(f"Could not load client data for ID {selected_client_id}.")
+        else:
+            st.session_state.chat_context = None  # Placeholder was selected
+
+        st.rerun()  # Force a rerun to reflect the new state in the UI
+
+    # --- Main Chat Interface ---
+    if st.session_state.chat_context:
+        chat_ctx = st.session_state.chat_context
+        client_name = chat_ctx.get("client_data", {}).get("customer_name", "N/A")
+        quote_ref = chat_ctx.get("quote_ref", "N/A")
+        st.info(f"Chatting about document: **{client_name} - {quote_ref}**")
+
+        # Display chat history
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+        # React to user input
+        if prompt := st.chat_input("Ask a question about the selected document..."):
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    from app import process_chat_query
+                    # Directly use the context active on THIS page, which is now guaranteed to be correct
+                    context_data = {
+                        "full_pdf_text": chat_ctx.get("full_pdf_text", ""),
+                        "selected_pdf_descs": [],
+                        "template_contexts": {}
+                    }
+                    response = process_chat_query(prompt, "quote", context_data)
+                    st.markdown(response)
+            
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
             st.rerun()
-        
-        # Context selection
-        st.subheader("Context")
-        context_type = st.selectbox(
-            "Select Context Type",
-            options=["Current Document", "CRM Data", "Template Data"],
-            key="chat_page_context_type_selector"
-        )
-        
-        # Load appropriate context based on selection
-        context_data = None
-        if context_type == "Current Document":
-            from app import get_current_context
-            context_data = get_current_context()
-        elif context_type == "CRM Data":
-            if "all_crm_clients" in st.session_state:
-                context_data = st.session_state.all_crm_clients
-        elif context_type == "Template Data":
-            if "current_template_data" in st.session_state:
-                context_data = st.session_state.current_template_data
+    else:
+        st.info("Please select a document from the dropdown to begin.")
+
+def on_client_select_for_chat():
+    """Callback to handle chat context switching."""
+    selected_id = st.session_state.chat_client_selector
     
-    # Main chat interface
-    st.markdown("Ask questions about your documents, CRM data, or templates.")
+    # Always reset chat history when selection changes
+    st.session_state.chat_history = [] 
     
-    # Display chat history
-    for idx, message in enumerate(st.session_state.chat_history):
-        with st.chat_message(message["role"], key=f"chat_page_msg_{idx}"):
-            st.markdown(message["content"])
-    
-    # Chat input
-    if prompt := st.chat_input("What would you like to know?", key="chat_page_input_field"):
-        # Add user message to chat history
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        
-        # Display user message
-        with st.chat_message("user", key=f"chat_page_user_msg_{len(st.session_state.chat_history)}"):
-            st.markdown(prompt)
-        
-        # Process the query and get response
-        from app import process_chat_query
-        response = process_chat_query(prompt, context_type, context_data)
-        
-        # Add assistant response to chat history
-        st.session_state.chat_history.append({"role": "assistant", "content": response})
-        
-        # Display assistant response
-        with st.chat_message("assistant", key=f"chat_page_assistant_msg_{len(st.session_state.chat_history)}"):
-            st.markdown(response)
-        
-        # Rerun to update the chat interface
-        st.rerun()
+    if selected_id and selected_id != "placeholder":
+        from src.utils.crm_utils import get_client_by_id, load_document_content
+        client_data = get_client_by_id(selected_id)
+        if client_data:
+            quote_ref = client_data.get('quote_ref')
+            doc_content = load_document_content(quote_ref)
+            if doc_content and doc_content.get("full_pdf_text"):
+                st.session_state.chat_context = {
+                    "client_data": client_data,
+                    "quote_ref": quote_ref,
+                    "full_pdf_text": doc_content.get("full_pdf_text", "")
+                }
+            else:
+                st.warning(f"No document content found for quote '{quote_ref}'. Cannot start chat for this selection.")
+                st.session_state.chat_context = None # Clear context if doc is missing
+        else:
+            st.error(f"Could not load client data for ID {selected_id}.")
+            st.session_state.chat_context = None
+    else:
+        # Placeholder was selected, so clear the context
+        st.session_state.chat_context = None
 
 def render_chat_ui():
     """
