@@ -31,7 +31,8 @@ from src.utils.crm_utils import (
     load_machines_for_quote, save_machine_template_data, load_machine_template_data, 
     save_document_content, load_document_content,
     load_machine_templates_with_modifications, save_goa_modification,
-    update_template_after_modifications, find_machines_by_name, load_all_processed_machines
+    update_template_after_modifications, find_machines_by_name, load_all_processed_machines,
+    save_bulk_goa_modifications
 )
 from src.generators.document_generators import generate_packing_slip_data, generate_commercial_invoice_data, generate_certificate_of_origin_data
 
@@ -1070,7 +1071,7 @@ def show_goa_modifications_ui(machine_id: int = None, machine_name: Optional[str
 def display_template_editor(template, machine_id: Optional[int] = None, machine_name: Optional[str] = None):
     """Helper function to display and edit a single template"""
     try:
-        from src.utils.crm_utils import save_goa_modification
+        from src.utils.crm_utils import save_goa_modification, save_bulk_goa_modifications
         # Imports for explicit_placeholder_mappings are already at the top of the file
         import re
         
@@ -1231,6 +1232,9 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
         # Create sections for editing vs adding fields
         edit_tab, add_tab = st.tabs(["Edit Existing Fields", "Add New Fields"])
         
+        # List to hold info about every field displayed in the editor
+        all_displayed_fields = []
+
         # Tab for editing existing fields
         with edit_tab:
             st.markdown("#### Edit Existing Template Fields")
@@ -1391,119 +1395,120 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                             sorted_fields_list = sorted(fields_list, key=lambda x: (get_regular_field_priority(x), x["label"]))
 
                         for field_info in sorted_fields_list:
+                            all_displayed_fields.append((field_info, "structured"))
                             field_key = field_info["key"]
                             field_display = field_info["label"]
                             current_value = field_info["value"]
                             is_boolean = field_info["is_boolean"]
 
-                            col1, col2, col3 = st.columns([3, 4, 1.5]) 
+                            col1, col2 = st.columns([3, 5.5]) 
                             with col1:
                                 st.markdown(f"{field_display}")
                             with col2:
                                 if is_boolean:
                                     cv_str = str(current_value) if current_value is not None else "NO"
                                     is_checked = cv_str.upper() in ["YES", "TRUE"]
-                                    new_checked = st.checkbox(
+                                    st.checkbox(
                                         f"Enable {field_key}", 
                                         value=is_checked,
-                                        key=f"edit_bool_{field_key}_{template_id}",
+                                        key=f"edit_structured_bool_{field_key}_{template_id}",
                                         label_visibility="collapsed"
                                     )
-                                    new_value = "YES" if new_checked else "NO"
                                 else:
                                     current_value_str = "" if current_value is None else str(current_value)
                                     if field_key == "options_listing":
-                                        new_value = st.text_area(
+                                        st.text_area(
                                             f"Value for {field_key}", 
                                             value=current_value_str,
-                                            key=f"edit_text_{field_key}_{template_id}",
+                                            key=f"edit_structured_text_{field_key}_{template_id}",
                                             label_visibility="collapsed",
                                             height=150 # Provide more space for options_listing
                                         )
                                     else:
-                                        new_value = st.text_input(
+                                        st.text_input(
                                             f"Value for {field_key}", 
                                             value=current_value_str,
-                                            key=f"edit_text_{field_key}_{template_id}",
+                                            key=f"edit_structured_text_{field_key}_{template_id}",
                                             label_visibility="collapsed"
                                         )
-                            with col3:
-                                current_compare_val = str(current_value).upper() if is_boolean and current_value is not None else str(current_value if current_value is not None else "")
-                                new_compare_val = str(new_value).upper() if is_boolean else str(new_value)
-
-                                if new_compare_val != current_compare_val:
-                                    if st.button("Save", key=f"save_edit_{field_key}_{template_id}", use_container_width=True):
-                                        try:
-                                            save_goa_modification(
-                                                template_id, field_key, 
-                                                str(current_value if current_value is not None else ("NO" if is_boolean else "")), 
-                                                new_value,
-                                                "Manual edit", "User"
-                                            )
-                                            st.success(f"Updated: {field_display}")
-                                            template_data[field_key] = new_value 
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"Error saving: {str(e)}")
             
             if other_fields:
                 # Sort other_fields by label as well
                 sorted_other_fields = sorted(other_fields, key=lambda x: x["label"])
                 with st.expander("**Other Fields (Not in Standard Outline)**", expanded=False):
                     for field_info in sorted_other_fields:
+                        all_displayed_fields.append((field_info, "other"))
                         field_key = field_info["key"]
                         field_display = field_info["label"]
                         current_value = field_info["value"]
                         is_boolean = field_info["is_boolean"]
 
-                        col1, col2, col3 = st.columns([3, 4, 1.5])
+                        col1, col2 = st.columns([3, 5.5])
                         with col1:
                             st.markdown(f"{field_display}")
                         with col2:
                             if is_boolean:
                                 cv_str = str(current_value) if current_value is not None else "NO"
                                 is_checked = cv_str.upper() in ["YES", "TRUE"]
-                                new_checked = st.checkbox(
+                                st.checkbox(
                                     f"Enable {field_key}", 
                                     value=is_checked,
-                                    key=f"edit_bool_other_{field_key}_{template_id}",
+                                    key=f"edit_other_bool_{field_key}_{template_id}",
                                     label_visibility="collapsed"
                                 )
-                                new_value = "YES" if new_checked else "NO"
                             else:
                                 current_value_str = "" if current_value is None else str(current_value)
                                 if field_key == "options_listing":
-                                    new_value = st.text_area(
+                                    st.text_area(
                                         f"Value for {field_key}", 
                                         value=current_value_str,
-                                        key=f"edit_text_other_{field_key}_{template_id}",
+                                        key=f"edit_other_text_{field_key}_{template_id}",
                                         label_visibility="collapsed",
                                         height=150
                                     )
                                 else:
-                                    new_value = st.text_input(
+                                    st.text_input(
                                         f"Value for {field_key}", 
                                         value=current_value_str,
-                                        key=f"edit_text_other_{field_key}_{template_id}",
+                                        key=f"edit_other_text_{field_key}_{template_id}",
                                         label_visibility="collapsed"
                                     )
-                            with col3:
-                                current_compare_val = str(current_value).upper() if is_boolean and current_value is not None else str(current_value if current_value is not None else "")
-                                new_compare_val = str(new_value).upper() if is_boolean else str(new_value)
-                                if new_compare_val != current_compare_val:
-                                    if st.button("Save", key=f"save_edit_other_{field_key}_{template_id}", use_container_width=True):
-                                        try:
-                                            save_goa_modification(
-                                                template_id, field_key, 
-                                                str(current_value if current_value is not None else ("NO" if is_boolean else "")), 
-                                                new_value,
-                                                "Manual edit", "User"
-                                            )
-                                            st.success(f"Updated: {field_display}")
-                                            template_data[field_key] = new_value
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"Error saving: {str(e)}")
+            
+            st.markdown("---")
+            if st.button("Save All Changes", key=f"save_all_mods_{template_id}", type="primary", use_container_width=True):
+                changes_to_save = {}
+                for field_info, field_type in all_displayed_fields:
+                    field_key = field_info["key"]
+                    original_value = field_info["value"]
+                    is_boolean = field_info["is_boolean"]
+
+                    if is_boolean:
+                        widget_key = f"edit_{field_type}_bool_{field_key}_{template_id}"
+                        new_checked = st.session_state.get(widget_key, False)
+                        new_value = "YES" if new_checked else "NO"
+                    else:
+                        widget_key = f"edit_{field_type}_text_{field_key}_{template_id}"
+                        new_value = st.session_state.get(widget_key, "")
+
+                    original_compare_val = str(original_value if original_value is not None else ("NO" if is_boolean else ""))
+                    new_compare_val = str(new_value)
+
+                    if original_compare_val != new_compare_val:
+                        changes_to_save[field_key] = {
+                            "new_value": new_value,
+                            "original_value": original_compare_val
+                        }
+                
+                if changes_to_save:
+                    with st.spinner(f"Saving {len(changes_to_save)} modifications..."):
+                        success = save_bulk_goa_modifications(template_id, changes_to_save)
+                        if success:
+                            st.success(f"Saved {len(changes_to_save)} modifications successfully.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to save modifications. Please check the logs.")
+                else:
+                    st.info("No changes were detected to save.")
         
         # Tab for adding new fields
         with add_tab:

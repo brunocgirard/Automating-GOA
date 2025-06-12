@@ -1450,6 +1450,93 @@ def calculate_common_items_price(common_items):
             total_price += item_price
     return total_price
     
+def save_bulk_goa_modifications(
+    machine_template_id: int, 
+    changes: Dict[str, Dict[str, str]],
+    modification_reason: str = "Batch Manual Edit",
+    modified_by: str = "User",
+    db_path: str = DB_PATH
+) -> bool:
+    """
+    Saves a batch of modifications to a GOA template field and updates the underlying template data.
+    """
+    if not machine_template_id or not changes:
+        print("Error: Missing required parameters for save_bulk_goa_modifications.")
+        return False
+    
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("BEGIN TRANSACTION")
+
+        cursor.execute("SELECT template_data_json, generated_file_path FROM machine_templates WHERE id = ?", (machine_template_id,))
+        template_row = cursor.fetchone()
+        if not template_row:
+            print(f"Error: Machine template with ID {machine_template_id} not found.")
+            conn.rollback()
+            return False
+        
+        template_data_json, generated_file_path = template_row
+        try:
+            template_data = json.loads(template_data_json or '{}')
+        except json.JSONDecodeError:
+            print(f"Error parsing JSON for machine template ID {machine_template_id}")
+            conn.rollback()
+            return False
+
+        modification_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for field_key, change_info in changes.items():
+            original_value = change_info.get("original_value")
+            modified_value = change_info.get("new_value")
+
+            template_data[field_key] = modified_value
+
+            cursor.execute("SELECT id FROM goa_modifications WHERE machine_template_id = ? AND field_key = ?", (machine_template_id, field_key))
+            existing_mod = cursor.fetchone()
+
+            if existing_mod:
+                cursor.execute("""
+                UPDATE goa_modifications
+                SET original_value = ?, modified_value = ?, modification_reason = ?, modified_by = ?, modification_date = ?
+                WHERE id = ?
+                """, (original_value, modified_value, modification_reason, modified_by, modification_date, existing_mod[0]))
+            else:
+                cursor.execute("""
+                INSERT INTO goa_modifications (machine_template_id, field_key, original_value, modified_value, modification_reason, modified_by, modification_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (machine_template_id, field_key, original_value, modified_value, modification_reason, modified_by, modification_date))
+        
+        cursor.execute("""
+        UPDATE machine_templates SET template_data_json = ?, processing_date = ? WHERE id = ?
+        """, (json.dumps(template_data), modification_date, machine_template_id))
+
+        conn.commit()
+        
+        if generated_file_path and os.path.exists(TEMPLATE_FILE_PATH):
+            print(f"Regenerating document at: {generated_file_path}")
+            fill_word_document_from_llm_data(TEMPLATE_FILE_PATH, template_data, generated_file_path)
+            print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+
+        print(f"Saved {len(changes)} GOA modifications for machine template ID: {machine_template_id}")
+        return True
+
+    except sqlite3.Error as e:
+        print(f"Database error in save_bulk_goa_modifications: {e}")
+        if conn: conn.rollback()
+        return False
+    except Exception as e:
+        print(f"Unexpected error in save_bulk_goa_modifications: {e}")
+        if conn: conn.rollback()
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 # Example usage (can be run once to create the DB)
 if __name__ == '__main__':
     print(f"Attempting to initialize database at: {os.path.abspath(DB_PATH)}")
