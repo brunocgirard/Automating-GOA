@@ -1372,6 +1372,52 @@ def load_all_processed_machines(db_path: str = DB_PATH) -> List[Dict]:
         if conn:
             conn.close()
 
+def group_items_by_confirmed_machines(all_items, main_machine_indices, common_option_indices):
+    machines = []
+    common_items = []
+    remaining_items = list(range(len(all_items)))
+    for idx in common_option_indices:
+        if idx in remaining_items: 
+            remaining_items.remove(idx)
+            common_items.append(all_items[idx])
+    for machine_idx in main_machine_indices:
+        if machine_idx in remaining_items:
+            remaining_items.remove(machine_idx)
+            next_machine_idx = float('inf')
+            for next_idx in main_machine_indices:
+                if next_idx > machine_idx and next_idx < next_machine_idx: 
+                    next_machine_idx = next_idx
+            add_ons = []
+            for idx in list(remaining_items): 
+                if idx > machine_idx and (idx < next_machine_idx or next_machine_idx == float('inf')):
+                    add_ons.append(all_items[idx])
+                    remaining_items.remove(idx)
+            machine_name = all_items[machine_idx].get('description', '').split('\n')[0]
+            machines.append({"machine_name": machine_name, "main_item": all_items[machine_idx], "add_ons": add_ons})
+    for idx in remaining_items: 
+        common_items.append(all_items[idx])
+    return {"machines": machines, "common_items": common_items}
+
+def calculate_machine_price(machine_data):
+    total_price = 0.0
+    main_item = machine_data.get("main_item", {})
+    main_price = main_item.get("item_price_numeric", 0)
+    if main_price is not None: 
+        total_price += main_price
+    for item in machine_data.get("add_ons", []):
+        addon_price = item.get("item_price_numeric", 0)
+        if addon_price is not None: 
+            total_price += addon_price
+    return total_price
+
+def calculate_common_items_price(common_items):
+    total_price = 0.0
+    for item in common_items:
+        item_price = item.get("item_price_numeric", 0)
+        if item_price is not None: 
+            total_price += item_price
+    return total_price
+    
 # Example usage (can be run once to create the DB)
 if __name__ == '__main__':
     print(f"Attempting to initialize database at: {os.path.abspath(DB_PATH)}")

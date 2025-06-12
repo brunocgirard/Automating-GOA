@@ -9,7 +9,7 @@ import traceback # For detailed error logging
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils.template_utils import extract_placeholder_context_hierarchical # If needed for profile confirmation display
 from src.utils.llm_handler import configure_gemini_client, answer_pdf_question # For client profile extraction, chat features
-from src.utils.crm_utils import save_client_info, save_priced_items, save_machines_data, save_document_content, load_document_content, get_client_by_id, load_priced_items_for_quote, load_machines_for_quote, load_all_clients
+from src.utils.crm_utils import save_client_info, save_priced_items, save_machines_data, save_document_content, load_document_content, get_client_by_id, load_priced_items_for_quote, load_machines_for_quote, load_all_clients, group_items_by_confirmed_machines
 
 # Moved from app.py
 def extract_client_profile(pdf_path):
@@ -167,265 +167,253 @@ def extract_client_profile(pdf_path):
 
 def confirm_client_profile(extracted_profile):
     """
-    Display UI for confirming and editing client profile information
-    Returns confirmed profile data
+    Display UI for confirming and editing client profile information and machine groupings.
+    Returns confirmed profile data.
     """
-    st.subheader("📋 Confirm Client Profile")
-    
+    st.subheader("📋 Confirm Client Profile and Machines")
+
     if not extracted_profile:
         st.error("No profile data to confirm.")
         return None
-    
-    # Import group_items_by_confirmed_machines from app.py or app_utils.py if moved
-    # For now, assuming it's accessible or defined in this scope if needed for re-grouping during confirmation
-    from app import group_items_by_confirmed_machines # Temporary direct import
 
-    # Initialize session state for machine confirmation if not present
-    if "selected_main_machines_profile" not in st.session_state:
-        st.session_state.selected_main_machines_profile = []
-    if "selected_common_options_profile" not in st.session_state:
-        st.session_state.selected_common_options_profile = []
-    if "profile_machine_confirmation_step" not in st.session_state:
-        st.session_state.profile_machine_confirmation_step = "main_machines"
+    # Use a more robust key for session state to avoid conflicts
+    profile_key = f"profile_{extracted_profile.get('pdf_filename', '').replace('.', '_')}"
+    if f"{profile_key}_selected_main_machines" not in st.session_state:
+        st.session_state[f"{profile_key}_selected_main_machines"] = []
+    if f"{profile_key}_selected_common_options" not in st.session_state:
+        st.session_state[f"{profile_key}_selected_common_options"] = []
 
     # Create a copy for editing
     confirmed_profile = extracted_profile.copy()
     client_info = confirmed_profile.get("client_info", {}).copy()
     standard_fields = confirmed_profile.get("standard_fields", {}).copy()
-    
-    # Client Information Form
-    st.markdown("### 1. Client Information")
-    with st.form("client_info_form"):
-        tab1, tab2 = st.tabs(["Basic Info", "Advanced Info"])
-        
-        with tab1:
-            col1, col2 = st.columns(2)
+
+    # --- 1. Client Information Form ---
+    with st.expander("Step 1: Edit Client Information", expanded=True):
+        with st.form("client_info_form"):
+            tab1, tab2 = st.tabs(["Basic Info", "Advanced Info"])
             
-            with col1:
-                client_info["client_name"] = st.text_input(
-                    "Client/Company Name", 
-                    value=client_info.get("client_name", "")
-                )
-                client_info["contact_person"] = st.text_input(
-                    "Contact Person", 
-                    value=client_info.get("contact_person", "")
-                )
-                client_info["phone"] = st.text_input(
-                    "Phone", 
-                    value=client_info.get("phone", "")
-                )
-                client_info["quote_ref"] = st.text_input(
-                    "Quote Reference", 
-                    value=client_info.get("quote_ref", "") or confirmed_profile.get("pdf_filename", "").split('.')[0]
-                )
+            with tab1:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    client_info["client_name"] = st.text_input(
+                        "Client/Company Name", 
+                        value=client_info.get("client_name", "")
+                    )
+                    client_info["contact_person"] = st.text_input(
+                        "Contact Person", 
+                        value=client_info.get("contact_person", "")
+                    )
+                    client_info["phone"] = st.text_input(
+                        "Phone", 
+                        value=client_info.get("phone", "")
+                    )
+                    client_info["quote_ref"] = st.text_input(
+                        "Quote Reference", 
+                        value=client_info.get("quote_ref", "") or confirmed_profile.get("pdf_filename", "").split('.')[0]
+                    )
+                
+                with col2:
+                    client_info["customer_po"] = st.text_input(
+                        "Customer PO", 
+                        value=client_info.get("customer_po", "")
+                    )
+                    client_info["quote_date"] = st.text_input(
+                        "Quote Date", 
+                        value=client_info.get("quote_date", "")
+                    )
+                    client_info["incoterm"] = st.text_input(
+                        "Incoterm", 
+                        value=client_info.get("incoterm", "")
+                    )
+                    client_info["country_destination"] = st.text_input( # Added country_destination
+                        "Country Destination",
+                        value=client_info.get("country_destination", "")
+                    )
             
-            with col2:
-                client_info["customer_po"] = st.text_input(
-                    "Customer PO", 
-                    value=client_info.get("customer_po", "")
-                )
-                client_info["quote_date"] = st.text_input(
-                    "Quote Date", 
-                    value=client_info.get("quote_date", "")
-                )
-                client_info["incoterm"] = st.text_input(
-                    "Incoterm", 
-                    value=client_info.get("incoterm", "")
-                )
-                client_info["country_destination"] = st.text_input( # Added country_destination
-                    "Country Destination",
-                    value=client_info.get("country_destination", "")
-                )
-        
-        with tab2:
-            col1, col2 = st.columns(2)
+            with tab2:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    client_info["billing_address"] = st.text_area(
+                        "Billing Address", 
+                        value=client_info.get("billing_address", ""),
+                        height=150
+                    )
+                    
+                    standard_fields["Tax ID"] = st.text_input(
+                        "Tax ID",
+                        value=standard_fields.get("Tax ID", "")
+                    )
+                    
+                    standard_fields["H.S"] = st.text_input(
+                        "H.S Code",
+                        value=standard_fields.get("H.S", "")
+                    )
+                
+                with col2:
+                    client_info["shipping_address"] = st.text_area(
+                        "Shipping Address", 
+                        value=client_info.get("shipping_address", ""),
+                        height=150
+                    )
+                    
+                    standard_fields["Via"] = st.text_input(
+                        "Shipping Method",
+                        value=standard_fields.get("Via", "")
+                    )
+                    
+                    standard_fields["Serial Number"] = st.text_input(
+                        "Serial Number",
+                        value=standard_fields.get("Serial Number", "")
+                    )
             
-            with col1:
-                client_info["billing_address"] = st.text_area(
-                    "Billing Address", 
-                    value=client_info.get("billing_address", ""),
-                    height=150
-                )
-                
-                standard_fields["Tax ID"] = st.text_input(
-                    "Tax ID",
-                    value=standard_fields.get("Tax ID", "")
-                )
-                
-                standard_fields["H.S"] = st.text_input(
-                    "H.S Code",
-                    value=standard_fields.get("H.S", "")
-                )
-            
-            with col2:
-                client_info["shipping_address"] = st.text_area(
-                    "Shipping Address", 
-                    value=client_info.get("shipping_address", ""),
-                    height=150
-                )
-                
-                standard_fields["Via"] = st.text_input(
-                    "Shipping Method",
-                    value=standard_fields.get("Via", "")
-                )
-                
-                standard_fields["Serial Number"] = st.text_input(
-                    "Serial Number",
-                    value=standard_fields.get("Serial Number", "")
-                )
-        
-        # Only show confirm profile button if machine grouping is done
-        if st.session_state.profile_machine_confirmation_step == "done":
-            submit_button = st.form_submit_button("Confirm and Save Profile")
-        else:
-            st.form_submit_button("Next: Confirm Machines", disabled=True)
-            submit_button = False
-    
-    confirmed_profile["client_info"] = client_info
-    confirmed_profile["standard_fields"] = standard_fields
-    
-    st.markdown("### 2. Confirm Identified Machines")
-    items_for_machine_confirmation = confirmed_profile.get("line_items", [])
-    
-    if not items_for_machine_confirmation:
-        st.info("No line items found in the quote to identify machines.")
-        st.session_state.profile_machine_confirmation_step = "done"
-    
-    elif st.session_state.profile_machine_confirmation_step == "main_machines":
-        st.markdown("Select all items that are **main machines**.")
-        selected_indices_main = []
-        with st.container():
-            for i, item in enumerate(items_for_machine_confirmation):
-                desc = item.get('description', 'No description')
-                first_line = desc.split('\n')[0] if '\n' in desc else desc
-                price_str = item.get('selection_text', '') or item.get('item_price_str', '')
-                display_text = f"{first_line} ({price_str})"
-                is_preselected = i in st.session_state.selected_main_machines_profile
-                if st.checkbox(display_text, value=is_preselected, key=f"profile_machine_cb_{i}"):
-                    selected_indices_main.append(i)
-        st.session_state.selected_main_machines_profile = selected_indices_main
-        if st.button("Confirm Main Machines", key="profile_confirm_main_machines"):
-            if not selected_indices_main:
-                st.warning("Please select at least one main machine.")
-            else:
-                st.session_state.profile_machine_confirmation_step = "common_options"
+            form_submit_button = st.form_submit_button("Update Client Info")
+            if form_submit_button:
+                confirmed_profile["client_info"] = client_info
+                confirmed_profile["standard_fields"] = standard_fields
+                st.success("Client information updated locally.")
                 st.rerun()
-                
-    elif st.session_state.profile_machine_confirmation_step == "common_options":
-        st.markdown("Select items that are **common options** (applying to all machines).")
-        main_machine_indices = st.session_state.selected_main_machines_profile
-        available_indices_common = []
-        available_options_common = []
-        for i, item in enumerate(items_for_machine_confirmation):
-            if i not in main_machine_indices:
-                desc = item.get('description', 'No description')
-                first_line = desc.split('\n')[0] if '\n' in desc else desc
-                price_str = item.get('selection_text', '') or item.get('item_price_str', '')
-                display_text = f"{first_line} ({price_str})"
-                available_indices_common.append(i)
-                available_options_common.append(display_text)
-        selected_positions_common = []
-        with st.container():
-            for pos, i in enumerate(available_indices_common):
-                display_text = available_options_common[pos]
-                is_preselected = i in st.session_state.selected_common_options_profile
-                if st.checkbox(display_text, value=is_preselected, key=f"profile_common_cb_{i}"):
-                    selected_positions_common.append(pos)
-        selected_indices_common = [available_indices_common[pos] for pos in selected_positions_common]
-        st.session_state.selected_common_options_profile = selected_indices_common
-        col_back, col_confirm_common = st.columns(2)
-        with col_back:
-            if st.button("Back to Main Machines", key="profile_back_to_main"):
-                st.session_state.profile_machine_confirmation_step = "main_machines"
-                st.rerun()
-        with col_confirm_common:
-            if st.button("Confirm Common Options & Group Machines", key="profile_confirm_common", type="primary"):
-                updated_machines_data = group_items_by_confirmed_machines(
-                    items_for_machine_confirmation,
-                    st.session_state.selected_main_machines_profile,
-                    st.session_state.selected_common_options_profile
-                )
-                confirmed_profile["machines_data"] = updated_machines_data
-                st.session_state.extracted_profile["machines_data"] = updated_machines_data
-                st.session_state.profile_machine_confirmation_step = "done"
-                st.success("Machines re-grouped based on your selection.")
-                st.rerun()
-                
-    elif st.session_state.profile_machine_confirmation_step == "done":
-        st.markdown("### Machine Groupings")
+
+    # --- 2. Machine and Item Grouping ---
+    st.markdown("### Step 2: Group Quote Items")
+    items = confirmed_profile.get("line_items", [])
+    
+    if not items:
+        st.info("No line items were found in the quote.")
+        # Even if no items, allow profile to be saved
+        if st.button("Save Profile without Items"):
+             # ... (save logic) ...
+            pass
+        return None
+
+    # Create more descriptive labels for the selection
+    def format_item_for_display(item, index):
+        desc = item.get('description', 'No description')
+        price = item.get('selection_text') or item.get('item_price_str', 'N/A')
+        qty = item.get('qty', 'N/A')
+        # Clean up description
+        clean_desc = desc.replace('\n', ' ').strip()
+        if len(clean_desc) > 80:
+            clean_desc = clean_desc[:77] + "..."
+        return f"{index+1}. {clean_desc} (Qty: {qty}, Price: {price})"
+
+    item_options = {format_item_for_display(item, i): i for i, item in enumerate(items)}
+    
+    # Pre-select based on initial machine identification
+    initial_machines_data = confirmed_profile.get("machines_data", {})
+    preselected_machine_indices = [
+        i for i, item in enumerate(items) 
+        if any(m.get("main_item") == item for m in initial_machines_data.get("machines", []))
+    ]
+    preselected_common_indices = [
+        i for i, item in enumerate(items)
+        if any(c == item for c in initial_machines_data.get("common_items", []))
+    ]
+
+    # Convert indices to the display format for multiselect default value
+    default_main_machines = [
+        display_str for display_str, index in item_options.items() if index in preselected_machine_indices
+    ]
+    default_common_options = [
+        display_str for display_str, index in item_options.items() if index in preselected_common_indices
+    ]
+
+    st.markdown("**Select the main machines from the list of quote items.** These are the primary pieces of equipment.")
+    selected_main_machine_labels = st.multiselect(
+        "Main Machines",
+        options=list(item_options.keys()),
+        default=default_main_machines,
+        key=f"{profile_key}_main_machines_multiselect"
+    )
+    selected_main_machine_indices = [item_options[label] for label in selected_main_machine_labels]
+
+    # Options for common items should not include already selected main machines
+    available_common_options = {
+        display: index for display, index in item_options.items() if index not in selected_main_machine_indices
+    }
+
+    st.markdown("**Select common options.** These are items that apply to the entire quote, not a specific machine.")
+    selected_common_option_labels = st.multiselect(
+        "Common Options",
+        options=list(available_common_options.keys()),
+        default=[label for label in default_common_options if label in available_common_options],
+        key=f"{profile_key}_common_options_multiselect"
+    )
+    selected_common_option_indices = [available_common_options[label] for label in selected_common_option_labels]
+
+    # Update profile with the new groupings
+    updated_machines_data = group_items_by_confirmed_machines(
+        items,
+        selected_main_machine_indices,
+        selected_common_option_indices
+    )
+    confirmed_profile["machines_data"] = updated_machines_data
+
+    # --- 3. Review and Save ---
+    st.markdown("### Step 3: Review and Save Profile")
+    with st.container(border=True):
+        st.markdown("#### Final Machine Groupings")
         machines = confirmed_profile.get("machines_data", {}).get("machines", [])
         if machines:
             for i, machine in enumerate(machines):
                 with st.expander(f"Machine {i+1}: {machine.get('machine_name', 'Unknown')}", expanded=i==0):
-                    st.markdown(f"**Main Item:** {machine.get('main_item', {}).get('description', 'No description')}")
-                    add_ons = machine.get('add_ons', [])
-                    if add_ons:
-                        st.markdown(f"**Add-ons:** {len(add_ons)} items")
-                        for j, addon in enumerate(add_ons[:3]):
-                            st.markdown(f"- {addon.get('description', '')[:100]}...")
-                        if len(add_ons) > 3:
-                            st.markdown(f"- ... and {len(add_ons) - 3} more add-ons")
-                    else:
-                        st.markdown("**Add-ons:** None")
+                    st.markdown(f"**Main Item:** {machine.get('main_item', {}).get('description', 'N/A').splitlines()[0]}")
+                    st.markdown(f"**Add-ons:** {len(machine.get('add_ons', []))} items")
         else:
-            st.info("No machines identified based on current selections.")
+            st.info("No main machines selected.")
+        
         common_items = confirmed_profile.get("machines_data", {}).get("common_items", [])
         if common_items:
-            with st.expander("Common Items"):
-                st.markdown(f"**{len(common_items)} common items**")
-                for item in common_items:
-                    st.markdown(f"- {item.get('description', '')[:100]}...")
-        if st.button("Re-confirm Machines", key="profile_reconfirm_machines"):
-            st.session_state.profile_machine_confirmation_step = "main_machines"
-            st.rerun()
-
-    if submit_button and st.session_state.profile_machine_confirmation_step == "done":
-        if client_info.get("client_name") and client_info.get("quote_ref"):
-            client_record = {
-                "quote_ref": client_info.get("quote_ref"),
-                "customer_name": client_info.get("client_name"),
-                "machine_model": ", ".join([m.get("machine_name", "") for m in confirmed_profile.get("machines_data", {}).get("machines", [])]),
-                "country_destination": client_info.get("country_destination", ""),
-                "sold_to_address": client_info.get("billing_address"),
-                "ship_to_address": client_info.get("shipping_address"),
-                "telephone": client_info.get("phone"),
-                "customer_contact_person": client_info.get("contact_person"),
-                "customer_po": client_info.get("customer_po"),
-                "incoterm": client_info.get("incoterm"),
-                "quote_date": client_info.get("quote_date")
-            }
-            client_record["tax_id"] = standard_fields.get("Tax ID", "")
-            client_record["hs_code"] = standard_fields.get("H.S", "")
-            client_record["shipping_method"] = standard_fields.get("Via", "")
-            client_record["serial_number"] = standard_fields.get("Serial Number", "")
-            
-            if save_client_info(client_record):
-                st.success("Client profile saved to database.")
-                if confirmed_profile.get("line_items"):
-                    save_priced_items(client_info.get("quote_ref"), confirmed_profile.get("line_items"))
-                if confirmed_profile.get("machines_data"):
-                    save_machines_data(client_info.get("quote_ref"), confirmed_profile.get("machines_data"))
-                save_document_content(
-                    client_info.get("quote_ref"),
-                    confirmed_profile.get("full_text", ""),
-                    confirmed_profile.get("pdf_filename", "")
-                )
-                # Call load_crm_data from app.py or pass it as an argument if needed to refresh lists
-                # For now, assuming direct call might error or session_state is used by load_crm_data directly
-                st.session_state.all_crm_clients = load_all_clients() # Direct call to refresh
-                if confirmed_profile:
-                    st.session_state.confirmed_profile = confirmed_profile
-                    st.session_state.profile_extraction_step = "action_selection" 
-                    st.session_state.current_page = "Client Dashboard" 
-                    st.rerun()
-                else: st.error(f"Could not load full profile for {client_record.get('quote_ref')}.")
-                return confirmed_profile
+            st.markdown(f"**Common Items:** {len(common_items)} items selected.")
+        
+        if st.button("Confirm and Save Full Profile", type="primary", use_container_width=True):
+            if client_info.get("client_name") and client_info.get("quote_ref"):
+                client_record = {
+                    "quote_ref": client_info.get("quote_ref"),
+                    "customer_name": client_info.get("client_name"),
+                    "machine_model": ", ".join([m.get("machine_name", "") for m in confirmed_profile.get("machines_data", {}).get("machines", [])]),
+                    "country_destination": client_info.get("country_destination", ""),
+                    "sold_to_address": client_info.get("billing_address"),
+                    "ship_to_address": client_info.get("shipping_address"),
+                    "telephone": client_info.get("phone"),
+                    "customer_contact_person": client_info.get("contact_person"),
+                    "customer_po": client_info.get("customer_po"),
+                    "incoterm": client_info.get("incoterm"),
+                    "quote_date": client_info.get("quote_date")
+                }
+                client_record["tax_id"] = standard_fields.get("Tax ID", "")
+                client_record["hs_code"] = standard_fields.get("H.S", "")
+                client_record["shipping_method"] = standard_fields.get("Via", "")
+                client_record["serial_number"] = standard_fields.get("Serial Number", "")
+                
+                if save_client_info(client_record):
+                    st.success("Client profile saved to database.")
+                    if confirmed_profile.get("line_items"):
+                        save_priced_items(client_info.get("quote_ref"), confirmed_profile.get("line_items"))
+                    if confirmed_profile.get("machines_data"):
+                        save_machines_data(client_info.get("quote_ref"), confirmed_profile.get("machines_data"))
+                    save_document_content(
+                        client_info.get("quote_ref"),
+                        confirmed_profile.get("full_text", ""),
+                        confirmed_profile.get("pdf_filename", "")
+                    )
+                    st.session_state.all_crm_clients = load_all_clients()
+                    if confirmed_profile:
+                        st.session_state.confirmed_profile = confirmed_profile
+                        st.session_state.profile_extraction_step = "action_selection"
+                        st.session_state.current_page = "Client Dashboard"
+                        st.rerun()
+                    else:
+                        st.error(f"Could not load full profile for {client_record.get('quote_ref')}.")
+                    return confirmed_profile
+                else:
+                    st.error("Failed to save client profile to database.")
+                    return None
             else:
-                st.error("Failed to save client profile to database.")
+                st.warning("Client name and quote reference are required to save.")
                 return None
-        else:
-            st.warning("Client name and quote reference are required to save.")
-            return None
     return None
 
 def show_action_selection(client_profile):

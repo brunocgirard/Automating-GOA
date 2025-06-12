@@ -42,6 +42,16 @@ def show_welcome_page():
     """
     st.title("QuoteFlow Document Assistant")
     
+    # MODAL: Profile extraction workflow - confirmation step should be first
+    if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "confirmation":
+        if "extracted_profile" in st.session_state and st.session_state.extracted_profile:
+            # Show confirmation UI and stop rendering the rest of the page
+            st.session_state.confirmed_profile = confirm_client_profile(st.session_state.extracted_profile)
+            if st.session_state.confirmed_profile:
+                st.session_state.profile_extraction_step = "action_selection"
+                st.rerun()
+            return # Stop rendering the rest of the page
+    
     # Status check for existing client profiles
     if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "action_selection":
         if "confirmed_profile" in st.session_state and st.session_state.confirmed_profile:
@@ -84,25 +94,13 @@ def show_welcome_page():
     if uploaded_file is not None:
         st.markdown(f"Uploaded: **{uploaded_file.name}**")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Extract Full Profile", key="extract_profile_btn", type="primary", use_container_width=True):
-                st.session_state.extracted_profile = extract_client_profile(uploaded_file)
-                if st.session_state.extracted_profile:
-                    st.session_state.profile_extraction_step = "confirmation"
-                    st.rerun()
-                else:
-                    st.error("Failed to extract profile from the uploaded PDF.")
-        
-        with col2:
-            if st.button("Quick Catalog Only", key="quick_catalog_btn", use_container_width=True):
-                from app import quick_extract_and_catalog
-                result = quick_extract_and_catalog(uploaded_file)
-                if result:
-                    st.success(f"Quote {result['quote_ref']} cataloged with {len(result['items'])} items.")
-                    st.session_state.all_crm_clients = load_all_clients() # Refresh
-                else:
-                    st.error("Failed to catalog the uploaded PDF.")
+        if st.button("Extract Full Profile", key="extract_profile_btn", type="primary", use_container_width=True):
+            st.session_state.extracted_profile = extract_client_profile(uploaded_file)
+            if st.session_state.extracted_profile:
+                st.session_state.profile_extraction_step = "confirmation"
+                st.rerun()
+            else:
+                st.error("Failed to extract profile from the uploaded PDF.")
     
     # Profile extraction workflow - confirmation step
     if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "confirmation":
@@ -118,6 +116,16 @@ def show_client_dashboard_page():
     Displays the client dashboard interface for browsing and selecting clients
     """
     st.title("🎯 Client Dashboard")
+    
+    # MODAL: Profile extraction workflow - confirmation step should be first
+    if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "confirmation":
+        if "extracted_profile" in st.session_state and st.session_state.extracted_profile:
+            # Show confirmation UI and stop rendering the rest of the page
+            st.session_state.confirmed_profile = confirm_client_profile(st.session_state.extracted_profile)
+            if st.session_state.confirmed_profile:
+                st.session_state.profile_extraction_step = "action_selection"
+                st.rerun()
+            return # Stop rendering the rest of the page
     
     # Status check for existing client profiles
     if "profile_extraction_step" in st.session_state and st.session_state.profile_extraction_step == "action_selection":
@@ -172,25 +180,13 @@ def show_client_dashboard_page():
         if uploaded_file is not None:
             st.markdown(f"Uploaded: **{uploaded_file.name}**")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Extract Full Profile", key="extract_profile_dash_btn", type="primary", use_container_width=True):
-                    st.session_state.extracted_profile = extract_client_profile(uploaded_file)
-                    if st.session_state.extracted_profile:
-                        st.session_state.profile_extraction_step = "confirmation"
-                        st.rerun()
-                    else:
-                        st.error("Failed to extract profile from the uploaded PDF.")
-            
-            with col2:
-                if st.button("Quick Catalog Only", key="quick_catalog_dash_btn", use_container_width=True):
-                    from app import quick_extract_and_catalog
-                    result = quick_extract_and_catalog(uploaded_file)
-                    if result:
-                        st.success(f"Quote {result['quote_ref']} cataloged with {len(result['items'])} items.")
-                        st.session_state.all_crm_clients = load_all_clients() # Refresh
-                    else:
-                        st.error("Failed to catalog the uploaded PDF.")
+            if st.button("Extract Full Profile", key="extract_profile_dash_btn", type="primary", use_container_width=True):
+                st.session_state.extracted_profile = extract_client_profile(uploaded_file)
+                if st.session_state.extracted_profile:
+                    st.session_state.profile_extraction_step = "confirmation"
+                    st.rerun()
+                else:
+                    st.error("Failed to extract profile from the uploaded PDF.")
     
     # Client browser
     st.subheader("Client Browser")
