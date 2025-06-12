@@ -548,9 +548,11 @@ def handle_selected_action(action, profile_data):
         return
     elif action == "chat":
         st.session_state.current_page = "Chat"
+        client_info = profile_data.get("client_info", {})
         st.session_state.chat_context = {
-            "full_pdf_text": profile_data.get("full_text", ""),
-            "client_info": profile_data.get("client_info", {})
+            "client_data": client_info,
+            "quote_ref": client_info.get("quote_ref"),
+            "full_pdf_text": profile_data.get("full_text", "")
         }
         return
     return

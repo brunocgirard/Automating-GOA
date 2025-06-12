@@ -2296,6 +2296,8 @@ def show_chat_page():
         st.session_state.chat_context = None
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+    if "chat_page_client_selector" not in st.session_state:
+        st.session_state.chat_page_client_selector = "placeholder"
 
     # --- Document Selection UI (Always Visible) ---
     st.subheader("Select Document to Chat About")
@@ -2386,6 +2388,10 @@ def handle_chat_context_switch():
     else:
         # If the user selects the placeholder, clear the context
         st.session_state.chat_context = None
+
+    # If no valid context was loaded, reset the dropdown selection
+    if st.session_state.chat_context is None:
+        st.session_state.chat_page_client_selector = "placeholder"
 
 def render_chat_ui():
     """
