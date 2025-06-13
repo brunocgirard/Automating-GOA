@@ -44,6 +44,7 @@ graph TB
     SaveToDB --> SaveItems[Save Line Items]
     SaveItems --> SaveMachines[Save Machine Data]
     SaveMachines --> SaveDoc[Save Document Content]
+    ExtractText --> SaveDoc
     
     SaveDoc --> UserChoice{User Action}
     
