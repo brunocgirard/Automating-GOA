@@ -1,7 +1,7 @@
-# GOA LLM Project
+# QuoteFlow Document Assistant
 
 ## 1. Project Purpose
-The GOA LLM Project aims to streamline and automate the process of generating General Offer Arrangement (GOA) documents from PDF quotes. It leverages Large Language Models (LLMs) for intelligent data extraction from quotes, populates standardized Word templates, and provides a user interface for managing and modifying these templates, particularly after client kickoff meetings. The system is designed to improve accuracy, reduce manual effort, and maintain a traceable history of document modifications for manufacturing and sales workflows.
+The QuoteFlow Document Assistant aims to streamline and automate the process of generating General Offer Arrangement (GOA) documents from PDF quotes. It leverages Large Language Models (LLMs) for intelligent data extraction from quotes, populates standardized Word templates, and provides a user interface for managing and modifying these templates, particularly after client kickoff meetings. The system is designed to improve accuracy, reduce manual effort, and maintain a traceable history of document modifications for manufacturing and sales workflows.
 
 ## 2. Features Overview
 - **Automated PDF Quote Parsing:** Extracts text and table data from uploaded PDF quote documents.
@@ -16,6 +16,94 @@ The GOA LLM Project aims to streamline and automate the process of generating Ge
 - **Template Modification Tracking:** Allows users to select specific fields in a machine's GOA, modify their values, provide reasons for changes, and save these modifications.
 - **Hierarchical Template Summary:** Displays a structured, hierarchical view of selected options within a GOA template, making it easier to review and understand the configuration.
 - **Document Regeneration:** Enables regeneration of GOA documents incorporating all saved modifications.
+
+## How It Works
+
+QuoteFlow uses PDF quotes as the primary data source to automatically populate documents and build a comprehensive customer database. The workflow is designed to extract data once and reuse it for multiple document types.
+
+### Workflow Overview
+
+```mermaid
+graph TB
+    Start([User Uploads PDF Quote]) --> Extract[Extract Data from PDF]
+    
+    Extract --> ParseItems[Parse Line Items & Details]
+    Extract --> ExtractText[Extract Full Text]
+    
+    ParseItems --> IdentifyMachines[Identify Machines]
+    IdentifyMachines --> GroupItems[Group Items by Machine]
+    
+    GroupItems --> CreateClient{New or Existing Client?}
+    
+    CreateClient -->|New Client| SaveNewClient[Create Client Record]
+    CreateClient -->|Existing Client| LinkQuote[Link Quote to Client]
+    
+    SaveNewClient --> SaveToDB[(Save to Database)]
+    LinkQuote --> SaveToDB
+    
+    SaveToDB --> SaveItems[Save Line Items]
+    SaveItems --> SaveMachines[Save Machine Data]
+    SaveMachines --> SaveDoc[Save Document Content]
+    
+    SaveDoc --> UserChoice{User Action}
+    
+    UserChoice -->|Generate GOA| SelectMachine[Select Machine]
+    UserChoice -->|Build Reports| BuildReports[Machine Build Summary]
+    UserChoice -->|Chat with Document| ChatInterface[Open Chat Interface]
+    UserChoice -->|Modify Templates| ModifyUI[Template Modification UI]
+    
+    UserChoice -.->|Future: Packing Slip| GenPacking[Generate Packing Document]
+    UserChoice -.->|Future: Invoice| GenInvoice[Generate Commercial Invoice]
+    UserChoice -.->|Future: COO| GenCOO[Generate Certificate of Origin]
+    
+    SelectMachine --> DetectType{Machine Type?}
+    DetectType -->|Regular Machine| LoadTemplate1[Load Standard Template]
+    DetectType -->|SortStar Machine| LoadTemplate2[Load SortStar Template]
+    
+    LoadTemplate1 --> LLMProcess[LLM Processes Data]
+    LoadTemplate2 --> LLMProcess
+    
+    LLMProcess --> FillTemplate[Fill Template Fields]
+    FillTemplate --> GenerateOptions[Generate Options Listing]
+    GenerateOptions --> SaveTemplate[(Save Template Data)]
+    
+    SaveTemplate --> GenerateDoc[Generate Word Document]
+    GenerateDoc --> Download[User Downloads Document]
+    
+    BuildReports --> SelectTemplate[Select GOA Template]
+    SelectTemplate --> GenerateSummary[Generate Summary Report]
+    GenerateSummary --> Download
+    
+    ModifyUI --> LoadSaved[Load Saved Templates]
+    LoadSaved --> EditFields[Edit Field Values]
+    EditFields --> SaveMods[(Save Modifications)]
+    SaveMods --> RegenerateDoc[Regenerate Document]
+    
+    ChatInterface --> QueryLLM[Query LLM with Context]
+    QueryLLM --> ShowResponse[Display Response]
+    
+    GenPacking -.-> Download
+    GenInvoice -.-> Download
+    GenCOO -.-> Download
+    RegenerateDoc --> Download
+    
+    style Start fill:#e1f5fe
+    style SaveToDB fill:#fff3e0
+    style Download fill:#c8e6c9
+    style LLMProcess fill:#f3e5f5
+    style GenPacking fill:#f5f5f5,stroke:#999,stroke-dasharray: 5 5
+    style GenInvoice fill:#f5f5f5,stroke:#999,stroke-dasharray: 5 5
+    style GenCOO fill:#f5f5f5,stroke:#999,stroke-dasharray: 5 5
+```
+
+### Key Components
+
+- **Line Items Database**: Stores individual items from quotes (products, quantities, prices) that are extracted from the PDF
+- **Client Database**: Maintains customer information, addresses, and contact details
+- **Machine Database**: Stores machine specifications and configurations identified from quotes
+- **Template System**: Supports both standard GOA templates and specialized SortStar machine templates
+
+The system ensures that quote data is extracted once and can be used to generate multiple document types, with full modification tracking and regeneration capabilities.
 
 ## 3. Getting Started
 
