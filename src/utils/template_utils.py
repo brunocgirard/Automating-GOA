@@ -2037,6 +2037,311 @@ def parse_full_fields_outline(outline_md_content: str) -> Dict[str, Dict[str, li
 
     return parsed_structure
 
+def select_sortstar_basic_system(machine_data, full_pdf_text):
+    """
+    Selects the correct SortStar basic system configuration based on 
+    machine specifications extracted from the PDF.
+    
+    Handles variations in voltage (e.g., 415V) and capacity specifications
+    by selecting the closest match available.
+    
+    Returns a dictionary with the appropriate basic system field set to 'YES'
+    """
+    basic_systems = {
+        'bs_984_check': 'NO',  # 18ft3 (500L) 220VAC 3 Phases LEFT TO RIGHT
+        'bs_1230_check': 'NO', # 18ft3 (500L) 220VAC 3 Phases RIGHT TO LEFT
+        'bs_985_check': 'NO',  # 18ft3 (500L) 480VAC & 380VAC 3 Phases LEFT TO RIGHT
+        'bs_1229_check': 'NO', # 18ft3 (500L) 480VAC & 380VAC 3 Phases RIGHT TO LEFT
+        'bs_1264_check': 'NO', # 24ft3 (680L) 220VAC 3 Phases LEFT TO RIGHT
+        'bs_1265_check': 'NO', # 24ft3 (680L) 480VAC & 380VAC 3 Phases LEFT TO RIGHT
+    }
+    
+    print("\n=== SortStar Configuration Selection ===")
+    print(f"Machine name: {machine_data.get('machine_name', 'Unknown')}")
+    
+    # First, check add-ons for capacity/hopper size information
+    # This takes priority over other methods since it's the most reliable indicator
+    size_value = None
+    size_hopper = None
+    size_from_addon = False
+    
+    if "add_ons" in machine_data and machine_data["add_ons"]:
+        print("Checking add-ons for capacity information...")
+        for addon in machine_data["add_ons"]:
+            addon_desc = addon.get("description", "").lower()
+            print(f"  - Add-on: {addon_desc}")
+            
+            # Look specifically for "Over Size Hopper" add-ons
+            if any(term in addon_desc for term in ["over size", "oversize", "larger", "big", "extra large", "xl", "jumbo"]) and any(term in addon_desc for term in ["hopper", "capacity", "bin", "container", "bowl"]):
+                print(f"    Found potential oversize hopper add-on: {addon_desc}")
+                
+                # Extract size from the add-on
+                size_patterns = [
+                    r'(\d+)\s*(?:ft3|cubic\s*feet|cu\.\s*ft)',
+                    r'(\d+)\s*(?:l|liter|liters)',
+                    r'(\d+)\s*(?:m3|cubic\s*meters|cu\.\s*m)',
+                    r'capacity.*?(\d+)',
+                    r'(\d+).*?capacity',
+                    r'(\d+)',
+                ]
+                
+                for pattern in size_patterns:
+                    match = re.search(pattern, addon_desc, re.IGNORECASE)
+                    if match:
+                        try:
+                            size_value = int(match.group(1))
+                            print(f"    Extracted size value {size_value} from add-on")
+                            size_from_addon = True
+                            break
+                        except ValueError:
+                            continue
+                
+                # If no specific size found but "over size" is mentioned, default to larger than standard
+                if not size_value and any(term in addon_desc for term in ["over size", "oversize", "larger", "big", "extra large", "xl", "jumbo"]):
+                    size_value = 800  # Set to a value larger than 680L to trigger oversize handling
+                    print(f"    Inferred oversize hopper value of 800L from '{addon_desc}'")
+                    size_from_addon = True
+                
+                # If we found a size value in this add-on, no need to check others
+                if size_value:
+                    break
+    
+    # Extract direction information
+    direction = None
+    direction_patterns = [
+        r'(?:line|machine|flow)\s+direction.*?(left\s+to\s+right|right\s+to\s+left)',
+        r'direction.*?(L\s*to\s*R|R\s*to\s*L)',
+        r'(?:LTR|RTL)',
+        r'(?:left.*?right|right.*?left)',
+        r'LEFT TO RIGHT',
+        r'RIGHT TO LEFT'
+    ]
+    
+    print("Extracting direction information...")
+    for pattern in direction_patterns:
+        match = re.search(pattern, full_pdf_text, re.IGNORECASE | re.DOTALL)
+        if match:
+            direction_text = match.group(1).lower() if hasattr(match, 'group') and match.group(1) else match.group(0).lower()
+            if 'left' in direction_text and 'right' in direction_text:
+                if 'to right' in direction_text or 'ltr' in direction_text or 'l to r' in direction_text:
+                    direction = 'Left to Right'
+                elif 'to left' in direction_text or 'rtl' in direction_text or 'r to l' in direction_text:
+                    direction = 'Right to Left'
+            print(f"  Found direction: {direction} from pattern: {pattern}")
+            break
+    
+    # Extract voltage information
+    voltage = None
+    voltage_patterns = [
+        r'(\d+)\s*(?:v|volt|volts|vac)',
+        r'voltage.*?(\d+)',
+        r'electrical.*?(\d+)\s*(?:v|volt)',
+        r'(\d+)VAC'
+    ]
+    
+    print("Extracting voltage information...")
+    for pattern in voltage_patterns:
+        match = re.search(pattern, full_pdf_text, re.IGNORECASE)
+        if match:
+            try:
+                voltage = int(match.group(1))
+                print(f"  Found voltage: {voltage}V from pattern: {pattern}")
+                break
+            except ValueError:
+                continue
+    
+    # If we haven't found size from add-ons, extract from full PDF text
+    if not size_value:
+        print("No size found in add-ons, checking full PDF text...")
+        size_patterns = [
+            r'(\d+)\s*(?:ft3|cubic\s*feet|cu\.\s*ft)',
+            r'(\d+)\s*(?:l|liter|liters)',
+            r'hopper.*?(\d+)',
+            r'capacity.*?(\d+)',
+            r'sortstar.*?(\d+)'
+        ]
+        
+        for pattern in size_patterns:
+            match = re.search(pattern, full_pdf_text, re.IGNORECASE)
+            if match:
+                try:
+                    size_value = int(match.group(1))
+                    print(f"  Found size value {size_value} from pattern: {pattern}")
+                    break
+                except ValueError:
+                    continue
+    
+    # If we're still missing any required parameter, try to infer from machine_data
+    if not direction or not voltage or not size_value:
+        print("Some parameters missing, trying to infer from machine data...")
+        # Check machine name and description for clues
+        machine_name = machine_data.get('machine_name', '').lower()
+        main_item = machine_data.get('main_item', {})
+        description = main_item.get('description', '').lower() if main_item else ''
+        
+        # Build combined text from all sources
+        add_ons_text = ""
+        if "add_ons" in machine_data and machine_data["add_ons"]:
+            for addon in machine_data["add_ons"]:
+                add_ons_text += " " + addon.get("description", "").lower()
+        
+        combined_text = machine_name + ' ' + description + ' ' + add_ons_text
+        
+        # Try to infer direction
+        if not direction:
+            if any(term in combined_text for term in ['ltr', 'left to right', 'l to r']):
+                direction = 'Left to Right'
+                print(f"  Inferred direction: {direction} from combined text")
+            elif any(term in combined_text for term in ['rtl', 'right to left', 'r to l']):
+                direction = 'Right to Left'
+                print(f"  Inferred direction: {direction} from combined text")
+        
+        # Try to infer voltage
+        if not voltage:
+            voltage_matches = re.findall(r'(\d+)\s*(?:v|volt|vac)', combined_text)
+            if voltage_matches:
+                try:
+                    voltage = int(voltage_matches[0])
+                    print(f"  Inferred voltage: {voltage}V from combined text")
+                except ValueError:
+                    pass
+        
+        # Try to infer hopper size if not already found in add-ons
+        if not size_value:
+            # Look for specific model numbers that indicate size
+            if any(term in combined_text for term in ['18ft3', '500l', '500 l']):
+                size_value = 500
+                print(f"  Inferred size value: 500L from combined text")
+            elif any(term in combined_text for term in ['24ft3', '680l', '680 l']):
+                size_value = 680
+                print(f"  Inferred size value: 680L from combined text")
+            elif any(term in combined_text for term in ['over size hopper', 'oversize hopper', 'larger hopper', 'big hopper', 'extra large hopper', 'xl hopper', 'jumbo hopper']):
+                size_value = 800  # Set to a value larger than 680L to trigger oversize handling
+                print(f"  Inferred oversize hopper value of 800L from combined text")
+            else:
+                # Try to extract numeric values
+                size_matches = re.findall(r'(\d+)\s*(?:ft3|l|liter|liters|m3|cubic)', combined_text)
+                if size_matches:
+                    try:
+                        size_value = int(size_matches[0])
+                        print(f"  Extracted size value: {size_value} from combined text")
+                    except ValueError:
+                        pass
+    
+    # Set default values if still missing after inference attempts
+    if not direction:
+        direction = 'Left to Right'  # Most common default
+        print(f"  Using default direction: {direction}")
+    if not voltage:
+        voltage = 220  # Most common default
+        print(f"  Using default voltage: {voltage}V")
+    if not size_value:
+        # If we couldn't determine size, default to 500L (18ft3) as it's more common
+        size_value = 500
+        print(f"  Using default size value: {size_value}L")
+    
+    # Normalize the hopper size to match our available configurations
+    # For cubic feet measurements
+    if size_value <= 3:  # Likely cubic meters
+        size_value = size_value * 35.3  # Convert to cubic feet
+        print(f"  Converted cubic meters to cubic feet: {size_value}")
+    
+    # Map the size value to our standard sizes
+    if size_value <= 21:  # Cubic feet
+        if size_value <= 18:
+            size_hopper = '500 liters'  # 18ft3
+        else:
+            size_hopper = '680 liters'  # 24ft3
+    else:  # Liters or larger cubic feet
+        # Check if this might be cubic feet (typical range for SortStar hoppers)
+        if size_value > 21 and size_value < 100:  # Likely cubic feet
+            print(f"  Value {size_value} appears to be in cubic feet")
+            if size_value > 21:  # Larger than 21 ft³ should use 24ft³ model
+                size_hopper = '680 liters'  # 24ft3
+                print(f"  Mapping {size_value} ft³ to 24ft³ (680L) model as it's an oversize hopper")
+            else:
+                size_hopper = '500 liters'  # 18ft3
+        else:  # Treating as liters
+            if size_value <= 550:
+                size_hopper = '500 liters'  # 18ft3
+            else:
+                size_hopper = '680 liters'  # 24ft3
+            
+    # Special handling for oversize hoppers - ensure this happens before voltage normalization
+    if (size_value > 24 and size_value < 100) or size_value > 680:  # Oversize hopper (larger than 24ft3/680L)
+        size_hopper = '680 liters'  # Force to 24ft3 model for oversize
+        print(f"  Detected oversize hopper: {size_value} (> 24ft³ or > 680L)")
+        print("  Will select 24ft3 model for oversize hopper - user will update document with actual size")
+    
+    # Normalize the voltage to match our available configurations
+    # Map voltage to our standard voltage categories
+    if voltage <= 240:  # 220V category
+        voltage_category = '220V'
+    else:  # 380-480V category
+        voltage_category = '380-480V'
+    
+    # Log the extracted/inferred values and normalized categories
+    print(f"\nFinal SortStar Configuration Parameters:")
+    print(f"  Direction: {direction}")
+    print(f"  Voltage: {voltage}V (Category: {voltage_category})")
+    print(f"  Size: {size_value} (Normalized: {size_hopper})")
+    print(f"  Size from add-on: {size_from_addon}")
+    
+    # Select the appropriate basic system based on the parameters
+    if size_hopper == '500 liters':  # 18ft3 models
+        if voltage_category == '220V':
+            if direction == 'Left to Right':
+                basic_systems['bs_984_check'] = 'YES'
+                print(f"  Selected: bs_984_check - 18ft3 (500L) 220VAC LEFT TO RIGHT")
+            else:  # Right to Left
+                basic_systems['bs_1230_check'] = 'YES'
+                print(f"  Selected: bs_1230_check - 18ft3 (500L) 220VAC RIGHT TO LEFT")
+        else:  # 380-480V
+            if direction == 'Left to Right':
+                basic_systems['bs_985_check'] = 'YES'
+                print(f"  Selected: bs_985_check - 18ft3 (500L) 480VAC & 380VAC LEFT TO RIGHT")
+            else:  # Right to Left
+                basic_systems['bs_1229_check'] = 'YES'
+                print(f"  Selected: bs_1229_check - 18ft3 (500L) 480VAC & 380VAC RIGHT TO LEFT")
+    else:  # 680 liters or larger (24ft3 models)
+        if voltage_category == '220V':
+            if direction == 'Left to Right':
+                basic_systems['bs_1264_check'] = 'YES'
+                print(f"  Selected: bs_1264_check - 24ft3 (680L) 220VAC LEFT TO RIGHT")
+                if size_value > 680 or (size_value > 24 and size_value < 100):
+                    unit = "ft³" if size_value < 100 else "L"
+                    print(f"  Note: Actual hopper size is {size_value}{unit} - user will need to update document")
+            else:  # Right to Left - no specific config, use Left to Right
+                print("  Warning: No specific configuration for 24ft3 Right to Left with 220V, using Left to Right")
+                basic_systems['bs_1264_check'] = 'YES'
+                print(f"  Selected: bs_1264_check - 24ft3 (680L) 220VAC LEFT TO RIGHT")
+                if size_value > 680 or (size_value > 24 and size_value < 100):
+                    unit = "ft³" if size_value < 100 else "L"
+                    print(f"  Note: Actual hopper size is {size_value}{unit} - user will need to update document")
+        else:  # 380-480V
+            if direction == 'Left to Right':
+                basic_systems['bs_1265_check'] = 'YES'
+                print(f"  Selected: bs_1265_check - 24ft3 (680L) 480VAC & 380VAC LEFT TO RIGHT")
+                if size_value > 680 or (size_value > 24 and size_value < 100):
+                    unit = "ft³" if size_value < 100 else "L"
+                    print(f"  Note: Actual hopper size is {size_value}{unit} - user will need to update document")
+            else:  # Right to Left - no specific config, use Left to Right
+                print("  Warning: No specific configuration for 24ft3 Right to Left with 380-480V, using Left to Right")
+                basic_systems['bs_1265_check'] = 'YES'
+                print(f"  Selected: bs_1265_check - 24ft3 (680L) 480VAC & 380VAC LEFT TO RIGHT")
+                if size_value > 680 or (size_value > 24 and size_value < 100):
+                    unit = "ft³" if size_value < 100 else "L"
+                    print(f"  Note: Actual hopper size is {size_value}{unit} - user will need to update document")
+    
+    # Check if we found a match
+    if 'YES' not in basic_systems.values():
+        print("  Warning: Could not determine appropriate SortStar configuration, using default")
+        basic_systems['bs_984_check'] = 'YES'  # Default to most common configuration
+        print(f"  Selected default: bs_984_check - 18ft3 (500L) 220VAC LEFT TO RIGHT")
+    
+    print("=== End of SortStar Configuration Selection ===\n")
+    return basic_systems
+
 if __name__ == '__main__':
     test_template_path = 'template.docx' 
     if os.path.exists(test_template_path):
