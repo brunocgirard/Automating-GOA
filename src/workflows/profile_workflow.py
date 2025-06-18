@@ -301,24 +301,20 @@ def confirm_client_profile(extracted_profile):
 
     item_options = {format_item_for_display(item, i): i for i, item in enumerate(items)}
     
-    # Pre-select based on initial machine identification
-    initial_machines_data = confirmed_profile.get("machines_data", {})
-    preselected_machine_indices = [
-        i for i, item in enumerate(items) 
-        if any(m.get("main_item") == item for m in initial_machines_data.get("machines", []))
-    ]
-    preselected_common_indices = [
-        i for i, item in enumerate(items)
-        if any(c == item for c in initial_machines_data.get("common_items", []))
-    ]
+    # Initialize with empty selections to avoid confusion - let users select manually
+    # initial_machines_data = confirmed_profile.get("machines_data", {})
+    # preselected_machine_indices = [
+    #     i for i, item in enumerate(items) 
+    #     if any(m.get("main_item") == item for m in initial_machines_data.get("machines", []))
+    # ]
+    # preselected_common_indices = [
+    #     i for i, item in enumerate(items)
+    #     if any(c == item for c in initial_machines_data.get("common_items", []))
+    # ]
 
-    # Convert indices to the display format for multiselect default value
-    default_main_machines = [
-        display_str for display_str, index in item_options.items() if index in preselected_machine_indices
-    ]
-    default_common_options = [
-        display_str for display_str, index in item_options.items() if index in preselected_common_indices
-    ]
+    # Initialize with empty selections to avoid confusion - let users select manually
+    default_main_machines = []
+    default_common_options = []
 
     st.markdown("**Select the main machines from the list of quote items.** These are the primary pieces of equipment.")
     selected_main_machine_labels = st.multiselect(

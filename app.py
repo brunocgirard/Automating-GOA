@@ -246,17 +246,17 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
             st.session_state.items_for_confirmation = st.session_state.selected_pdf_items_structured
             
             initial_machine_data = identify_machines_from_items(st.session_state.selected_pdf_items_structured)
-            preselected_machines, preselected_common = [], []
             
             # This logic is no longer needed here, it will be handled per-machine.
             # The main purpose here is to extract and save the raw data from the PDF.
             # The template-specific logic is now in `process_machine_specific_data`.
 
-            for i, item in enumerate(st.session_state.selected_pdf_items_structured):
-                if any(m.get("main_item") == item for m in initial_machine_data.get("machines", [])): preselected_machines.append(i)
-                elif any(ci == item for ci in initial_machine_data.get("common_items", [])): preselected_common.append(i)
-            st.session_state.selected_main_machines = preselected_machines
-            st.session_state.selected_common_options = preselected_common
+            # Initialize with empty selections to avoid confusion - let users select manually
+            # for i, item in enumerate(st.session_state.selected_pdf_items_structured):
+            #     if any(m.get("main_item") == item for m in initial_machine_data.get("machines", [])): preselected_machines.append(i)
+            #     elif any(ci == item for ci in initial_machine_data.get("common_items", [])): preselected_common.append(i)
+            st.session_state.selected_main_machines = []
+            st.session_state.selected_common_options = []
             st.session_state.selected_pdf_descs = [item.get("description","") for item in st.session_state.selected_pdf_items_structured if item.get("description")]
             if not st.session_state.selected_pdf_descs: st.warning("No descriptions extracted for LLM.")
             if not st.session_state.full_pdf_text: st.warning("Full PDF text extraction failed.")

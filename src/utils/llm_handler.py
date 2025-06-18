@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 import json
 import traceback # For more detailed error logging
 import re
-from src.utils.template_utils import add_section_aware_instructions, DEFAULT_EXPLICIT_MAPPINGS, SORTSTAR_EXPLICIT_MAPPINGS
+from src.utils.template_utils import add_section_aware_instructions, DEFAULT_EXPLICIT_MAPPINGS, SORTSTAR_EXPLICIT_MAPPINGS, select_sortstar_basic_system
 
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
@@ -1228,6 +1228,17 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     
     # Apply post-processing rules to improve the data
     corrected_data = apply_post_processing_rules(llm_response_data, template_placeholder_contexts)
+    
+    # For SortStar machines, use our specialized function to select the correct basic system
+    if is_sortstar_machine:
+        print("Detected SortStar machine - applying specialized basic system selection logic")
+        basic_systems = select_sortstar_basic_system(machine_data, full_pdf_text)
+        
+        # Add these selections to the response data
+        for key, value in basic_systems.items():
+            corrected_data[key] = value
+            print(f"SortStar basic system selection: {key} = {value}")
+    
     return corrected_data
 
 # Example Usage:
