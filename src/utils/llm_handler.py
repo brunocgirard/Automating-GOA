@@ -678,6 +678,43 @@ def get_llm_chat_update(current_data: Dict[str, str],
     
     # Apply post-processing rules to improve the data
     corrected_data = apply_post_processing_rules(updated_data, template_placeholder_contexts)
+    
+    # Record user feedback for few-shot learning improvement
+    try:
+        from src.utils.few_shot_learning import record_user_feedback_on_extraction
+        from src.utils.few_shot_learning import determine_machine_type
+        
+        # Try to determine machine type from context (this might not always be available in chat)
+        machine_name = "Unknown"  # Default fallback
+        if selected_pdf_descriptions:
+            # Try to extract machine name from first description
+            first_desc = selected_pdf_descriptions[0]
+            if "machine" in first_desc.lower() or "system" in first_desc.lower():
+                machine_name = first_desc.split('\n')[0] if '\n' in first_desc else first_desc[:50]
+        
+        machine_type = determine_machine_type(machine_name)
+        
+        # Record feedback for fields that were changed
+        for field_name in corrected_data:
+            original_value = current_data.get(field_name, "")
+            new_value = corrected_data.get(field_name, "")
+            
+            # If the value changed due to user instruction, record it as feedback
+            if original_value != new_value:
+                record_user_feedback_on_extraction(
+                    field_name=field_name,
+                    original_value=original_value,
+                    corrected_value=new_value,
+                    feedback_type="correction",
+                    machine_type=machine_type,
+                    template_type="default",  # Could be enhanced to detect template type
+                    user_context=user_instruction
+                )
+                print(f"Recorded feedback for field '{field_name}': '{original_value}' -> '{new_value}'")
+        
+    except Exception as e:
+        print(f"Error recording user feedback: {e}")
+    
     return corrected_data
 
 def answer_pdf_question(user_question: str, 
@@ -1057,6 +1094,14 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     if re.search(sortstar_pattern, machine_name.lower()):
         is_sortstar_machine = True
 
+    # Import few-shot learning module
+    try:
+        from src.utils.few_shot_learning import enhance_prompt_with_few_shot_examples
+        few_shot_available = True
+    except ImportError:
+        few_shot_available = False
+        print("Few-shot learning module not available, using standard prompts")
+
     # Simplified prompt focusing on the specific machine and its direct context
     prompt_parts = [
         "You are an AI assistant specializing in extracting information from packaging machinery quotes.",
@@ -1160,6 +1205,21 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
             "For example, if the quote specifies a 'Sortstar 24ft3 220VAC Left to Right', then 'bs_1264_check' should be YES and all other bs_..._check for basic configuration should be NO."
         ])
 
+    # Enhance prompt with few-shot examples if available
+    if few_shot_available:
+        try:
+            prompt_parts = enhance_prompt_with_few_shot_examples(
+                prompt_parts=prompt_parts,
+                machine_data=machine_data,
+                template_placeholder_contexts=template_placeholder_contexts,
+                common_items=common_items,
+                full_pdf_text=full_pdf_text,
+                max_examples_per_field=2
+            )
+            print("Enhanced prompt with few-shot examples")
+        except Exception as e:
+            print(f"Error enhancing prompt with few-shot examples: {e}")
+
     prompt_parts.extend([
         "Respond with a single, valid JSON object. Keys MUST be ALL the TEMPLATE PLACEHOLDER KEYS, values their extracted text or YES/NO.",
         "\nEXAMPLE JSON RESPONSE FORMAT:",
@@ -1238,6 +1298,53 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
         for key, value in basic_systems.items():
             corrected_data[key] = value
             print(f"SortStar basic system selection: {key} = {value}")
+    
+    # Save successful extractions as few-shot examples for future learning
+    if few_shot_available:
+        try:
+            from src.utils.few_shot_learning import (
+                save_successful_extraction_as_example, determine_machine_type
+            )
+            
+            machine_type = determine_machine_type(machine_name)
+            template_type = "sortstar" if is_sortstar_machine else "default"
+            source_machine_id = machine_data.get("id")  # If available from database
+            
+            # Save examples for fields that have meaningful values
+            for field_name, field_value in corrected_data.items():
+                # Only save examples for fields with meaningful values
+                if field_value and field_value not in ["", "NO", "Not Specified", "None"]:
+                    # For checkboxes, only save "YES" values as examples
+                    if field_name.endswith("_check") and field_value == "YES":
+                        save_successful_extraction_as_example(
+                            field_name=field_name,
+                            field_value=field_value,
+                            machine_data=machine_data,
+                            common_items=common_items,
+                            full_pdf_text=full_pdf_text,
+                            machine_type=machine_type,
+                            template_type=template_type,
+                            source_machine_id=source_machine_id,
+                            confidence_score=0.9  # High confidence for successful extractions
+                        )
+                    # For text fields, save if they have meaningful content
+                    elif not field_name.endswith("_check") and len(str(field_value).strip()) > 3:
+                        save_successful_extraction_as_example(
+                            field_name=field_name,
+                            field_value=str(field_value),
+                            machine_data=machine_data,
+                            common_items=common_items,
+                            full_pdf_text=full_pdf_text,
+                            machine_type=machine_type,
+                            template_type=template_type,
+                            source_machine_id=source_machine_id,
+                            confidence_score=0.8  # Good confidence for text fields
+                        )
+            
+            print(f"Saved few-shot examples for {machine_type} {template_type} template")
+            
+        except Exception as e:
+            print(f"Error saving few-shot examples: {e}")
     
     return corrected_data
 

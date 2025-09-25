@@ -11,7 +11,8 @@ from datetime import datetime
 # Import from new modules
 from src.ui.ui_pages import (
     show_welcome_page, show_client_dashboard_page, show_quote_processing, 
-    show_crm_management_page, show_chat_page, render_chat_ui, show_template_report_page
+    show_crm_management_page, show_chat_page, render_chat_ui, show_template_report_page,
+    show_few_shot_management_page
 )
 from src.workflows.profile_workflow import (
     extract_client_profile, confirm_client_profile, show_action_selection, 
@@ -741,7 +742,7 @@ def main():
     if st.session_state.error_message: st.error(st.session_state.error_message); st.session_state.error_message = ""
 
     st.sidebar.title("Navigation")
-    page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Machine Build Reports", "Chat"]
+    page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Machine Build Reports", "Chat", "Few-Shot Learning"]
     
     # Set default page to Client Dashboard
     if st.session_state.current_page == "Welcome":
@@ -774,6 +775,8 @@ def main():
         show_template_report_page()
     elif st.session_state.current_page == "Chat": 
         show_chat_page()
+    elif st.session_state.current_page == "Few-Shot Learning":
+        show_few_shot_management_page()
 
 if __name__ == "__main__":
     main()

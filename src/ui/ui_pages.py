@@ -1594,6 +1594,257 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
         import traceback
         st.exception(e)
 
+def show_few_shot_management_page():
+    """
+    Shows a page for managing few-shot learning examples.
+    """
+    st.title("Few-Shot Learning Management")
+    
+    st.markdown("""
+    This page allows you to manage the few-shot learning examples that improve 
+    the accuracy of field extraction over time.
+    """)
+    
+    # Import the few-shot learning functions
+    try:
+        from src.utils.few_shot_learning import get_few_shot_examples, get_similar_examples
+        from src.utils.crm_utils import (
+            get_few_shot_examples as db_get_examples,
+            get_few_shot_statistics,
+            get_field_examples,
+            get_all_field_names,
+            create_sample_few_shot_data
+        )
+        few_shot_available = True
+    except ImportError:
+        few_shot_available = False
+        st.error("Few-shot learning module not available")
+        return
+    
+    if not few_shot_available:
+        st.warning("Few-shot learning is not available. Please ensure the module is properly installed.")
+        return
+    
+    # Sidebar for filtering
+    st.sidebar.header("Filter Examples")
+    
+    machine_types = ["all", "filling", "labeling", "capping", "sortstar", "general"]
+    selected_machine_type = st.sidebar.selectbox("Machine Type", machine_types)
+    
+    template_types = ["all", "default", "sortstar"]
+    selected_template_type = st.sidebar.selectbox("Template Type", template_types)
+    
+    # Get statistics
+    stats = get_few_shot_statistics()
+    
+    # Main content area
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("📊 Performance Statistics")
+        
+        if stats and stats.get('total_examples', 0) > 0:
+            # Overall metrics
+            overall = stats.get('overall', {})
+            col1_1, col1_2, col1_3, col1_4 = st.columns(4)
+            
+            with col1_1:
+                st.metric("Total Examples", stats.get('total_examples', 0))
+            with col1_2:
+                success_rate = overall.get('overall_success_rate', 0)
+                st.metric("Success Rate", f"{success_rate:.1%}")
+            with col1_3:
+                avg_confidence = overall.get('avg_confidence', 0)
+                st.metric("Avg Confidence", f"{avg_confidence:.2f}")
+            with col1_4:
+                total_usage = overall.get('total_usage', 0)
+                st.metric("Total Usage", total_usage)
+            
+            # Quality distribution
+            st.subheader("🎯 Quality Distribution")
+            quality_dist = stats.get('quality_distribution', [])
+            if quality_dist:
+                for quality in quality_dist:
+                    tier = quality.get('quality_tier', '')
+                    count = quality.get('count', 0)
+                    percentage = (count / stats.get('total_examples', 1)) * 100
+                    st.write(f"**{tier}**: {count} examples ({percentage:.1f}%)")
+            
+            # Top fields by performance
+            st.subheader("🏆 Top Performing Fields")
+            top_fields = stats.get('top_fields', [])
+            if top_fields:
+                for field in top_fields[:5]:  # Show top 5
+                    field_name = field.get('field_name', '')
+                    count = field.get('count', 0)
+                    avg_confidence = field.get('avg_confidence', 0)
+                    success_rate = field.get('avg_success_rate', 0)
+                    st.write(f"**{field_name}**: {count} examples, {avg_confidence:.2f} confidence, {success_rate:.1%} success")
+            
+        else:
+            st.info("📈 No examples found yet. Process some PDFs to start building the learning database!")
+        
+        # Show recent examples
+        st.subheader("🕒 Recent Examples")
+        
+        if stats and stats.get('recent_examples'):
+            recent = stats.get('recent_examples', [])
+            for example in recent[:5]:  # Show last 5
+                field_name = example.get('field_name', '')
+                expected_output = example.get('expected_output', '')
+                confidence = example.get('confidence_score', 0)
+                usage_count = example.get('usage_count', 0)
+                success_count = example.get('success_count', 0)
+                created_date = example.get('created_date', '')
+                
+                # Truncate long outputs
+                display_output = expected_output[:50] + "..." if len(expected_output) > 50 else expected_output
+                
+                success_rate = (success_count / usage_count * 100) if usage_count > 0 else 0
+                
+                st.write(f"**{field_name}**: `{display_output}`")
+                st.write(f"  Confidence: {confidence:.2f} | Usage: {usage_count} | Success: {success_rate:.1f}% | Date: {created_date}")
+                st.write("---")
+        else:
+            st.info("No recent examples to display.")
+        
+    with col2:
+        st.subheader("⚙️ Management Actions")
+        
+        if st.button("🔄 Refresh Statistics"):
+            st.rerun()
+        
+        # Add button to create sample data for testing
+        if not stats or stats.get('total_examples', 0) == 0:
+            if st.button("🧪 Create Sample Data"):
+                if create_sample_few_shot_data():
+                    st.success("Sample data created successfully! Refresh the page to see the results.")
+                    st.rerun()
+                else:
+                    st.error("Failed to create sample data.")
+        
+        if stats and stats.get('total_examples', 0) > 0:
+            if st.button("🗑️ Clear Low-Quality Examples"):
+                st.warning("This feature will remove examples with success rate < 50% and usage > 5")
+                # TODO: Implement cleanup function
+            
+            if st.button("📊 Export Statistics"):
+                import json
+                stats_json = json.dumps(stats, indent=2)
+                st.download_button(
+                    label="Download Statistics JSON",
+                    data=stats_json,
+                    file_name="few_shot_statistics.json",
+                    mime="application/json"
+                )
+            
+            if st.button("📋 Export Examples"):
+                st.info("Export functionality will export all examples to CSV format")
+                # TODO: Implement CSV export
+        else:
+            st.info("Actions will be available once examples are created.")
+    
+    # Example search functionality
+    st.subheader("🔍 Search Examples")
+    
+    search_query = st.text_input("Search for examples by field name or context:")
+    
+    if search_query:
+        try:
+            # Use the similar examples function for search
+            similar_examples = get_similar_examples(
+                search_query, 
+                selected_machine_type if selected_machine_type != "all" else "general",
+                selected_template_type if selected_template_type != "all" else "default",
+                limit=5
+            )
+            
+            if similar_examples:
+                st.write(f"Found {len(similar_examples)} similar examples:")
+                for example in similar_examples:
+                    similarity = example.get('similarity', 0)
+                    field_name = example.get('field_name', '')
+                    expected_output = example.get('expected_output', '')
+                    confidence = example.get('confidence_score', 0)
+                    
+                    st.write(f"**{field_name}** (similarity: {similarity:.2f})")
+                    st.write(f"Output: `{expected_output}` (confidence: {confidence:.2f})")
+                    st.write("---")
+            else:
+                st.info(f"No similar examples found for '{search_query}'")
+        except Exception as e:
+            st.error(f"Error searching examples: {e}")
+    
+    # Field-specific examples
+    st.subheader("🎯 Field-Specific Examples")
+    
+    # Get all unique field names from the database
+    field_names = get_all_field_names()
+    if not field_names:
+        field_names = ["No fields found"]
+    
+    selected_field = st.selectbox("Select Field", ["all"] + field_names)
+    
+    if selected_field and selected_field != "all":
+        # Get examples for the selected field
+        field_examples = get_field_examples(
+            machine_type=selected_machine_type if selected_machine_type != "all" else None,
+            template_type=selected_template_type if selected_template_type != "all" else None,
+            field_name=selected_field,
+            limit=10
+        )
+        
+        if field_examples:
+            st.write(f"Found {len(field_examples)} examples for field '{selected_field}':")
+            
+            for example in field_examples:
+                expected_output = example.get('expected_output', '')
+                confidence = example.get('confidence_score', 0)
+                usage_count = example.get('usage_count', 0)
+                success_count = example.get('success_count', 0)
+                machine_type = example.get('machine_type', '')
+                template_type = example.get('template_type', '')
+                created_date = example.get('created_date', '')
+                
+                # Calculate success rate
+                success_rate = (success_count / usage_count * 100) if usage_count > 0 else 0
+                
+                # Truncate long outputs for display
+                display_output = expected_output[:100] + "..." if len(expected_output) > 100 else expected_output
+                
+                st.write(f"**Output**: `{display_output}`")
+                st.write(f"  Type: {machine_type}/{template_type} | Confidence: {confidence:.2f} | Usage: {usage_count} | Success: {success_rate:.1f}% | Created: {created_date}")
+                
+                # Show input context if available
+                input_context = example.get('input_context', '')
+                if input_context:
+                    with st.expander("Show Input Context"):
+                        st.text(input_context[:500] + "..." if len(input_context) > 500 else input_context)
+                
+                st.write("---")
+        else:
+            st.info(f"No examples found for field '{selected_field}' with current filters.")
+    
+    # Machine type and template type breakdown
+    if stats and stats.get('by_machine_type'):
+        st.subheader("📈 Examples by Machine Type")
+        
+        col_type1, col_type2 = st.columns(2)
+        
+        with col_type1:
+            st.write("**Machine Types:**")
+            for machine_type_data in stats.get('by_machine_type', []):
+                machine_type = machine_type_data.get('machine_type', '')
+                count = machine_type_data.get('count', 0)
+                st.write(f"- {machine_type}: {count} examples")
+        
+        with col_type2:
+            st.write("**Template Types:**")
+            for template_type_data in stats.get('by_template_type', []):
+                template_type = template_type_data.get('template_type', '')
+                count = template_type_data.get('count', 0)
+                st.write(f"- {template_type}: {count} examples")
+
 def show_template_report_page():
     """
     Displays a dedicated page for viewing and printing template reports.
