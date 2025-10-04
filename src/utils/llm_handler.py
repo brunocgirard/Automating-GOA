@@ -58,7 +58,7 @@ def configure_gemini_client():
             return False
         
         # Choose model - 1.5 Flash is much cheaper than 2.5 Pro
-        model_name = 'gemini-1.5-flash-latest'
+        model_name = 'gemini-2.5-flash-lite'
         print(f"Initializing Gemini with model: {model_name}")
         
         genai.configure(api_key=api_key)
