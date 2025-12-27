@@ -996,12 +996,18 @@ def generate_synonyms_for_checkbox(key: str, description: str) -> List[str]:
         # Specialized add-ons
         "weighing": ["checkweigher", "weight verification", "weight control", "gravimetric", "scale", "balance", 
                     "load cell", "mass measurement", "weight check"],
-        "coding": ["printer", "marking", "coding system", "date coder", "lot coder", "batch coder", 
+        "coding": ["printer", "marking", "coding system", "date coder", "lot coder", "batch coder",
                   "expiry date printer", "variable information"],
-        "serialization": ["track and trace", "unique identification", "serial number", "unique code", 
+        "serialization": ["track and trace", "unique identification", "serial number", "unique code",
                          "serialization system", "aggregation", "parent-child relationship"],
-        "format_change": ["changeover", "format parts", "change parts", "size parts", "adjustment parts", 
-                         "quick change", "tool-less changeover", "format conversion"]
+        "format_change": ["changeover", "format parts", "change parts", "size parts", "adjustment parts",
+                         "quick change", "tool-less changeover", "format conversion"],
+
+        # Validation document terms
+        "fat": ["factory acceptance test", "factory acceptance testing", "fat protocol", "fat package",
+                "fat/sat", "fat and sat", "fat & sat"],
+        "sat": ["site acceptance test", "site acceptance testing", "sat protocol", "sat package",
+                "fat/sat", "fat and sat", "fat & sat"]
     }
     
     # Extract potential key parts by splitting on underscores
