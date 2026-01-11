@@ -751,6 +751,7 @@ def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[D
                 synonyms = [description.lower(), ph_key.replace("_check","").replace("_"," ")]
                 schema[ph_key]["synonyms"] = list(set(synonyms))
                 schema[ph_key]["positive_indicators"] = [f"with {s}" for s in synonyms] + ["yes", "selected", description.lower()]
+                schema[ph_key]["negative_indicators"] = generate_negative_indicators(ph_key, description, synonyms)
     
     try:
         doc = Document(template_path)
@@ -850,6 +851,10 @@ def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[D
                 # Generate positive indicators based on the synonyms and key
                 positive_indicators = generate_positive_indicators(ph_key, description, synonyms)
                 schema[ph_key]["positive_indicators"] = positive_indicators
+                
+                # Generate negative indicators
+                negative_indicators = generate_negative_indicators(ph_key, description, synonyms)
+                schema[ph_key]["negative_indicators"] = negative_indicators
             
         # Ensure all placeholders have schema entries
         all_phs = extract_placeholders(template_path)
@@ -882,198 +887,89 @@ def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[D
 
 def generate_synonyms_for_checkbox(key: str, description: str) -> List[str]:
     """
-    Generates synonyms for a checkbox field based on its key and description.
-    
-    Args:
-        key: The placeholder key (e.g. "explosion_proof_check")
-        description: The human-readable description
-        
-    Returns:
-        A list of synonyms for this concept
+    Generates more precise synonyms for a checkbox field based on its key and description.
     """
-    # Remove _check suffix for cleaner key
-    clean_key = key.replace("_check", "")
+    clean_key = key.replace("_check", "").replace("_", " ").strip()
     
-    # Comprehensive dictionary of packaging industry terms and their synonyms
-    word_synonyms = {
-        # Safety and compliance terms
-        "explosion_proof": ["explosion-proof", "explosion proof", "explosion protected", "exp", "exd", "class 1 div 2", 
-                           "explosion protection", "hazardous area", "atex", "ex-proof", "explosion protected environment"],
-        "stainless": ["ss", "s.s.", "stainless steel", "inox", "s/s", "316", "304", "316l", "ss316", "ss304", "aisi"],
-        "certification": ["certified", "ce", "csa", "ul", "ansi", "asme", "iso", "iec", "din", "gmp", "fda", "3a"],
-        "gmp": ["good manufacturing practice", "gmp-compliant", "cleanroom", "clean room", "pharmaceutical grade"],
-        "fda": ["food grade", "fda approved", "fda-compliant", "pharma grade", "medical grade"],
-        
-        # Production parameters
-        "production_speed": ["projected speed", "throughput", "bottles per minute", "units per minute", "parts per minute", 
-                            "bpm", "upm", "ppm", "production rate", "processing speed", "output rate", "machine speed"],
-        
-        # Identification and coding systems
-        "barcode": ["bar code", "barcode reader", "code reader", "scanner", "scan", "scanning", "2d code", "qr", 
-                   "datamatrix", "data matrix", "upc", "ean", "barcode verification", "symbology"],
-        "ocr": ["optical character recognition", "character reading", "text reading", "code reading", "character verification"],
-        "ocv": ["optical character verification", "text verification", "character validation", "text validation"],
-        "vision": ["machine vision", "camera", "imaging", "visual inspection", "vision system", "cognex", "keyence", "omron"],
-        "laser": ["laser marking", "laser coding", "laser etching", "laser printing", "co2 laser", "fiber laser", "marking laser"],
-        "inkjet": ["ink jet", "ink-jet", "cij", "continuous inkjet", "thermal inkjet", "ink printer", "coding", "printing"],
-        
-        # Labeling and packaging systems
-        "label": ["label", "labelling", "labeling", "labeler", "labeller", "adhesive label", "pressure sensitive", 
-                 "roll fed", "cut and stack", "label applicator", "front label", "back label"],
-        "sleeve": ["shrink sleeve", "shrink label", "sleeve applicator", "full body sleeve", "neck sleeve", "tamper evident"],
-        "wrap": ["wrap around", "wraparound", "wrap-around", "wrap label", "full wrap", "partial wrap"],
-        "reel": ["label reel", "roll", "spool", "material reel", "unwinder", "rewinder", "roll holder"],
-        
-        # Control systems
-        "hmi": ["hmi", "human machine interface", "touch screen", "touch panel", "operator interface", 
-               "control panel", "display", "panel pc", "operator panel", "touchscreen", "monitor", "5.7 hmi", "5.7 inch hmi"],
-        "plc": ["plc", "controller", "control system", "automation controller", "programmable logic", 
-               "automation system", "control unit", "processor", "allen bradley", "siemens", "b&r", "omron", "b & r plc", "b&r plc"],
-        "servo": ["servo motor", "servo drive", "servo system", "servo control", "brushless", "motion control", 
-                 "precision motion", "servo-driven", "servo actuator", "stepper", "motor"],
-        "pneumatic": ["air", "pneumatic cylinder", "pneumatic actuator", "pneumatic system", "compressed air", 
-                     "air cylinder", "air pressure", "air operated", "air driven"],
-        
-        # Transport and handling systems
-        "conveyor": ["conveying system", "transport system", "belt conveyor", "chain conveyor", "mat conveyor", 
-                    "conveyor belt", "transport", "product transfer", "product handling"],
-        "accumulation": ["accumulation table", "accumulator", "buffer", "buffer table", "accumulation conveyor", 
-                        "bottle accumulator", "container buffer"],
-        "elevator": ["product elevator", "vertical conveyor", "cap elevator", "bottle elevator", "vertical transport", 
-                    "lifting system", "bucket elevator", "z-elevator"],
-        "turntable": ["rotary table", "turn table", "rotating table", "accumulation table", "indexing table", 
-                     "disc table", "disc turntable", "rotary buffer"],
-        "starwheel": ["star wheel", "timing screw", "timing star", "infeed star", "discharge star", "transfer star", 
-                     "pocket wheel", "container transfer"],
-        
-        # Filling and dispensing systems
-        "filling": ["filler", "filling system", "liquid filling", "volumetric filling", "gravimetric filling", 
-                   "level filling", "time pressure filling", "mass flow", "piston filler"],
-        "pump": ["peristaltic pump", "gear pump", "lobe pump", "piston pump", "diaphragm pump", "centrifugal pump", 
-                "rotary pump", "dosing pump", "metering pump", "dispensing pump"],
-        "nozzle": ["filling nozzle", "dispensing nozzle", "fill head", "dosing nozzle", "spray nozzle", 
-                  "injection nozzle", "applicator nozzle", "valve nozzle"],
-        "valve": ["filling valve", "control valve", "check valve", "solenoid valve", "ball valve", "needle valve", 
-                 "butterfly valve", "diaphragm valve", "pinch valve"],
-        
-        # Capping and sealing systems
-        "capping": ["capper", "cap applicator", "cap tightener", "cap sealer", "screwing", "twist-off", 
-                   "screw capper", "press-on capper", "snap-on capper", "ROPP", "roll-on pilfer-proof"],
-        "torque": ["torque control", "cap torque", "torque monitoring", "torque verification", "torque check", 
-                  "torque testing", "torque adjustment", "tightening torque"],
-        "sealing": ["heat sealing", "induction sealing", "foil sealing", "ultrasonic sealing", "band sealing", 
-                   "conduction sealing", "hermetic seal", "tamper evident"],
-        "induction": ["induction sealer", "cap sealer", "foil sealer", "induction heating", "induction coil", 
-                     "sealing head", "cap sealing"],
-        
-        # Detection and verification systems
-        "sensor": ["detector", "sensing device", "photoelectric", "proximity", "ultrasonic", "capacitive", 
-                  "inductive", "fiber optic", "vision sensor", "level sensor", "presence sensor"],
-        "inspection": ["inspection system", "quality control", "verification", "checking", "monitoring", 
-                      "detection", "visual inspection", "automated inspection", "100% inspection"],
-        "reject": ["rejection system", "reject mechanism", "reject station", "rejection station", "ejector", 
-                  "rejection device", "sort", "discard", "rejection arm"],
-        "verification": ["check", "verification system", "monitoring", "quality assurance", "validation", 
-                        "confirmation", "inspection", "testing", "quality check"],
-        
-        # Container handling terms
-        "bottle": ["container", "vial", "jar", "flask", "ampoule", "bottle", "can", "packaging", "primary container"],
-        "puck": ["carrier", "container carrier", "bottle puck", "vial carrier", "nest", "container holder", "pocket"],
-        "unscrambler": ["bottle unscrambler", "container unscrambler", "container orienter", "bottle orienter", 
-                       "unscrambling system", "bottle sorting", "bottle feed"],
-        "accumulator": ["buffer", "accumulation", "accumulation table", "container buffer", "bottle buffer", 
-                       "buffering system", "product queue"],
-        
-        # Machine features
-        "clean_in_place": ["cip", "clean-in-place", "cip system", "automated cleaning", "washdown", "cleaning system",
-                          "sanitization", "sterilization", "aseptic", "clean room"],
-        "touchless": ["no-touch", "non-contact", "contactless", "touchless operation", "hands-free", "remote operation"],
-        "remote_service": ["remote support", "remote access", "remote diagnostics", "remote monitoring", 
-                          "teleservice", "remote maintenance", "remote connection"],
-        "guarding": ["safety guarding", "machine guarding", "safety fence", "protective cover", "safety barrier", 
-                    "safety shield", "protective enclosure", "lexan", "plexiglass", "safety door"],
-        
-        # Specialized add-ons
-        "weighing": ["checkweigher", "weight verification", "weight control", "gravimetric", "scale", "balance", 
-                    "load cell", "mass measurement", "weight check"],
-        "coding": ["printer", "marking", "coding system", "date coder", "lot coder", "batch coder", 
-                  "expiry date printer", "variable information"],
-        "serialization": ["track and trace", "unique identification", "serial number", "unique code", 
-                         "serialization system", "aggregation", "parent-child relationship"],
-        "format_change": ["changeover", "format parts", "change parts", "size parts", "adjustment parts", 
-                         "quick change", "tool-less changeover", "format conversion"]
-    }
+    synonyms = {clean_key, description.lower()}
     
-    # Extract potential key parts by splitting on underscores
-    key_parts = clean_key.split("_")
-    
-    # Get synonyms from description
-    desc_words = description.lower().split()
-    
-    # Start with the key itself and the description
-    synonyms = [key, clean_key.replace("_", " ")]
-
-    # Add variations from description
+    # Add variations from description, but only if they are specific enough
     if description:
         desc_lower = description.lower()
-        synonyms.append(desc_lower) # Raw lowercase description
+        # Add the description without punctuation
+        desc_no_punct = re.sub(r'[^\w\s]', '', desc_lower).strip()
+        if len(desc_no_punct) > 3:
+            synonyms.add(desc_no_punct)
 
-        # Description with punctuation (except period and ampersand) removed, spaces kept
-        desc_no_punct_spaces = re.sub(r'[^\w\s.&]', '', desc_lower) # Keep periods and ampersands
-        desc_no_punct_spaces = re.sub(r'\s+', ' ', desc_no_punct_spaces).strip() # Consolidate spaces
-        synonyms.append(desc_no_punct_spaces)
+    # Add parts of the key if they are specific
+    key_parts = clean_key.split()
+    if len(key_parts) > 1:
+        for part in key_parts:
+            if len(part) > 3: # Avoid adding very short, generic parts
+                synonyms.add(part)
 
-        # Description with all non-alphanumeric chars removed (concatenated)
-        desc_concatenated = re.sub(r'[\W_]', '', desc_lower)
-        synonyms.append(desc_concatenated)
-    
-    # Add synonyms for each key part if available
-    for part in key_parts:
-        if part in word_synonyms:
-            synonyms.extend(word_synonyms[part])
-    
-    # Look for known phrases in the description and add their synonyms
-    for phrase, syn_list in word_synonyms.items():
-        if phrase in description.lower() or phrase.replace("_", " ") in description.lower():
-            synonyms.extend(syn_list)
-    
-    # Clean up and return unique values
-    cleaned_synonyms = [s.strip().lower() for s in synonyms if s.strip()]
-    return list(set(cleaned_synonyms))
+    # Clean up and return unique, non-empty values
+    return sorted(list(s for s in synonyms if s), key=len, reverse=True)
 
 def generate_positive_indicators(key: str, description: str, synonyms: List[str]) -> List[str]:
     """
     Generates phrases that would indicate this checkbox should be marked YES.
+    Prioritizes full phrases for multi-word fields.
+    """
+    indicators = ["included", "standard", "included as standard", "yes", "selected"]
+    
+    # Prioritize the full description and key as indicators
+    if description:
+        clean_desc = description.strip().lower()
+        if len(clean_desc.split()) > 1: # It's a phrase
+            indicators.append(clean_desc)
+            indicators.append(f"with {clean_desc}")
+            indicators.append(f"includes {clean_desc}")
+
+    clean_key = key.replace("_check", "").replace("_", " ").strip().lower()
+    if len(clean_key.split()) > 1:
+        indicators.append(clean_key)
+        
+    # Add synonyms, but be more selective
+    for synonym in synonyms:
+        if synonym:
+            indicators.append(synonym)
+            if len(synonym.split()) > 1: # Add phrase variations for multi-word synonyms
+                indicators.append(f"with {synonym}")
+                indicators.append(f"includes {synonym}")
+
+    # Clean up and return unique values, prioritizing longer phrases
+    cleaned_indicators = sorted(list(set([i.strip().lower() for i in indicators if i.strip()])), key=len, reverse=True)
+    return cleaned_indicators
+
+def generate_negative_indicators(key: str, description: str, synonyms: List[str]) -> List[str]:
+    """
+    Generates phrases that would strongly indicate this checkbox should be marked NO.
     
     Args:
         key: The placeholder key
         description: The human-readable description
-        synonyms: List of synonyms for this concept
+        synonyms: List of synonyms for this concept (can be used to find related negatives)
         
     Returns:
-        A list of phrases that would indicate this is selected
+        A list of phrases that would indicate this is NOT selected
     """
-    # Start with basic indicators
-    indicators = ["included", "standard", "included as standard", "yes", "selected"]
-    
-    # Create phrases like "with <synonym>"
-    for synonym in synonyms:
-        if synonym:
-            indicators.append(f"with {synonym}")
-            indicators.append(f"includes {synonym}")
-            indicators.append(f"{synonym} included")
-            indicators.append(f"{synonym} is selected")
-    
-    # Clean up the description to use as an indicator
-    if description:
-        clean_desc = description.strip().lower()
-        indicators.append(clean_desc)
-        indicators.append(f"with {clean_desc}")
-        indicators.append(f"includes {clean_desc}")
+    negative_indicators = ["none", "no", "not included", "not applicable", "n/a"]
+
+    # Specific negative indicators for 'induction' fields if they are known
+    if "induction" in key.lower() or "induction" in description.lower():
+        negative_indicators.extend(["no induction", "without induction", "no induction sealer", "not induction sealed"])
+
+    # Add general terms that might imply absence if not explicitly present
+    clean_desc = description.strip().lower()
+    # Avoid adding very common words as negative indicators, as they might conflict.
+    # Focus on terms that explicitly negate the feature.
+    if "with out" in clean_desc or "without" in clean_desc:
+        negative_indicators.append(clean_desc)
     
     # Clean up and return unique values
-    cleaned_indicators = [i.strip().lower() for i in indicators if i.strip()]
-    return list(set(cleaned_indicators))
+    cleaned_neg_indicators = [i.strip().lower() for i in negative_indicators if i.strip()]
+    return list(set(cleaned_neg_indicators))
 
 def add_section_aware_instructions(template_schema: Dict[str, Dict], prompt_parts: List[str]) -> List[str]:
     """

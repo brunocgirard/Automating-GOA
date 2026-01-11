@@ -192,7 +192,8 @@ def enhance_prompt_with_few_shot_examples(prompt_parts: List[str],
     template_type = "sortstar" if "sortstar" in machine_type else "default"
     
     # Get few-shot examples for key fields
-    key_fields = list(template_placeholder_contexts.keys())[:10]  # Limit to first 10 fields
+    # Note: Limit removed to support Divide and Conquer strategy where contexts are already grouped/limited
+    key_fields = list(template_placeholder_contexts.keys())
     
     few_shot_section = ["\nFEW-SHOT EXAMPLES FROM PREVIOUS SUCCESSFUL EXTRACTIONS:"]
     

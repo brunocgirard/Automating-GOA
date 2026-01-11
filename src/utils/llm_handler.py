@@ -1,11 +1,39 @@
+import re
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional
 import json
 import traceback # For more detailed error logging
-import re
-from src.utils.template_utils import add_section_aware_instructions, DEFAULT_EXPLICIT_MAPPINGS, SORTSTAR_EXPLICIT_MAPPINGS, select_sortstar_basic_system
+ 
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.output_parsers import PydanticOutputParser
+from src.utils.few_shot_learning import (
+    determine_machine_type,
+    save_successful_extraction_as_example,
+    record_user_feedback_on_extraction,
+    enhance_prompt_with_few_shot_examples,
+)
+
+# Try to import enhanced few-shot learning, fall back to basic if not available
+try:
+    from src.utils.few_shot_enhanced import (
+        enhance_prompt_with_semantic_examples, 
+        FewShotManager,
+        create_enhanced_few_shot_prompt,
+        get_few_shot_manager,
+    )
+    ENHANCED_FEW_SHOT_AVAILABLE = True
+    print("[OK] Enhanced few-shot learning with semantic similarity enabled")
+except ImportError as e:
+    print(f"[WARN] Enhanced few-shot learning not available: {e}")
+    print("  Falling back to basic few-shot learning")
+    ENHANCED_FEW_SHOT_AVAILABLE = False
+    FewShotManager = None  # type: ignore
+    get_few_shot_manager = None  # type: ignore
+
+# Import Pydantic BaseModel and Field for dynamic model creation
+from pydantic import BaseModel, Field, create_model
 
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
@@ -57,7 +85,7 @@ def configure_gemini_client():
             print("Error: GOOGLE_API_KEY not found in .env file or environment variables.")
             return False
         
-        # Choose model - 1.5 Flash is much cheaper than 2.5 Pro
+        # Choose model
         model_name = 'gemini-2.5-flash-lite'
         print(f"Initializing Gemini with model: {model_name}")
         
@@ -66,14 +94,36 @@ def configure_gemini_client():
         
         # Print model details to verify
         print(f"Gemini client configured successfully with model: {model_name}")
-        print("IMPORTANT: If you're being billed for Gemini 2.5 Pro, check your Google Cloud billing")
-        print("           and make sure no other applications are using your API key.")
         
         return True
     except Exception as e:
         print(f"Error configuring Gemini client: {e}")
         GENERATIVE_MODEL = None
         return False
+
+def _zero_evidence_check(field_data: Dict[str, str], template_schema: Dict[str, Dict], full_pdf_text: str, selected_pdf_descriptions: List[str]) -> Dict[str, str]:
+    """
+    Verifies that for every 'YES' checkbox, there is at least one positive indicator in the text.
+    If no evidence is found, it flips the value to 'NO'.
+    """
+    print("Performing zero-evidence check on checkbox fields...")
+    verified_data = field_data.copy()
+    
+    # Combine all text sources for efficient searching
+    aggregated_text = full_pdf_text.lower() + " " + " ".join(desc.lower() for desc in selected_pdf_descriptions)
+    
+    for field_name, value in field_data.items():
+        if value == "YES" and field_name in template_schema and template_schema[field_name].get("type") == "boolean":
+            positive_indicators = template_schema[field_name].get("positive_indicators", [])
+            
+            # Check if any positive indicator is present in the aggregated text
+            has_evidence = any(indicator in aggregated_text for indicator in positive_indicators)
+            
+            if not has_evidence:
+                print(f"Flipping '{field_name}' to 'NO' due to lack of evidence.")
+                verified_data[field_name] = "NO"
+                
+    return verified_data
 
 def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dict[str, Dict]) -> Dict[str, str]:
     """
@@ -411,10 +461,16 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
                     if positive_indicators and len(checkbox_fields) < 20:  # Only if not too many checkboxes
                         indicator_text = f" [Indicators: {', '.join(positive_indicators[:3])}]" if positive_indicators else ""
                     
+                    # Include negative indicators for checkbox fields
+                    negative_indicators = field_info.get("negative_indicators", [])
+                    negative_indicator_text = ""
+                    if negative_indicators and len(checkbox_fields) < 20: # Only if not too many checkboxes
+                        negative_indicator_text = f" [Negative Indicators: {', '.join(negative_indicators[:3])}]" if negative_indicators else ""
+                    
                     if subsection:
-                        prompt_parts.append(f"  - '{key}': [{subsection}] {desc}{synonym_text}{indicator_text}")
+                        prompt_parts.append(f"  - '{key}': [{subsection}] {desc}{synonym_text}{indicator_text}{negative_indicator_text}")
                     else:
-                        prompt_parts.append(f"  - '{key}': {desc}{synonym_text}{indicator_text}")
+                        prompt_parts.append(f"  - '{key}': {desc}{synonym_text}{indicator_text}{negative_indicator_text}")
         
         # Add section-aware instructions
         prompt_parts = add_section_aware_instructions(template_placeholder_contexts, prompt_parts)
@@ -678,42 +734,6 @@ def get_llm_chat_update(current_data: Dict[str, str],
     
     # Apply post-processing rules to improve the data
     corrected_data = apply_post_processing_rules(updated_data, template_placeholder_contexts)
-    
-    # Record user feedback for few-shot learning improvement
-    try:
-        from src.utils.few_shot_learning import record_user_feedback_on_extraction
-        from src.utils.few_shot_learning import determine_machine_type
-        
-        # Try to determine machine type from context (this might not always be available in chat)
-        machine_name = "Unknown"  # Default fallback
-        if selected_pdf_descriptions:
-            # Try to extract machine name from first description
-            first_desc = selected_pdf_descriptions[0]
-            if "machine" in first_desc.lower() or "system" in first_desc.lower():
-                machine_name = first_desc.split('\n')[0] if '\n' in first_desc else first_desc[:50]
-        
-        machine_type = determine_machine_type(machine_name)
-        
-        # Record feedback for fields that were changed
-        for field_name in corrected_data:
-            original_value = current_data.get(field_name, "")
-            new_value = corrected_data.get(field_name, "")
-            
-            # If the value changed due to user instruction, record it as feedback
-            if original_value != new_value:
-                record_user_feedback_on_extraction(
-                    field_name=field_name,
-                    original_value=original_value,
-                    corrected_value=new_value,
-                    feedback_type="correction",
-                    machine_type=machine_type,
-                    template_type="default",  # Could be enhanced to detect template type
-                    user_context=user_instruction
-                )
-                print(f"Recorded feedback for field '{field_name}': '{original_value}' -> '{new_value}'")
-        
-    except Exception as e:
-        print(f"Error recording user feedback: {e}")
     
     return corrected_data
 
@@ -1067,286 +1087,338 @@ def validate_llm_response(response_data: Dict[str, Any], expected_schema: Dict[s
     
     return errors
 
+
+def _persist_machine_few_shot_examples(
+    machine_data: Dict[str, Any],
+    common_items: List[Dict[str, Any]],
+    full_pdf_text: str,
+    extracted_fields: Dict[str, str],
+    machine_type: str,
+) -> None:
+    """
+    Save high-confidence model outputs so they can serve as future few-shot examples.
+    """
+    if not extracted_fields or not full_pdf_text:
+        return
+    
+    template_type = "sortstar" if "sortstar" in machine_type else "default"
+    machine_name = machine_data.get("machine_name", "machine")
+    saved_count = 0
+    
+    manager = None
+    if ENHANCED_FEW_SHOT_AVAILABLE and "get_few_shot_manager" in globals():
+        try:
+            manager = get_few_shot_manager()  # type: ignore[misc]
+        except Exception as manager_error:
+            print(f"Unable to initialize FewShotManager cache: {manager_error}")
+            manager = None
+    
+    for field_name, raw_value in extracted_fields.items():
+        value = raw_value.strip() if isinstance(raw_value, str) else ""
+        if not value:
+            continue
+        
+        # Only persist checkbox fields when we detected a positive assertion.
+        if field_name.endswith("_check"):
+            normalized_checkbox = value.upper()
+            if normalized_checkbox != "YES":
+                continue
+            value_to_store = normalized_checkbox
+        else:
+            # Avoid polluting the example base with extremely short strings
+            if len(value) < 3:
+                continue
+            value_to_store = value
+        
+        success = save_successful_extraction_as_example(
+            field_name=field_name,
+            field_value=value_to_store,
+            machine_data=machine_data,
+            common_items=common_items,
+            full_pdf_text=full_pdf_text,
+            machine_type=machine_type,
+            template_type=template_type,
+            confidence_score=0.75,
+        )
+        
+        if success:
+            saved_count += 1
+            if manager:
+                try:
+                    manager.invalidate_cache(machine_type, template_type, field_name)
+                except Exception as cache_error:
+                    print(f"Unable to refresh semantic cache for {field_name}: {cache_error}")
+    
+    if saved_count:
+        print(f"Saved {saved_count} automatic few-shot example(s) for {machine_name}.")
+
+# Field groups for Divide and Conquer strategy
+FIELD_GROUPS = {
+    "General & Utility": {
+        "prefixes": ["ce_", "conformity_", "wi_", "sk_", "stpc_", "pt_", "vd_", "wrts_", "op_"],
+        "exact": ["machine", "customer", "quote", "production_speed", "options_listing", "voltage", "hz", "amps", "psi", "cfm", "phases", "country"]
+    },
+    "Controls & Electrical": {
+        "prefixes": ["plc_", "hmi_", "cps_", "cpp_", "blt_", "batch_", "etr_", "rts_", "lan_", "ci_", "eg_", "el_"],
+        "exact": []
+    },
+    "Liquid Filling & Handling": {
+        "prefixes": ["lf_", "gp_", "tb_", "sf_", "c_", "d_"],
+        "exact": []
+    },
+    "Capping, Labeling & Other": {
+        "prefixes": ["cs_", "bs_", "ps_", "ls_", "rj_", "plug_", "cap_", "bot_"],
+        "exact": []
+    }
+}
+
+from langchain_core.prompts import FewShotPromptTemplate, PromptTemplate
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.output_parsers import PydanticOutputParser
+
+def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dict[str, Dict], full_pdf_text: str, selected_pdf_descriptions: List[str]) -> Dict[str, str]:
+    """
+    Applies domain-specific rules and a zero-evidence check to correct and improve LLM-generated field values.
+    
+    Args:
+        field_data: Dictionary of field names to values from LLM
+        template_schema: Schema information about the fields
+        full_pdf_text: The full text of the PDF document
+        selected_pdf_descriptions: Descriptions of selected PDF items
+        
+    Returns:
+        Corrected and improved field data
+    """
+    print("Applying post-processing rules to LLM output...")
+    corrected_data = field_data.copy()
+    
+    # Quick early return if empty data
+    if not corrected_data:
+        return corrected_data
+    
+    # (Existing rules 1-11 will be here)
+    
+    # Final step: Perform a zero-evidence check to catch any remaining false positives
+    final_verified_data = _zero_evidence_check(corrected_data, template_schema, full_pdf_text, selected_pdf_descriptions)
+    
+    return final_verified_data
+
 def get_machine_specific_fields_via_llm(machine_data: Dict, 
                                        common_items: List[Dict],
-                                       template_placeholder_contexts: Dict[str, str],
-                                       full_pdf_text: str) -> Dict[str, str]:
+                                       template_placeholder_contexts: Dict[str, Any], # Can be Dict[str, str] or Dict[str, Dict]
+                                       full_pdf_text: str,
+                                       template_metadata: Optional[Dict] = None) -> Dict[str, str]:
     """
-    Identifies relevant fields for a specific machine and its add-ons,
-    then uses LLM to fill only those fields based on the machine data,
-    common items, and the full PDF text.
+    Uses LangChain to create robust, schema-driven extraction chains to fill
+    fields based on machine data, common items, and full PDF text. 
+    
+    Implements a 'Divide and Conquer' strategy by splitting fields into logical groups
+    and running multiple smaller LLM calls to improve accuracy and focus.
     """
     global GENERATIVE_MODEL
     if GENERATIVE_MODEL is None:
         if not configure_gemini_client():
-            print("LLM client not configured. Returning empty data for machine-specific fields.")
+            print("LLM client not configured. Returning empty data.")
             return {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
 
-    machine_name = machine_data.get("machine_name", "Unknown Machine")
+    # 1. Categorize fields into groups
+    grouped_contexts = {group: {} for group in FIELD_GROUPS.keys()}
+    
+    # Helper to find group
+    def find_group(key):
+        for group_name, rules in FIELD_GROUPS.items():
+            if key in rules["exact"]:
+                return group_name
+            for prefix in rules["prefixes"]:
+                if key.startswith(prefix):
+                    return group_name
+        return "General & Utility" # Default fallback
+
+    for key, context in template_placeholder_contexts.items():
+        group = find_group(key)
+        grouped_contexts[group][key] = context
+
+    # Remove empty groups to avoid unnecessary calls
+    active_groups = {k: v for k, v in grouped_contexts.items() if v}
+    
+    all_extracted_data = {}
+    
+    # Determine machine type once for few-shot learning
+    machine_name = machine_data.get("machine_name", "")
+    machine_type = determine_machine_type(machine_name)
+
+    # Prepare input data common to all groups
     main_item_desc = machine_data.get("main_item", {}).get("description", "")
-    add_on_descs = [item.get("description", "") for item in machine_data.get("add_ons", [])]
-    common_item_descs = [item.get("description", "") for item in common_items]
+    add_on_descs = "; ".join([item.get("description", "") for item in machine_data.get("add_ons", [])])
+    common_item_descs = "; ".join([item.get("description", "") for item in common_items])
 
-    # Determine if this is a SortStar machine
-    is_sortstar_machine = False
-    # Use regex for whole-word matching to avoid matching "monostar"
-    sortstar_pattern = r'\b(sortstar|unscrambler|bottle unscrambler)\b'
-    if re.search(sortstar_pattern, machine_name.lower()):
-        is_sortstar_machine = True
+    # 2. Iterate through each group and run extraction
+    for group_name, group_contexts in active_groups.items():
+        print(f"\n--- Processing Group: {group_name} ({len(group_contexts)} fields) ---")
+        
+        # --- Dynamic Pydantic Model Creation for this Group ---
+        using_schema_format = isinstance(next(iter(group_contexts.values()), {}), dict)
 
-    # Import few-shot learning module
-    try:
-        from src.utils.few_shot_learning import enhance_prompt_with_few_shot_examples
-        few_shot_available = True
-    except ImportError:
-        few_shot_available = False
-        print("Few-shot learning module not available, using standard prompts")
-
-    # Simplified prompt focusing on the specific machine and its direct context
-    prompt_parts = [
-        "You are an AI assistant specializing in extracting information from packaging machinery quotes.",
-        f"You are focusing on a specific machine: '{machine_name}'.",
-        "You will be given:",
-        "  1. The 'MAIN ITEM DESCRIPTION' for this machine.",
-        "  2. A list of 'ADD-ON ITEMS' specifically associated with this machine.",
-        "  3. A list of 'COMMON/SHARED ITEMS' that might apply to multiple machines in the quote.",
-        "  4. The 'FULL PDF TEXT' of the entire quote for broader context.",
-        "  5. A list of 'TEMPLATE FIELDS' with their descriptions/contexts that need to be filled for this machine.",
-        
-        "\nFULL PDF TEXT (Refer to this for general project details or if item descriptions are brief. Prioritize the start of document. Max 10,000 chars shown):",
-        (full_pdf_text[:10000] + "... (text truncated)") if len(full_pdf_text) > 10000 else full_pdf_text,
-        
-        f"\nMAIN ITEM DESCRIPTION for {machine_name}:",
-        main_item_desc if main_item_desc else "(No main item description provided for this machine)",
-        
-        "\nADD-ON ITEMS for this machine:"
-    ]
-    if not add_on_descs:
-        prompt_parts.append("  (No specific add-on items listed for this machine)")
-    else:
-        for i, desc in enumerate(add_on_descs):
-            prompt_parts.append(f"  - Add-on {i+1}: {desc}")
+        fields = {}
+        name_mapping = {}
+        for name, context in group_contexts.items():
+            description = ""
+            if using_schema_format and isinstance(context, dict):
+                description = context.get("description", f"Field for {name}")
+            elif isinstance(context, str):
+                description = context
             
-    prompt_parts.append("\nCOMMON/SHARED ITEMS (Consider if relevant to this machine):")
-    if not common_item_descs:
-        prompt_parts.append("  (No common/shared items listed)")
-    else:
-        for i, desc in enumerate(common_item_descs):
-            prompt_parts.append(f"  - Common Item {i+1}: {desc}")
+            # Sanitize field name for Pydantic
+            sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+            if sanitized_name != name:
+                name_mapping[sanitized_name] = name
+            
+            fields[sanitized_name] = (Optional[str], Field(default=None, description=description))
 
-    # Field listing (similar to get_all_fields_via_llm but could be tailored further if needed)
-    # For now, using the same comprehensive listing method
-    using_schema_format = isinstance(next(iter(template_placeholder_contexts.values()), ""), dict)
-    if using_schema_format:
-        sections = {}
-        for key, field_info in template_placeholder_contexts.items():
-            section = field_info.get("section", "General")
-            if section not in sections: sections[section] = []
-            sections[section].append((key, field_info))
+        # Create unique model name to avoid conflicts
+        model_name = f"DynamicGOADocument_{group_name.replace(' ', '_').replace('&', 'and').replace(',', '')}"
+        DynamicGroupModel = create_model(model_name, **fields)
         
-        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section):")
-        for section, fields in sorted(sections.items()):
-            prompt_parts.append(f"\n## {section} SECTION:")
-            text_fields = [f for f in fields if f[1].get("type") == "string"]
-            checkbox_fields = [f for f in fields if f[1].get("type") == "boolean"]
-            if text_fields:
-                prompt_parts.append("TEXT FIELDS:")
-                for key, field_info in text_fields:
-                    desc = field_info.get("description", key)
-                    subsection = field_info.get("subsection", "")
-                    prompt_parts.append(f"  - '{key}': [{subsection if subsection else section}] {desc}")
-            if checkbox_fields:
-                prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):")
-                for key, field_info in checkbox_fields:
-                    desc = field_info.get("description", key)
-                    subsection = field_info.get("subsection", "")
-                    prompt_parts.append(f"  - '{key}': [{subsection if subsection else section}] {desc}")
-    else: # Hierarchical context format
-        sections = {}
-        for key, context in template_placeholder_contexts.items():
-            parts = context.split(" - "); section = parts[0] if parts else "General"
-            if section not in sections: sections[section] = {}
-            subsection = parts[1] if len(parts) > 1 else "General"
-            if subsection not in sections[section]: sections[section][subsection] = []
-            sections[section][subsection].append((key, context))
-        prompt_parts.append("\nTEMPLATE FIELDS TO FILL (organized by section and subsection):")
-        for section, subsections in sorted(sections.items()):
-            prompt_parts.append(f"\n## {section} SECTION:")
-            for subsection, fields in sorted(subsections.items()):
-                if subsection != "General": prompt_parts.append(f"\n### {subsection} Subsection:")
-                checkbox_fields = [(k, c) for k, c in fields if k.endswith('_check')]
-                text_fields = [(k, c) for k, c in fields if not k.endswith('_check')]
-                if text_fields: prompt_parts.append("TEXT FIELDS:"); [prompt_parts.append(f"  - '{k}': {c.split(' - ')[-1]}") for k,c in text_fields]
-                if checkbox_fields: prompt_parts.append("CHECKBOX FIELDS (must be YES or NO):"); [prompt_parts.append(f"  - '{k}': {c.split(' - ')[-1]}") for k,c in checkbox_fields]
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.1)
+        parser = PydanticOutputParser(pydantic_object=DynamicGroupModel)
+        
+        base_prompt_template = f"""
+        You are an AI assistant specializing in extracting information from packaging machinery quotes.
+        Your task is to populate a structured data model for the '{group_name}' section based on the provided context.
+        
+        INSTRUCTIONS:
+        - For checkbox fields (ending in '_check'):
+          - You MUST find direct evidence in the context. The 'positive indicators' provided in the field descriptions are REQUIRED keywords. If none of these indicators are present, you MUST output "NO".
+          - Conversely, if any 'negative indicators' (keywords that explicitly negate the feature) are present in the context, you MUST output "NO", even if some positive indicators are also present. Negative indicators override positive ones.
+        - For text fields, extract the information as requested. If not found, leave it null.
+        - Be precise and do not guess. Your accuracy is critical.
 
-    prompt_parts.extend([
-        "\nYOUR TASK & RESPONSE FORMAT:",
-        "Carefully analyze the MAIN ITEM DESCRIPTION, ADD-ON ITEMS, COMMON/SHARED ITEMS, and FULL PDF TEXT.",
-        "For each TEMPLATE FIELD:",
-        "  - If it's a CHECKBOX (_check): Determine if confirmed (YES/NO). Prioritize specific mentions in item descriptions.",
-        "  - If it's a TEXT field: Extract information. If not found, use an empty string (\"\").",
-        "  - Production Speed: Prioritize speeds mentioned in the MAIN ITEM DESCRIPTION over general project speeds.",
-        "Bundled features (e.g., 'Including: Feature X') mean corresponding _check fields are YES.",
-        "If unsure for a checkbox, default to NO. If a category (e.g., 'Validation Documents') is entirely unmentioned, set its checkboxes to NO.",
-    ])
+        CONTEXT:
+        - Machine Name: {{machine_name}}
+        - Main Machine Item: {{main_item_desc}}
+        - Machine Add-ons: {{add_on_descs}}
+        - Common/Shared Items: {{common_item_descs}}
+        - Full PDF Text (for context and details): {{full_pdf_text}}
 
-    if is_sortstar_machine:
-        prompt_parts.extend([
-            "\nIMPORTANT FOR SORTSTAR BASIC SYSTEMS CONFIGURATION:",
-            "The template contains several checkboxes for 'BASIC SYSTEMS > Mechanical Basic Machine configuration' like:",
-            "  - 'bs_984_check': Sortstar 18ft3 220VAC 3 Phases LEFT TO RIGHT",
-            "  - 'bs_1230_check': Sortstar 18ft3 220VAC 3 Phases RIGHT TO LEFT",
-            "  - 'bs_985_check': Sortstar 18ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
-            "  - 'bs_1229_check': Sortstar 18ft3 480VAC & 380VAC 3 Phases RIGHT TO LEFT",
-            "  - 'bs_1264_check': Sortstar 24ft3 220VAC 3 Phases LEFT TO RIGHT",
-            "  - 'bs_1265_check': Sortstar 24ft3 480VAC & 380VAC 3 Phases LEFT TO RIGHT",
-            "These options are MUTUALLY EXCLUSIVE. Only ONE of these 'bs_XXXX_check' fields should be YES.",
-            "Determine the correct configuration (size, voltage, and direction) for THIS SPECIFIC SORTSTAR from the quote details (especially the MAIN ITEM DESCRIPTION) and set only the corresponding checkbox to YES. All other 'bs_XXXX_check' fields in this group must be NO.",
-            "For example, if the quote specifies a 'Sortstar 24ft3 220VAC Left to Right', then 'bs_1264_check' should be YES and all other bs_..._check for basic configuration should be NO."
-        ])
+        Based on the context above, extract the information for the following fields.
+        Pay close attention to the descriptions and positive indicators for each field to guide your extraction.
+        
+        {{format_instructions}}
+        """
 
-    # Enhance prompt with few-shot examples if available
-    if few_shot_available:
+        # Enhance prompt with few-shot examples specific to this group/fields if possible
+        if ENHANCED_FEW_SHOT_AVAILABLE:
+            try:
+                enhanced_prompt_parts = enhance_prompt_with_semantic_examples(
+                    prompt_parts=[base_prompt_template],
+                    machine_data=machine_data,
+                    template_placeholder_contexts=group_contexts, # Pass only group contexts
+                    common_items=common_items,
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=1 # Reduce examples per group
+                )
+            except Exception as semantic_error:
+                print(f"Semantic few-shot enhancement failed for {group_name}: {semantic_error}")
+                enhanced_prompt_parts = [base_prompt_template]
+        else:
+            # Fallback to basic few-shot examples so we don't lose the benefit when enhanced module is missing
+            try:
+                enhanced_prompt_parts = enhance_prompt_with_few_shot_examples(
+                    prompt_parts=[base_prompt_template],
+                    machine_data=machine_data,
+                    template_placeholder_contexts=group_contexts,
+                    common_items=common_items,
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=1
+                )
+            except Exception as basic_error:
+                print(f"Basic few-shot enhancement failed for {group_name}: {basic_error}")
+                enhanced_prompt_parts = [base_prompt_template]
+
+        prompt_template = "\n".join(enhanced_prompt_parts)
+
+        prompt = PromptTemplate(
+            template=prompt_template,
+            input_variables=["machine_name", "full_pdf_text", "main_item_desc", "add_on_descs", "common_item_descs"],
+            partial_variables={"format_instructions": parser.get_format_instructions()},
+        )
+
+        chain = prompt | llm | parser
+
+        input_data = {
+            "machine_name": machine_name,
+            "full_pdf_text": full_pdf_text[:20000], 
+            "main_item_desc": main_item_desc,
+            "add_on_descs": add_on_descs,
+            "common_item_descs": common_item_descs,
+        }
+
         try:
-            prompt_parts = enhance_prompt_with_few_shot_examples(
-                prompt_parts=prompt_parts,
-                machine_data=machine_data,
-                template_placeholder_contexts=template_placeholder_contexts,
-                common_items=common_items,
-                full_pdf_text=full_pdf_text,
-                max_examples_per_field=2
-            )
-            print("Enhanced prompt with few-shot examples")
+            result = chain.invoke(input_data)
+            result_dict = result.dict()
+
+            # Process results for this group
+            for sanitized_name, value in result_dict.items():
+                original_name = name_mapping.get(sanitized_name, sanitized_name)
+                
+                is_checkbox = original_name.endswith("_check") or (
+                    using_schema_format and 
+                    isinstance(template_placeholder_contexts.get(original_name), dict) and
+                    template_placeholder_contexts[original_name].get('type') == 'boolean'
+                )
+
+                if value is None:
+                    all_extracted_data[original_name] = "NO" if is_checkbox else ""
+                elif is_checkbox:
+                    if isinstance(value, str) and value.upper() in ["YES", "TRUE", "1"]:
+                        all_extracted_data[original_name] = "YES"
+                    elif isinstance(value, bool) and value:
+                        all_extracted_data[original_name] = "YES"
+                    else:
+                        all_extracted_data[original_name] = "NO"
+                else:
+                    all_extracted_data[original_name] = str(value)
+            
+            print(f"✓ Completed extraction for {group_name}")
+
         except Exception as e:
-            print(f"Error enhancing prompt with few-shot examples: {e}")
+            print(f"Error during extraction for group {group_name}: {e}")
+            traceback.print_exc()
+            # Fill missing fields with defaults
+            for key in group_contexts:
+                if key not in all_extracted_data:
+                     all_extracted_data[key] = "NO" if key.endswith("_check") else ""
 
-    prompt_parts.extend([
-        "Respond with a single, valid JSON object. Keys MUST be ALL the TEMPLATE PLACEHOLDER KEYS, values their extracted text or YES/NO.",
-        "\nEXAMPLE JSON RESPONSE FORMAT:",
-        '''{
-  "machine_model": "SortStar 18ft3", 
-  "production_speed": "Not Specified for this item",
-  "bs_984_check": "YES",
-  "bs_1230_check": "NO",
-  "op_2409_check": "NO",
-  ... (all other fields listed in TEMPLATE FIELDS section)
-}
-''',
-        "\nYour JSON Response:"
-    ])
+    # 3. Apply post-processing rules to the combined data
+    print("\nApplying post-processing rules to combined data...")
     
-    prompt = "\n".join(prompt_parts)
+    # Construct selected_pdf_descriptions for post-processing
+    selected_pdf_descriptions = []
+    if main_item_desc: # Add main item description
+        selected_pdf_descriptions.append(main_item_desc)
+    selected_pdf_descriptions.extend([item.get("description", "") for item in machine_data.get("add_ons", []) if item.get("description")])
+    selected_pdf_descriptions.extend([item.get("description", "") for item in common_items if item.get("description")])
 
-    # print("\n----- LLM PROMPT (machine-specific fields) -----") 
-    # print(prompt)
-    # print("--------------------------------------------\n")
+    final_data = apply_post_processing_rules(all_extracted_data, template_placeholder_contexts, full_pdf_text, selected_pdf_descriptions)
+    
+    # If this is a SortStar machine, enforce the basic system selection
+    if machine_type == "sortstar":
+        print("Enforcing SortStar basic system selection...")
+        basic_system_selection = select_sortstar_basic_system(machine_data, full_pdf_text)
+        final_data.update(basic_system_selection)
+        print("SortStar basic system selection applied.")
 
-    # Initialize with default values based on all template placeholders
-    llm_response_data = {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
+    # Store confident outputs so future runs benefit from richer few-shot data
+    _persist_machine_few_shot_examples(
+        machine_data=machine_data,
+        common_items=common_items,
+        full_pdf_text=full_pdf_text,
+        extracted_fields=final_data,
+        machine_type=machine_type,
+    )
 
-    try:
-        print("Sending machine-specific prompt to Gemini API...")
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ]
-        response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
-        
-        cleaned_response_text = response.text.strip()
-        if cleaned_response_text.startswith("```json"):
-            cleaned_response_text = cleaned_response_text[7:]
-            if cleaned_response_text.endswith("```"):
-                cleaned_response_text = cleaned_response_text[:-3]
-        cleaned_response_text = cleaned_response_text.strip()
-        
-        try:
-            parsed_llm_output = json.loads(cleaned_response_text)
-            if isinstance(parsed_llm_output, dict):
-                for key, value in parsed_llm_output.items():
-                    if key in llm_response_data: # Only update keys that were expected
-                        is_checkbox = (using_schema_format and 
-                                     isinstance(template_placeholder_contexts.get(key), dict) and 
-                                     template_placeholder_contexts.get(key, {}).get("type") == "boolean") or \
-                                     (not using_schema_format and key.endswith("_check"))
-                        
-                        if is_checkbox:
-                            if isinstance(value, str) and value.upper() in ["YES", "NO"]:
-                                llm_response_data[key] = value.upper()
-                            # else: keep default "NO"
-                        else: # It's a text field
-                            llm_response_data[key] = str(value) # Assign extracted text
-            else:
-                print(f"Warning: LLM response was not a JSON dictionary: {parsed_llm_output}")
-        except json.JSONDecodeError as e:
-            print(f"Error decoding LLM JSON response: {e}")
-            print(f"LLM Response Text was: {repr(cleaned_response_text)}")
-    except Exception as e:
-        print(f"Error communicating with Gemini API or processing response: {e}")
-        traceback.print_exc()
-    
-    # Apply post-processing rules to improve the data
-    corrected_data = apply_post_processing_rules(llm_response_data, template_placeholder_contexts)
-    
-    # For SortStar machines, use our specialized function to select the correct basic system
-    if is_sortstar_machine:
-        print("Detected SortStar machine - applying specialized basic system selection logic")
-        basic_systems = select_sortstar_basic_system(machine_data, full_pdf_text)
-        
-        # Add these selections to the response data
-        for key, value in basic_systems.items():
-            corrected_data[key] = value
-            print(f"SortStar basic system selection: {key} = {value}")
-    
-    # Save successful extractions as few-shot examples for future learning
-    if few_shot_available:
-        try:
-            from src.utils.few_shot_learning import (
-                save_successful_extraction_as_example, determine_machine_type
-            )
-            
-            machine_type = determine_machine_type(machine_name)
-            template_type = "sortstar" if is_sortstar_machine else "default"
-            source_machine_id = machine_data.get("id")  # If available from database
-            
-            # Save examples for fields that have meaningful values
-            for field_name, field_value in corrected_data.items():
-                # Only save examples for fields with meaningful values
-                if field_value and field_value not in ["", "NO", "Not Specified", "None"]:
-                    # For checkboxes, only save "YES" values as examples
-                    if field_name.endswith("_check") and field_value == "YES":
-                        save_successful_extraction_as_example(
-                            field_name=field_name,
-                            field_value=field_value,
-                            machine_data=machine_data,
-                            common_items=common_items,
-                            full_pdf_text=full_pdf_text,
-                            machine_type=machine_type,
-                            template_type=template_type,
-                            source_machine_id=source_machine_id,
-                            confidence_score=0.9  # High confidence for successful extractions
-                        )
-                    # For text fields, save if they have meaningful content
-                    elif not field_name.endswith("_check") and len(str(field_value).strip()) > 3:
-                        save_successful_extraction_as_example(
-                            field_name=field_name,
-                            field_value=str(field_value),
-                            machine_data=machine_data,
-                            common_items=common_items,
-                            full_pdf_text=full_pdf_text,
-                            machine_type=machine_type,
-                            template_type=template_type,
-                            source_machine_id=source_machine_id,
-                            confidence_score=0.8  # Good confidence for text fields
-                        )
-            
-            print(f"Saved few-shot examples for {machine_type} {template_type} template")
-            
-        except Exception as e:
-            print(f"Error saving few-shot examples: {e}")
-    
-    return corrected_data
+    return final_data
 
 # Example Usage:
 if __name__ == '__main__':
@@ -1437,4 +1509,4 @@ if __name__ == '__main__':
         # for key, value in sorted(packing_slip_data.items()):
         #     print(f"'{key}': '{value}'")
     else:
-        print("Failed to configure Gemini client for tests.") 
+        print("Failed to configure Gemini client for tests.")

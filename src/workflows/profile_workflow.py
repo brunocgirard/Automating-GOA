@@ -10,6 +10,7 @@ from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text
 from src.utils.template_utils import extract_placeholder_context_hierarchical # If needed for profile confirmation display
 from src.utils.llm_handler import configure_gemini_client, answer_pdf_question # For client profile extraction, chat features
 from src.utils.crm_utils import save_client_info, save_priced_items, save_machines_data, save_document_content, load_document_content, get_client_by_id, load_priced_items_for_quote, load_machines_for_quote, load_all_clients, group_items_by_confirmed_machines
+from src.utils.few_shot_learning import save_successful_extraction_as_example, determine_machine_type, record_user_feedback_on_extraction
 
 # Moved from app.py
 def extract_client_profile(pdf_path):
@@ -364,7 +365,7 @@ def confirm_client_profile(extracted_profile):
         if common_items:
             st.markdown(f"**Common Items:** {len(common_items)} items selected.")
         
-        if st.button("Confirm and Save Full Profile", type="primary", use_container_width=True):
+        if st.button("Confirm and Save Full Profile", type="primary", width="stretch"):
             if client_info.get("client_name") and client_info.get("quote_ref"):
                 client_record = {
                     "quote_ref": client_info.get("quote_ref"),
@@ -395,6 +396,43 @@ def confirm_client_profile(extracted_profile):
                         confirmed_profile.get("full_text", ""),
                         confirmed_profile.get("pdf_filename", "")
                     )
+
+                    # --- Save client-level fields as few-shot examples ---
+                    full_pdf_text = confirmed_profile.get("full_text", "")
+                    machine_name_for_type = client_record.get("machine_model", "General")
+                    machine_type = determine_machine_type(machine_name_for_type)
+                    template_type = "client_profile" # A generic template type for client-level fields
+
+                    # Iterate through client_record and standard_fields to save examples
+                    for field_name, field_value in client_record.items():
+                        if field_value: # Only save if a value was extracted
+                            save_successful_extraction_as_example(
+                                field_name=field_name,
+                                field_value=field_value,
+                                machine_data={}, # No specific machine data for client-level fields
+                                common_items=[], # No common items for client-level fields
+                                full_pdf_text=full_pdf_text,
+                                machine_type=machine_type,
+                                template_type=template_type,
+                                confidence_score=1.0 # User confirmed, so high confidence
+                            )
+                    for field_name, field_value in standard_fields.items():
+                        if field_value: # Only save if a value was extracted
+                            # Map original standard field names to a consistent format if needed
+                            # For now, use them as is
+                            save_successful_extraction_as_example(
+                                field_name=field_name,
+                                field_value=field_value,
+                                machine_data={},
+                                common_items=[],
+                                full_pdf_text=full_pdf_text,
+                                machine_type=machine_type,
+                                template_type=template_type,
+                                confidence_score=1.0
+                            )
+                    st.info("Client-level few-shot examples saved.")
+                    # --- End few-shot example saving ---
+
                     st.session_state.all_crm_clients = load_all_clients()
                     if confirmed_profile:
                         st.session_state.confirmed_profile = confirmed_profile
@@ -450,7 +488,7 @@ def show_action_selection(client_profile):
         with st.container(border=True):
             st.markdown("### 📄 Generate GOA Document")
             st.markdown("Create General Order Agreement documents for specific machines")
-            if st.button("Generate GOA", key="action_goa", use_container_width=True):
+            if st.button("Generate GOA", key="action_goa", width="stretch"):
                 st.session_state.current_action = "goa_generation"
                 st.session_state.action_profile = client_profile
                 return "goa_generation"
@@ -458,7 +496,7 @@ def show_action_selection(client_profile):
         with st.container(border=True):
             st.markdown("### ✏️ Edit Profile")
             st.markdown("Update client information and manage machines")
-            if st.button("Edit Profile", key="action_edit", use_container_width=True):
+            if st.button("Edit Profile", key="action_edit", width="stretch"):
                 st.session_state.current_action = "edit_profile"
                 st.session_state.action_profile = client_profile
                 return "edit_profile"
@@ -467,7 +505,7 @@ def show_action_selection(client_profile):
         with st.container(border=True):
             st.markdown("### 💬 Chat with Quote")
             st.markdown("Ask questions about the quote and get answers")
-            if st.button("Chat Interface", key="action_chat", use_container_width=True):
+            if st.button("Chat Interface", key="action_chat", width="stretch"):
                 st.session_state.current_action = "chat"
                 st.session_state.action_profile = client_profile
                 return "chat"
@@ -504,8 +542,8 @@ def handle_selected_action(action, profile_data):
         # Set processing step to 3 (machine processing) to skip selection steps
         st.session_state.processing_step = 3
         
-        if os.path.exists(TEMPLATE_FILE):
-            st.session_state.template_contexts = extract_placeholder_context_hierarchical(TEMPLATE_FILE)
+        from src.utils.form_generator import extract_schema_from_excel
+        st.session_state.template_contexts = extract_schema_from_excel()
         
         # Load the machine data from the profile
         machines_data = profile_data.get("machines_data", {})
@@ -585,4 +623,4 @@ def load_full_client_profile(quote_ref: str) -> Optional[Dict]:
         "line_items": line_items, "machines_data": machines_data_app_structure,
         "full_text": full_text, "pdf_filename": pdf_filename
     }
-    return profile 
+    return profile

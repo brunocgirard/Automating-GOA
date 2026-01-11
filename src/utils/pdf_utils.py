@@ -90,39 +90,91 @@ def get_description_from_row(row: List[Optional[str]], headers: Dict[str, int]) 
 def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
     """
     Extracts description, quantity text, and selection/price text for selected items.
-    Returns: List of dicts, e.g., 
-    [{'description': 'Item A', 'quantity_text': '1', 'selection_text': '1,250.00'}, ...]
+    This enhanced version merges multi-line descriptions and uses flexible selection logic.
     """
     extracted_items: List[Dict[str, Optional[str]]] = []
-    unique_items_set = set() # To avoid duplicate entries
+    
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
                 tables = page.extract_tables()
                 for table_data in tables:
                     if not table_data: continue
+
                     headers = find_table_headers(table_data)
                     if not headers: continue
 
-                    desc_col_idx = headers["description"]
-                    sel_text_col_idx = headers["selection_text_source"]
-                    qty_col_idx = headers.get("quantity", -1) # Get quantity index, default to -1 if not found
+                    desc_col_idx = headers.get("description")
+                    sel_text_col_idx = headers.get("selection_text_source")
+                    qty_col_idx = headers.get("quantity", -1)
                     
-                    headers_for_selection_check = {"description": desc_col_idx, "selection": sel_text_col_idx}
+                    # Also look for a 'unit cost' column for selection logic
+                    unit_cost_keys = ["unit cost", "unit price"]
+                    header_row = table_data[0]
+                    unit_cost_col_idx = next((i for i, cell in enumerate(header_row) if cell and any(k in str(cell).lower() for k in unit_cost_keys)), -1)
+
+                    merged_rows = []
+                    current_item = None
 
                     for row in table_data[1:]: # Skip header row
-                        if is_row_selected(row, headers_for_selection_check):
-                            description = str(row[desc_col_idx]).strip() if len(row) > desc_col_idx and row[desc_col_idx] else None
-                            selection_text = str(row[sel_text_col_idx]).strip() if len(row) > sel_text_col_idx and row[sel_text_col_idx] else None
+                        # Determine if the row is a primary item row or a continuation
+                        is_continuation = True
+                        
+                        # Check if essential columns (like qty or price) have content. If so, it's likely a new item.
+                        if (qty_col_idx != -1 and len(row) > qty_col_idx and row[qty_col_idx] and str(row[qty_col_idx]).strip()) or \
+                           (sel_text_col_idx is not None and len(row) > sel_text_col_idx and row[sel_text_col_idx] and str(row[sel_text_col_idx]).strip()) or \
+                           (unit_cost_col_idx != -1 and len(row) > unit_cost_col_idx and row[unit_cost_col_idx] and str(row[unit_cost_col_idx]).strip()):
+                            is_continuation = False
+
+                        # Also, if the description cell is empty, it's not the start of a new item
+                        description_cell = str(row[desc_col_idx]).strip() if desc_col_idx is not None and len(row) > desc_col_idx and row[desc_col_idx] else ""
+                        if not description_cell:
+                            is_continuation = True
+
+                        # If it's a new item, save the previous one (if exists) and start a new one
+                        if not is_continuation:
+                            if current_item:
+                                merged_rows.append(current_item)
+                            current_item = list(row) # Make a copy
+                        # If it's a continuation, append the description to the current item
+                        elif current_item and description_cell:
+                            # Safely append description
+                            if desc_col_idx is not None and len(current_item) > desc_col_idx:
+                                current_item[desc_col_idx] = (current_item[desc_col_idx] or "") + "\n" + description_cell
+                    
+                    # Add the last processed item
+                    if current_item:
+                        merged_rows.append(current_item)
+
+                    # Now, process the merged rows to find selected items
+                    unique_items_set = set()
+                    for row in merged_rows:
+                        # Enhanced selection logic
+                        is_selected = False
+                        selection_text = str(row[sel_text_col_idx]).strip() if sel_text_col_idx is not None and len(row) > sel_text_col_idx and row[sel_text_col_idx] else None
+                        unit_cost_text = str(row[unit_cost_col_idx]).strip() if unit_cost_col_idx != -1 and len(row) > unit_cost_col_idx and row[unit_cost_col_idx] else None
+
+                        # Check for price in "Selected Item" or "Total" column
+                        if selection_text and re.search(r'\d', selection_text):
+                            is_selected = True
+                        # Check for price in "Unit Cost" column
+                        elif unit_cost_text and re.search(r'\d', unit_cost_text):
+                            is_selected = True
+                        # Check for keywords like "Included"
+                        elif selection_text and selection_text.lower() in ['included', 'standard', 'yes']:
+                            is_selected = True
+
+                        if is_selected:
+                            description = str(row[desc_col_idx]).strip() if desc_col_idx is not None and len(row) > desc_col_idx and row[desc_col_idx] else None
                             quantity_text = str(row[qty_col_idx]).strip() if qty_col_idx != -1 and len(row) > qty_col_idx and row[qty_col_idx] else None
                             
-                            if description: # Must have a description
+                            if description:
                                 item_tuple = (description, quantity_text, selection_text)
                                 if item_tuple not in unique_items_set:
                                     extracted_items.append({
                                         "description": description,
                                         "quantity_text": quantity_text,
-                                        "selection_text": selection_text
+                                        "selection_text": selection_text or unit_cost_text # Prioritize selection_text, fallback to unit_cost
                                     })
                                     unique_items_set.add(item_tuple)
     except Exception as e:

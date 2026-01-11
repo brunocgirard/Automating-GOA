@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import json
+import sqlite3
 import pandas as pd
 import re
 from typing import Dict, List, Optional, Any, Tuple
@@ -11,8 +12,7 @@ from datetime import datetime
 # Import from new modules
 from src.ui.ui_pages import (
     show_welcome_page, show_client_dashboard_page, show_quote_processing, 
-    show_crm_management_page, show_chat_page, render_chat_ui, show_template_report_page,
-    show_few_shot_management_page
+    show_crm_management_page, show_chat_page, render_chat_ui, show_template_report_page
 )
 from src.workflows.profile_workflow import (
     extract_client_profile, confirm_client_profile, show_action_selection, 
@@ -25,6 +25,8 @@ from src.utils import template_utils # Import the module itself
 from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, extract_placeholder_schema # Import specific functions
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
+from src.utils.html_doc_filler import fill_and_generate_html
+from src.utils.form_generator import generate_goa_form, extract_schema_from_excel, OUTPUT_HTML_PATH
 from src.utils.crm_utils import (
     init_db, save_client_info, load_all_clients, get_client_by_id, 
     update_client_record, save_priced_items, load_priced_items_for_quote, 
@@ -105,7 +107,7 @@ def initialize_session_state(is_new_processing_run=False):
         'corrected_docx_path': f"output_llm_corrected_run{st.session_state.get('run_key',0)}.docx",
         'error_message': "", 'chat_log': [], 'correction_applied': False,
         'identified_machines_data': {}, 'selected_machine_index': 0, 'machine_specific_filled_data': {},
-        'machine_docx_path': f"output_machine_specific_run{st.session_state.get('run_key',0)}.docx",
+        'machine_docx_path': f"output_machine_specific_run{st.session_state.get('run_key',0)}.html",
         'selected_machine_id': None, 'machine_confirmation_done': False,
         'common_options_confirmation_done': False, 'items_for_confirmation': [],
         'selected_main_machines': [], 'selected_common_options': [],
@@ -226,7 +228,7 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
         'corrected_docx_path': f"output_llm_corrected_run{st.session_state.run_key}.docx",
         'error_message': "", 'chat_log': [], 'correction_applied': False,
         'identified_machines_data': {}, 'selected_machine_index': 0, 'machine_specific_filled_data': {},
-        'machine_docx_path': f"output_machine_specific_run{st.session_state.run_key}.docx",
+        'machine_docx_path': f"output_machine_specific_run{st.session_state.run_key}.html",
         'selected_machine_id': None, 'machine_confirmation_done': False,
         'common_options_confirmation_done': False, 'items_for_confirmation': [],
         'selected_main_machines': [], 'selected_common_options': [],
@@ -309,94 +311,94 @@ def process_machine_specific_data(machine_data):
         if not common_items and st.session_state.identified_machines_data:
              common_items = st.session_state.identified_machines_data.get("common_items", [])
 
+        # --- DEBUG LOGGING ---
+        print("\n--- DEBUG: process_machine_specific_data ---")
+        print(f"Machine Data: {json.dumps(machine_data, indent=2)}")
+        print(f"Common Items: {json.dumps(common_items, indent=2)}")
+        print("------------------------------------------\n")
+        # --- END DEBUG LOGGING ---
+
         with st.spinner(f"Processing GOA for: {machine_data.get('machine_name')}..."):
             template_contexts, template_file_path, is_sortstar_template = get_contexts_for_machine(machine_data)
-            
+
             if not template_contexts:
                 st.error(f"Could not load template contexts for machine: {machine_data.get('machine_name')}")
                 return False
 
-            using_schema_format = isinstance(next(iter(template_contexts.values()), {}), dict)
-            st.info(f"Using {'schema' if using_schema_format else 'hierarchical context'} format with {len(template_contexts)} fields for {template_file_path}")
-            
-            machine_filled_data = get_machine_specific_fields_via_llm(machine_data, common_items, template_contexts, st.session_state.full_pdf_text)
+            # --- Rehydrate machine data from DB (source of truth for selected items) ---
+            refreshed_machine_data = machine_data
+            try:
+                if "id" in machine_data and machine_data["id"]:
+                    conn = sqlite3.connect("data/crm_data.db")
+                    cur = conn.cursor()
+                    cur.execute("SELECT machine_data_json FROM machines WHERE id = ?", (machine_data["id"],))
+                    row = cur.fetchone()
+                    if row:
+                        refreshed_machine_data = json.loads(row[0])
+                    conn.close()
+            except Exception as e:
+                print(f"Warning: could not reload machine data from DB for gating: {e}")
+
+            # Prefer common_items from refreshed machine data
+            if refreshed_machine_data and refreshed_machine_data.get("common_items"):
+                common_items = refreshed_machine_data.get("common_items", common_items)
+            machine_data_for_processing = refreshed_machine_data or machine_data
+
+            machine_filled_data = get_machine_specific_fields_via_llm(machine_data_for_processing, common_items, template_contexts, st.session_state.full_pdf_text)
+
+            # The evidence gate has been removed to rely solely on the stricter LLM prompt.
+
             st.session_state.machine_specific_filled_data = machine_filled_data
 
             machine_name = machine_data.get('machine_name', 'machine')
             clean_name = re.sub(r'[\\/*?:"<>|]', "_", machine_name.replace(' ', '_')) # Sanitize name more robustly
-            
-            # Generate options_listing for both regular and SortStar machines using the same logic
+
+            # --- Always regenerate options_listing from the currently selected machine items ---
             selected_details = []
-            
-            # First, include actual add-ons from the PDF for both template types
-            # This is what's shown in the regular template in the picture
-            if machine_data and "add_ons" in machine_data and machine_data["add_ons"]:
-                for i, addon in enumerate(machine_data["add_ons"], 1):
-                    if "description" in addon and addon["description"]:
-                        # Format description nicely
-                        desc_lines = addon["description"].split('\n')
-                        main_desc = desc_lines[0] if desc_lines else addon["description"]
-                        selected_details.append(f"- Add-on {i}: {main_desc}")
-            
-            # If no add-ons were found, fall back to template fields (original behavior)
-            if not selected_details and template_contexts and st.session_state.machine_specific_filled_data:
-                using_schema_format_local = isinstance(next(iter(template_contexts.values()), {}), dict)
-                for field_key, context_info in template_contexts.items():
-                    if field_key == "options_listing":
-                        continue # Skip the options_listing field itself
 
-                    field_value = st.session_state.machine_specific_filled_data.get(field_key, "")
-                    is_checkbox_field = False
-                    description = ""
+            def summarize_item(label, item):
+                desc = (item or {}).get("description", "").strip()
+                if not desc:
+                    return None
+                if "•" in desc:
+                    desc = desc.split("•", 1)[0].strip()
+                return f"- {label}: {desc}"
 
-                    if using_schema_format_local:
-                        is_checkbox_field = context_info.get("type") == "boolean"
-                        description = context_info.get("description", field_key)
-                    else: # Hierarchical context (dict of str:str) or basic fallback
-                        is_checkbox_field = field_key.endswith("_check")
-                        description = str(context_info) # context_info is the description string
-                        
-                        # Special handling for SortStar hierarchical paths
-                        is_sortstar_machine = is_sortstar_template
-                        if is_sortstar_machine and ">" in description:
-                            # Extract the most specific part of the description (last part after ">")
-                            parts = [p.strip() for p in description.split(" > ")]
-                            if len(parts) > 1:
-                                description = parts[-1]  # Use only the most specific part
-                    
-                    # Skip fields with 'none' or similar values
-                    if any(term in str(field_value).lower() for term in ["none", "not selected", "not specified"]):
-                        continue
-                        
-                    # Skip if the description contains "none" or similar
-                    if any(term in str(description).lower() for term in ["none", "not selected", "not specified"]):
-                        continue
+            main_line = summarize_item("Main Machine", machine_data.get("main_item"))
+            if main_line:
+                selected_details.append(main_line)
 
-                    # Include selected items
-                    if is_checkbox_field and str(field_value).upper() == "YES":
-                        selected_details.append(f"• {description}")
-                    elif not is_checkbox_field and field_value and field_key not in ["customer", "machine", "quote", "options_listing"]:
-                        # Only add non-checkbox fields if they have meaningful content
-                        if isinstance(field_value, str) and field_value.strip() and field_value.lower() not in ["no", "false", "0"]:
-                            selected_details.append(f"• {description}: {field_value}")
-            
+            for addon in (machine_data.get("add_ons") or []):
+                line = summarize_item("Add-on", addon)
+                if line:
+                    selected_details.append(line)
+
+            for common in (common_items or []):
+                line = summarize_item("Common Item", common)
+                if line:
+                    selected_details.append(line)
+
             if selected_details:
-                st.session_state.machine_specific_filled_data["options_listing"] = "Selected Options and Specifications:\n" + "\n".join(selected_details)
+                machine_filled_data["options_listing"] = "Selected Options and Specifications:\n" + "\n".join(selected_details)
             else:
-                st.session_state.machine_specific_filled_data["options_listing"] = "No options or specifications selected for this machine."
+                machine_filled_data["options_listing"] = "No options or specifications selected for this machine."
+
+            # Ensure the filled data includes options_listing for downstream HTML/Docx generation
+            if "options_listing" in st.session_state.machine_specific_filled_data:
+                machine_filled_data["options_listing"] = st.session_state.machine_specific_filled_data["options_listing"]
             
             # Set the output path based on machine type
             is_sortstar_machine = is_sortstar_template
             if is_sortstar_machine:
                 machine_specific_output_path = f"output_SORTSTAR_{clean_name}_GOA.docx"
             else:
-                machine_specific_output_path = f"output_{clean_name}_GOA.docx"
-            
+                machine_specific_output_path = f"output_{clean_name}_GOA.html"
+
             # Check that we have data before filling
             if not machine_filled_data:
                 st.error("No data received from LLM to fill the template.")
                 return False
-                
+
             # Show sample of the data for debugging
             with st.expander("Preview of data from LLM", expanded=False):
                 # Take first 5 fields to show as example
@@ -404,7 +406,19 @@ def process_machine_specific_data(machine_data):
                 st.write(sample_data)
                 st.write(f"Total fields: {len(machine_filled_data)}")
             
-            fill_word_document_from_llm_data(template_file_path, machine_filled_data, machine_specific_output_path)
+            if is_sortstar_machine:
+                # Keep Word logic for SortStar for now
+                fill_word_document_from_llm_data(template_file_path, machine_filled_data, machine_specific_output_path)
+            else:
+                # Use HTML logic for standard GOA
+                # 1. Regenerate form to ensure it's up to date
+                if not generate_goa_form():
+                    st.error("Failed to generate HTML form template.")
+                    return False
+                
+                # 2. Fill HTML and save
+                # We use the generated OUTPUT_HTML_PATH as the template source
+                fill_and_generate_html(str(OUTPUT_HTML_PATH), machine_filled_data, machine_specific_output_path)
             
             if not os.path.exists(machine_specific_output_path):
                 st.error(f"Failed to create output file: {machine_specific_output_path}")
@@ -643,16 +657,30 @@ def get_contexts_for_machine(machine_record: Dict[str, Any]) -> Tuple[Dict[str, 
     
     active_template_file = config["template_file"]
     contexts = {}
+    
+    # Check existence of source based on config type
+    source_exists = False
+    if config_key == "default":
+        # For default, source is the Excel file
+        source_exists = os.path.exists(os.path.join("templates", "GOA_template.xlsx"))
+    else:
+        # For others (SortStar), source is the docx template
+        source_exists = os.path.exists(active_template_file)
 
-    if os.path.exists(active_template_file):
+    if source_exists:
         try:
-            # Use the unified function from template_utils
-            # The schema extraction is more robust and suitable for both types
-            contexts = template_utils.extract_placeholder_schema(
-                template_path=active_template_file,
-                explicit_mappings=config["explicit_mappings"],
-                is_sortstar=config["is_sortstar"]
-            )
+            if config_key == "default":
+                # For default GOA, extract schema from Excel source of truth
+                print("Extracting schema from Excel for default config")
+                contexts = extract_schema_from_excel()
+            else:
+                # Use the unified function from template_utils
+                # The schema extraction is more robust and suitable for both types
+                contexts = template_utils.extract_placeholder_schema(
+                    template_path=active_template_file,
+                    explicit_mappings=config["explicit_mappings"],
+                    is_sortstar=config["is_sortstar"]
+                )
 
             if not contexts:
                 st.warning(f"Could not extract any contexts from {active_template_file}. Trying hierarchical extraction as fallback.")
@@ -742,7 +770,7 @@ def main():
     if st.session_state.error_message: st.error(st.session_state.error_message); st.session_state.error_message = ""
 
     st.sidebar.title("Navigation")
-    page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Machine Build Reports", "Chat", "Few-Shot Learning"]
+    page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Machine Build Reports", "Chat"]
     
     # Set default page to Client Dashboard
     if st.session_state.current_page == "Welcome":
@@ -775,8 +803,6 @@ def main():
         show_template_report_page()
     elif st.session_state.current_page == "Chat": 
         show_chat_page()
-    elif st.session_state.current_page == "Few-Shot Learning":
-        show_few_shot_management_page()
 
 if __name__ == "__main__":
     main()

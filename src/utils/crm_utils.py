@@ -6,12 +6,19 @@ import json
 import re
 
 # Import for document regeneration
+from src.utils.html_doc_filler import fill_and_generate_pdf, fill_and_generate_html
 from src.utils.doc_filler import fill_word_document_from_llm_data
+from src.utils.form_generator import OUTPUT_HTML_PATH
+import subprocess
+import sys
 
 # Define database connection
 DB_PATH = os.path.join("data", "crm_data.db")
-# Define base template path (ideally this would be passed or configured globally)
-TEMPLATE_FILE_PATH = os.path.join("templates", "template.docx")
+# Define base template paths
+HTML_TEMPLATE_PATH = OUTPUT_HTML_PATH
+DOCX_TEMPLATE_PATH = os.path.join("templates", "template.docx")
+# Legacy constant kept for compatibility if needed, but should rely on extension check
+TEMPLATE_FILE_PATH = os.path.join("templates", "template.docx") 
 
 def init_db(db_path: str = DB_PATH):
     """
@@ -698,6 +705,7 @@ def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str 
             # Add common items to each machine for storage
             machine_with_common = machine_copy.copy()
             machine_with_common["common_items"] = machines_data.get("common_items", [])
+            machine_with_common["main_item"] = machine.get("main_item", {})
             
             # Convert machine to JSON and validate
             try:
@@ -1139,15 +1147,24 @@ def save_goa_modification(
                 file_path_row = cursor.fetchone()
                 if file_path_row and file_path_row[0]:
                     generated_file_path = file_path_row[0]
-                    if os.path.exists(TEMPLATE_FILE_PATH): # Check if base template exists
-                        if generated_file_path: # Check if a file path exists to overwrite
-                            print(f"Regenerating document at: {generated_file_path}")
-                            fill_word_document_from_llm_data(TEMPLATE_FILE_PATH, template_data, generated_file_path)
-                            print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+                    
+                    if generated_file_path.endswith('.html'):
+                        print(f"Regenerating HTML document at: {generated_file_path}")
+                        fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
+                        print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
+                    elif generated_file_path.endswith('.docx'):
+                        # Fallback for legacy DOCX or SortStar (assuming standard template for now, ideal would be to store template path)
+                        # Note: This might pick the wrong template for SortStar if not handled, but sticking to previous logic for docx
+                        template_source = DOCX_TEMPLATE_PATH
+                        if "sortstar" in generated_file_path.lower():
+                             template_source = os.path.join("templates", "goa_sortstar_temp.docx")
+                             
+                        if os.path.exists(template_source):
+                            print(f"Regenerating DOCX document at: {generated_file_path} using {template_source}")
+                            fill_word_document_from_llm_data(template_source, template_data, generated_file_path)
+                            print(f"Successfully regenerated DOCX document for machine template ID: {machine_template_id}")
                         else:
-                            print(f"Warning: No generated_file_path found for template ID {machine_template_id}. Document not regenerated.")
-                    else:
-                        print(f"Warning: Base template file {TEMPLATE_FILE_PATH} not found. Document not regenerated.")
+                            print(f"Warning: Template source {template_source} not found.")
                 else:
                     print(f"Warning: Could not retrieve generated_file_path for template ID {machine_template_id}. Document not regenerated.")
 
@@ -2087,10 +2104,15 @@ def save_bulk_goa_modifications(
 
         conn.commit()
         
-        if generated_file_path and os.path.exists(TEMPLATE_FILE_PATH):
-            print(f"Regenerating document at: {generated_file_path}")
-            fill_word_document_from_llm_data(TEMPLATE_FILE_PATH, template_data, generated_file_path)
-            print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+        if generated_file_path:
+            if generated_file_path.endswith('.html'):
+                print(f"Regenerating HTML document at: {generated_file_path}")
+                fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
+                print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
+            elif generated_file_path.endswith('.docx') and os.path.exists(TEMPLATE_FILE_PATH):
+                print(f"Regenerating DOCX document at: {generated_file_path}")
+                fill_word_document_from_llm_data(TEMPLATE_FILE_PATH, template_data, generated_file_path)
+                print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
 
         print(f"Saved {len(changes)} GOA modifications for machine template ID: {machine_template_id}")
         return True
@@ -2305,4 +2327,4 @@ if __name__ == '__main__':
         else:
             print(f"Could not find client {del_quote_ref} to test deletion.")
     else:
-        print(f"Failed to save test client {del_quote_ref} for deletion test.") 
+        print(f"Failed to save test client {del_quote_ref} for deletion test.")

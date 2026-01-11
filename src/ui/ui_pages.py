@@ -12,6 +12,13 @@ import numpy as np
 import time
 import random
 from src.utils.template_utils import DEFAULT_EXPLICIT_MAPPINGS, SORTSTAR_EXPLICIT_MAPPINGS, parse_full_fields_outline
+from src.utils.form_generator import get_all_fields_from_excel, OUTPUT_HTML_PATH
+from src.utils.html_doc_filler import fill_html_template, fill_and_generate_html
+from bs4 import BeautifulSoup
+from src.utils.few_shot_learning import (
+    save_successful_extraction_as_example,
+    determine_machine_type
+)
 
 
 # Import from other modules
@@ -73,7 +80,7 @@ def show_welcome_page():
                         if client_summary_item.get('machine_model'): 
                             st.markdown(f"**Machine(s):** {client_summary_item.get('machine_model', 'Unknown')}")
                     with col2:
-                        if st.button("View Details", key=f"view_client_{client_summary_item.get('id')}", use_container_width=True):
+                        if st.button("View Details", key=f"view_client_{client_summary_item.get('id')}", width="stretch"):
                             full_profile_data = load_full_client_profile(client_summary_item.get('quote_ref'))
                             if full_profile_data:
                                 st.session_state.confirmed_profile = full_profile_data
@@ -82,7 +89,7 @@ def show_welcome_page():
                             else: st.error(f"Could not load full profile for {client_summary_item.get('quote_ref')}.")
             st.markdown("&nbsp;") 
             if len(st.session_state.all_crm_clients) > 5:
-                if st.button("View All Clients", use_container_width=True):
+                if st.button("View All Clients", width="stretch"):
                     st.session_state.current_page = "Client Dashboard"
                     st.rerun()
         else:
@@ -95,7 +102,7 @@ def show_welcome_page():
     if uploaded_file is not None:
         st.markdown(f"Uploaded: **{uploaded_file.name}**")
         
-        if st.button("Extract Full Profile", key="extract_profile_btn", type="primary", use_container_width=True):
+        if st.button("Extract Full Profile", key="extract_profile_btn", type="primary", width="stretch"):
             st.session_state.extracted_profile = extract_client_profile(uploaded_file)
             if st.session_state.extracted_profile:
                 st.session_state.profile_extraction_step = "confirmation"
@@ -181,7 +188,7 @@ def show_client_dashboard_page():
         if uploaded_file is not None:
             st.markdown(f"Uploaded: **{uploaded_file.name}**")
             
-            if st.button("Extract Full Profile", key="extract_profile_dash_btn", type="primary", use_container_width=True):
+            if st.button("Extract Full Profile", key="extract_profile_dash_btn", type="primary", width="stretch"):
                 st.session_state.extracted_profile = extract_client_profile(uploaded_file)
                 if st.session_state.extracted_profile:
                     st.session_state.profile_extraction_step = "confirmation"
@@ -215,7 +222,7 @@ def show_client_dashboard_page():
                     if client_item.get('machine_model'): 
                         st.markdown(f"**Machine(s):** {client_item.get('machine_model', 'Unknown')}")
                 with col2:
-                    if st.button("View Details", key=f"view_client_dash_{client_item.get('id')}", use_container_width=True):
+                    if st.button("View Details", key=f"view_client_dash_{client_item.get('id')}", width="stretch"):
                         full_profile_data = load_full_client_profile(client_item.get('quote_ref'))
                         if full_profile_data:
                             st.session_state.confirmed_profile = full_profile_data
@@ -474,7 +481,7 @@ def show_template_items_table(template_data, template_contexts=None):
             df = pd.DataFrame(items)
             # Add row numbers (starting from 0)
             df.insert(0, '', range(len(df)))
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
 
 def show_template_summary(template_data, template_contexts=None):
     """
@@ -1082,8 +1089,36 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                 is_sortstar_machine = True
                 st.info(f"SortStar machine template editor active for: {machine_name}")
         
-        current_explicit_mappings = SORTSTAR_EXPLICIT_MAPPINGS if is_sortstar_machine else DEFAULT_EXPLICIT_MAPPINGS
+        current_explicit_mappings = SORTSTAR_EXPLICIT_MAPPINGS if is_sortstar_machine else get_all_fields_from_excel()
         
+        # Create rank maps to preserve source order (Excel or SortStar mappings)
+        field_rank = {key: i for i, key in enumerate(current_explicit_mappings.keys())}
+        section_rank = {}
+        subsection_rank = {}
+        
+        sec_idx = 0
+        sub_idx = 0
+        for key, path in current_explicit_mappings.items():
+            # Parse path to get section/subsection
+            if is_sortstar_machine:
+                parts = [p.strip() for p in path.split(" > ")]
+            else:
+                parts = [p.strip() for p in path.split(" - ")]
+            
+            if parts:
+                sec = parts[0]
+                if sec not in section_rank:
+                    section_rank[sec] = sec_idx
+                    sec_idx += 1
+                
+                if len(parts) > 2:
+                    sub = parts[1]
+                    # Compound key for subsection to avoid collision between sections
+                    sub_key = (sec, sub)
+                    if sub_key not in subsection_rank:
+                        subsection_rank[sub_key] = sub_idx
+                        sub_idx += 1
+
         template_id = template["id"]
         template_type = template["template_type"]
         
@@ -1220,12 +1255,19 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
         
         # Download document button if available
         if template.get("generated_file_path") and os.path.exists(template["generated_file_path"]):
-            with open(template["generated_file_path"], "rb") as fp:
+            file_path = template["generated_file_path"]
+            mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            if file_path.endswith('.html'):
+                mime_type = "text/html"
+            elif file_path.endswith('.pdf'):
+                mime_type = "application/pdf"
+                
+            with open(file_path, "rb") as fp:
                 st.download_button(
                     "Download Document", 
                     fp, 
-                    os.path.basename(template["generated_file_path"]), 
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
+                    os.path.basename(file_path), 
+                    mime_type, 
                     key=f"dl_template_{template_id}"
                 )
         
@@ -1238,6 +1280,104 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
         # Tab for editing existing fields
         with edit_tab:
             st.markdown("#### Edit Existing Template Fields")
+
+            # Build section-based editor with friendly labels
+            section_fields: Dict[str, List[Dict[str, Any]]] = {}
+            for k, v in template_data.items():
+                mapping = current_explicit_mappings.get(k, k)
+                section_name = "Uncategorized"
+                friendly_label = k
+                if mapping and (" > " in mapping or " - " in mapping):
+                    parts = [p.strip() for p in mapping.replace(">", "-").split("-") if p.strip()]
+                    if parts:
+                        section_name = parts[0]
+                        friendly_label = parts[-1]
+                is_boolean = (str(v).upper() in ["YES", "NO", "TRUE", "FALSE"] or k.endswith("_check"))
+                section_fields.setdefault(section_name, []).append(
+                    {"key": k, "label": friendly_label, "value": v, "is_boolean": is_boolean}
+                )
+
+            # Order sections to match GOA form (HTML) order if possible
+            section_order = []
+            try:
+                if os.path.exists(OUTPUT_HTML_PATH):
+                    with open(OUTPUT_HTML_PATH, "r", encoding="utf-8") as f:
+                        soup = BeautifulSoup(f.read(), "html.parser")
+                    for hdr in soup.select("div.section-header > h2"):
+                        name = hdr.get_text(strip=True)
+                        if name and name not in section_order:
+                            section_order.append(name)
+            except Exception as e:
+                print(f"Warning: could not parse section order from goa_form.html: {e}")
+
+            def section_rank(name: str) -> int:
+                return section_order.index(name) if name in section_order else len(section_order) + sorted(section_fields.keys()).index(name)
+
+            section_options = sorted(section_fields.keys(), key=section_rank)
+            selected_section = st.selectbox(
+                "Select section to edit",
+                section_options,
+                key=f"section_select_{template_id}"
+            )
+
+            edited_data = dict(template_data)
+            if selected_section:
+                st.markdown(f"##### Fields in {selected_section}")
+                for field_info in sorted(section_fields[selected_section], key=lambda x: x["label"]):
+                    field_key = field_info["key"]
+                    field_label = field_info["label"]
+                    current_value = field_info["value"]
+                    is_boolean = field_info["is_boolean"]
+                    widget_key = f"edit_{template_id}_{field_key}"
+                    if is_boolean:
+                        checked = str(current_value).upper() in ["YES", "TRUE"]
+                        new_val = st.checkbox(field_label, value=checked, key=widget_key)
+                        edited_data[field_key] = "YES" if new_val else "NO"
+                    else:
+                        height = 150 if field_key == "options_listing" else 60
+                        new_val = st.text_area(
+                            field_label,
+                            value=current_value if current_value is not None else "",
+                            height=height,
+                            key=widget_key
+                        )
+                        edited_data[field_key] = new_val
+
+            # Live preview with edits applied using base GOA form (no highlights)
+            try:
+                base_template_path = OUTPUT_HTML_PATH
+                if os.path.exists(base_template_path):
+                    with open(base_template_path, "r", encoding="utf-8") as f:
+                        raw_html = f.read()
+                    plain_html = fill_html_template(raw_html, edited_data)
+                    st.markdown("Preview (base GOA form, no highlights):")
+                    st.components.v1.html(plain_html, height=900, scrolling=True)
+                else:
+                    st.info(f"Base GOA form not found at {base_template_path}.")
+            except Exception as e:
+                st.warning(f"Could not render HTML preview: {e}")
+
+            if st.button("Save template changes", type="primary", key=f"save_template_{template_id}"):
+                try:
+                    save_machine_template_data(
+                        machine_id,
+                        template_type,
+                        edited_data,
+                        template.get("generated_file_path", "")
+                    )
+                    gen_path = template.get("generated_file_path", "")
+                    if gen_path and gen_path.lower().endswith(".html") and os.path.exists(OUTPUT_HTML_PATH):
+                        fill_and_generate_html(str(OUTPUT_HTML_PATH), edited_data, gen_path)
+                    st.success("Template updated and saved.")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"Could not save template: {e}")
+            return
+
+            # Optional field editor (legacy UI); hide by default
+            show_field_editor = st.toggle("Show field editor (sections)", value=False)
+            if not show_field_editor:
+                return
 
             # Group fields by hierarchy from current_explicit_mappings
             structured_fields = {}
@@ -1319,28 +1459,9 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                             "is_boolean": is_boolean
                         })
 
-            # For SortStar machines, use a specific order for main sections
-            if is_sortstar_machine:
-                # Define SortStar section ordering
-                sortstar_section_order = [
-                    "GENERAL ORDER ACKNOWLEDGEMENT", 
-                    "BASIC SYSTEMS", 
-                    "OPTIONAL SYSTEMS", 
-                    "Order Identification", 
-                    "Utility Specifications"
-                ]
-                
-                # Create a sorting key function that respects this order
-                def sortstar_section_sort_key(section_item):
-                    section_name = section_item[0]
-                    if section_name in sortstar_section_order:
-                        return (sortstar_section_order.index(section_name), section_name)
-                    return (len(sortstar_section_order), section_name)
-                
-                sorted_sections_list = sorted(structured_fields.items(), key=sortstar_section_sort_key)
-            else:
-                # For regular templates, just sort alphabetically
-                sorted_sections_list = sorted(structured_fields.items(), key=lambda item: item[0])
+            # Sort sections using section_rank to preserve Excel/Source order
+            # Fallback to high number (9999) for unknown sections (like Option Listing) to put them at the end
+            sorted_sections_list = sorted(structured_fields.items(), key=lambda item: section_rank.get(item[0], 9999))
 
             for section_name, subsections_dict in sorted_sections_list:
                 # Determine if the expander should be open by default
@@ -1352,47 +1473,35 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                     expanded_default = True
                 
                 with st.expander(f"**{section_name}**", expanded=expanded_default):
-                    # Special sorting for SortStar subsections
-                    if is_sortstar_machine:
-                        # For SortStar, keep direct fields first, then sort subsections
-                        sorted_subsections_list = []
-                        if "_fields_" in subsections_dict:
-                            sorted_subsections_list.append(("_fields_", subsections_dict["_fields_"]))
-                        
-                        # Add other subsections sorted alphabetically
-                        other_subsections = [(k, v) for k, v in subsections_dict.items() if k != "_fields_"]
-                        sorted_subsections_list.extend(sorted(other_subsections, key=lambda item: item[0]))
-                    else:
-                        # For regular templates, sort subsections normally
-                        sorted_subsections_list = sorted(subsections_dict.items(), key=lambda item: item[0] if item[0] != "_fields_" else "")
+                    # Separate direct fields from subsections
+                    direct_fields = []
+                    if "_fields_" in subsections_dict:
+                        direct_fields = subsections_dict["_fields_"]
                     
-                    for subsection_name, fields_list in sorted_subsections_list:
+                    other_subsections = [(k, v) for k, v in subsections_dict.items() if k != "_fields_"]
+                    
+                    # Sort subsections using subsection_rank
+                    sorted_subsections_list = sorted(other_subsections, key=lambda item: subsection_rank.get((section_name, item[0]), 9999))
+                    
+                    # Combine: direct fields first (usually), then sorted subsections
+                    # We wrap direct_fields in a tuple to match the list structure
+                    final_subsections_list = []
+                    if direct_fields:
+                         final_subsections_list.append(("_fields_", direct_fields))
+                    final_subsections_list.extend(sorted_subsections_list)
+                    
+                    for subsection_name, fields_list in final_subsections_list:
                         if subsection_name != "_fields_":
                             st.markdown(f"##### {subsection_name}")
                         
-                        # Sort fields within the subsection/section by position in mappings
-                        if is_sortstar_machine:
-                            # Sort fields based on priority for SortStar
-                            def get_sortstar_field_priority(field_info):
-                                # Give options_listing highest priority for SortStar
-                                if field_info["key"] == "options_listing":
-                                    return -1
-                                # Otherwise use the mapping index as before
-                                keys_list = list(current_explicit_mappings.keys())
-                                try:
-                                    return keys_list.index(field_info["key"])
-                                except ValueError:
-                                    return len(keys_list)
+                        # Sort fields using field_rank
+                        # Give options_listing highest priority (-1)
+                        def get_field_priority(field_info):
+                            if field_info["key"] == "options_listing":
+                                return -1
+                            return field_rank.get(field_info["key"], 9999)
                             
-                            sorted_fields_list = sorted(fields_list, key=get_sortstar_field_priority)
-                        else:
-                            # For regular templates, prioritize options_listing and then sort by label
-                            def get_regular_field_priority(field_info):
-                                if field_info["key"] == "options_listing":
-                                    return -1
-                                return 0
-                                
-                            sorted_fields_list = sorted(fields_list, key=lambda x: (get_regular_field_priority(x), x["label"]))
+                        sorted_fields_list = sorted(fields_list, key=get_field_priority)
 
                         for field_info in sorted_fields_list:
                             all_displayed_fields.append((field_info, "structured"))
@@ -1475,7 +1584,7 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                                     )
             
             st.markdown("---")
-            if st.button("Save All Changes", key=f"save_all_mods_{template_id}", type="primary", use_container_width=True):
+            if st.button("Save All Changes", key=f"save_all_mods_{template_id}", type="primary", width="stretch"):
                 changes_to_save = {}
                 for field_info, field_type in all_displayed_fields:
                     field_key = field_info["key"]
@@ -1503,6 +1612,87 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                     with st.spinner(f"Saving {len(changes_to_save)} modifications..."):
                         success = save_bulk_goa_modifications(template_id, changes_to_save)
                         if success:
+                            # --- FEW-SHOT LEARNING FEEDBACK LOOP ---
+                            try:
+                                # 1. Gather Context
+                                feedback_machine_type = "general"
+                                if machine_name:
+                                    feedback_machine_type = determine_machine_type(machine_name)
+                                
+                                feedback_template_type = template_type if template_type else "default"
+                                if is_sortstar_machine:
+                                    feedback_template_type = "sortstar"
+
+                                # Attempt to get full text and machine data for context
+                                feedback_full_text = ""
+                                feedback_machine_data = {}
+                                feedback_common_items = []
+                                
+                                # Try to find the machine record and quote ref
+                                if machine_id and st.session_state.all_crm_clients:
+                                    from src.utils.crm_utils import load_machines_for_quote, load_document_content
+                                    found_machine = False
+                                    for client in st.session_state.all_crm_clients:
+                                        c_quote_ref = client.get('quote_ref', '')
+                                        machines = load_machines_for_quote(c_quote_ref)
+                                        for m in machines:
+                                            if m.get('id') == machine_id:
+                                                # Found our machine!
+                                                found_machine = True
+                                                
+                                                # Get full text
+                                                doc_content = load_document_content(c_quote_ref)
+                                                if doc_content:
+                                                    feedback_full_text = doc_content.get("full_pdf_text", "")
+                                                
+                                                # Get machine data and common items
+                                                machine_data_content = m.get("machine_data")
+                                                if isinstance(machine_data_content, str):
+                                                    try:
+                                                        feedback_machine_data = json.loads(machine_data_content)
+                                                    except:
+                                                        feedback_machine_data = {"machine_name": m.get("machine_name", "")}
+                                                elif isinstance(machine_data_content, dict):
+                                                    feedback_machine_data = machine_data_content
+                                                
+                                                if "common_items" in feedback_machine_data:
+                                                    feedback_common_items = feedback_machine_data["common_items"]
+                                                break
+                                        if found_machine:
+                                            break
+                                
+                                # 2. Save Corrections as Examples
+                                examples_saved = 0
+                                for field_key, change_info in changes_to_save.items():
+                                    new_val = change_info.get("new_value")
+                                    
+                                    # Skip if value is empty or just "NO" (unless we want to teach negatives, but positives are stronger)
+                                    if not new_val: continue
+                                    if isinstance(new_val, str) and new_val.upper() == "NO" and field_key.endswith("_check"):
+                                        # Optional: could save "NO" examples if needed, but usually we focus on extraction
+                                        continue
+                                        
+                                    save_successful_extraction_as_example(
+                                        field_name=field_key,
+                                        field_value=str(new_val),
+                                        machine_data=feedback_machine_data,
+                                        common_items=feedback_common_items,
+                                        full_pdf_text=feedback_full_text,
+                                        machine_type=feedback_machine_type,
+                                        template_type=feedback_template_type,
+                                        source_machine_id=machine_id,
+                                        confidence_score=1.0 # High confidence because it's a human correction
+                                    )
+                                    examples_saved += 1
+                                
+                                if examples_saved > 0:
+                                    st.toast(f"🧠 Learned from {examples_saved} correction(s) for future use!", icon="🎓")
+                                    
+                            except Exception as e:
+                                print(f"Error in few-shot feedback loop: {e}")
+                                # Don't block the user flow if learning fails
+                            # --- END FEEDBACK LOOP ---
+
                             st.success(f"Saved {len(changes_to_save)} modifications successfully.")
                             st.rerun()
                         else:
@@ -1516,8 +1706,14 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
             st.info("Use this section to add fields that weren't found by the LLM but should be included in the template.")
             
             try:
+                if is_sortstar_machine:
+                    all_possible_fields = current_explicit_mappings
+                else:
+                    # Use Excel source of truth for GOA
+                    all_possible_fields = get_all_fields_from_excel()
+                
                 # Filter out fields that are already in the template
-                available_fields = {k: v for k, v in current_explicit_mappings.items() # Use current_explicit_mappings
+                available_fields = {k: v for k, v in all_possible_fields.items()
                                    if k not in template_data}
                 
                 if not available_fields:
@@ -1593,257 +1789,6 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
         st.error(f"Error displaying template editor: {str(e)}")
         import traceback
         st.exception(e)
-
-def show_few_shot_management_page():
-    """
-    Shows a page for managing few-shot learning examples.
-    """
-    st.title("Few-Shot Learning Management")
-    
-    st.markdown("""
-    This page allows you to manage the few-shot learning examples that improve 
-    the accuracy of field extraction over time.
-    """)
-    
-    # Import the few-shot learning functions
-    try:
-        from src.utils.few_shot_learning import get_few_shot_examples, get_similar_examples
-        from src.utils.crm_utils import (
-            get_few_shot_examples as db_get_examples,
-            get_few_shot_statistics,
-            get_field_examples,
-            get_all_field_names,
-            create_sample_few_shot_data
-        )
-        few_shot_available = True
-    except ImportError:
-        few_shot_available = False
-        st.error("Few-shot learning module not available")
-        return
-    
-    if not few_shot_available:
-        st.warning("Few-shot learning is not available. Please ensure the module is properly installed.")
-        return
-    
-    # Sidebar for filtering
-    st.sidebar.header("Filter Examples")
-    
-    machine_types = ["all", "filling", "labeling", "capping", "sortstar", "general"]
-    selected_machine_type = st.sidebar.selectbox("Machine Type", machine_types)
-    
-    template_types = ["all", "default", "sortstar"]
-    selected_template_type = st.sidebar.selectbox("Template Type", template_types)
-    
-    # Get statistics
-    stats = get_few_shot_statistics()
-    
-    # Main content area
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader("📊 Performance Statistics")
-        
-        if stats and stats.get('total_examples', 0) > 0:
-            # Overall metrics
-            overall = stats.get('overall', {})
-            col1_1, col1_2, col1_3, col1_4 = st.columns(4)
-            
-            with col1_1:
-                st.metric("Total Examples", stats.get('total_examples', 0))
-            with col1_2:
-                success_rate = overall.get('overall_success_rate', 0)
-                st.metric("Success Rate", f"{success_rate:.1%}")
-            with col1_3:
-                avg_confidence = overall.get('avg_confidence', 0)
-                st.metric("Avg Confidence", f"{avg_confidence:.2f}")
-            with col1_4:
-                total_usage = overall.get('total_usage', 0)
-                st.metric("Total Usage", total_usage)
-            
-            # Quality distribution
-            st.subheader("🎯 Quality Distribution")
-            quality_dist = stats.get('quality_distribution', [])
-            if quality_dist:
-                for quality in quality_dist:
-                    tier = quality.get('quality_tier', '')
-                    count = quality.get('count', 0)
-                    percentage = (count / stats.get('total_examples', 1)) * 100
-                    st.write(f"**{tier}**: {count} examples ({percentage:.1f}%)")
-            
-            # Top fields by performance
-            st.subheader("🏆 Top Performing Fields")
-            top_fields = stats.get('top_fields', [])
-            if top_fields:
-                for field in top_fields[:5]:  # Show top 5
-                    field_name = field.get('field_name', '')
-                    count = field.get('count', 0)
-                    avg_confidence = field.get('avg_confidence', 0)
-                    success_rate = field.get('avg_success_rate', 0)
-                    st.write(f"**{field_name}**: {count} examples, {avg_confidence:.2f} confidence, {success_rate:.1%} success")
-            
-        else:
-            st.info("📈 No examples found yet. Process some PDFs to start building the learning database!")
-        
-        # Show recent examples
-        st.subheader("🕒 Recent Examples")
-        
-        if stats and stats.get('recent_examples'):
-            recent = stats.get('recent_examples', [])
-            for example in recent[:5]:  # Show last 5
-                field_name = example.get('field_name', '')
-                expected_output = example.get('expected_output', '')
-                confidence = example.get('confidence_score', 0)
-                usage_count = example.get('usage_count', 0)
-                success_count = example.get('success_count', 0)
-                created_date = example.get('created_date', '')
-                
-                # Truncate long outputs
-                display_output = expected_output[:50] + "..." if len(expected_output) > 50 else expected_output
-                
-                success_rate = (success_count / usage_count * 100) if usage_count > 0 else 0
-                
-                st.write(f"**{field_name}**: `{display_output}`")
-                st.write(f"  Confidence: {confidence:.2f} | Usage: {usage_count} | Success: {success_rate:.1f}% | Date: {created_date}")
-                st.write("---")
-        else:
-            st.info("No recent examples to display.")
-        
-    with col2:
-        st.subheader("⚙️ Management Actions")
-        
-        if st.button("🔄 Refresh Statistics"):
-            st.rerun()
-        
-        # Add button to create sample data for testing
-        if not stats or stats.get('total_examples', 0) == 0:
-            if st.button("🧪 Create Sample Data"):
-                if create_sample_few_shot_data():
-                    st.success("Sample data created successfully! Refresh the page to see the results.")
-                    st.rerun()
-                else:
-                    st.error("Failed to create sample data.")
-        
-        if stats and stats.get('total_examples', 0) > 0:
-            if st.button("🗑️ Clear Low-Quality Examples"):
-                st.warning("This feature will remove examples with success rate < 50% and usage > 5")
-                # TODO: Implement cleanup function
-            
-            if st.button("📊 Export Statistics"):
-                import json
-                stats_json = json.dumps(stats, indent=2)
-                st.download_button(
-                    label="Download Statistics JSON",
-                    data=stats_json,
-                    file_name="few_shot_statistics.json",
-                    mime="application/json"
-                )
-            
-            if st.button("📋 Export Examples"):
-                st.info("Export functionality will export all examples to CSV format")
-                # TODO: Implement CSV export
-        else:
-            st.info("Actions will be available once examples are created.")
-    
-    # Example search functionality
-    st.subheader("🔍 Search Examples")
-    
-    search_query = st.text_input("Search for examples by field name or context:")
-    
-    if search_query:
-        try:
-            # Use the similar examples function for search
-            similar_examples = get_similar_examples(
-                search_query, 
-                selected_machine_type if selected_machine_type != "all" else "general",
-                selected_template_type if selected_template_type != "all" else "default",
-                limit=5
-            )
-            
-            if similar_examples:
-                st.write(f"Found {len(similar_examples)} similar examples:")
-                for example in similar_examples:
-                    similarity = example.get('similarity', 0)
-                    field_name = example.get('field_name', '')
-                    expected_output = example.get('expected_output', '')
-                    confidence = example.get('confidence_score', 0)
-                    
-                    st.write(f"**{field_name}** (similarity: {similarity:.2f})")
-                    st.write(f"Output: `{expected_output}` (confidence: {confidence:.2f})")
-                    st.write("---")
-            else:
-                st.info(f"No similar examples found for '{search_query}'")
-        except Exception as e:
-            st.error(f"Error searching examples: {e}")
-    
-    # Field-specific examples
-    st.subheader("🎯 Field-Specific Examples")
-    
-    # Get all unique field names from the database
-    field_names = get_all_field_names()
-    if not field_names:
-        field_names = ["No fields found"]
-    
-    selected_field = st.selectbox("Select Field", ["all"] + field_names)
-    
-    if selected_field and selected_field != "all":
-        # Get examples for the selected field
-        field_examples = get_field_examples(
-            machine_type=selected_machine_type if selected_machine_type != "all" else None,
-            template_type=selected_template_type if selected_template_type != "all" else None,
-            field_name=selected_field,
-            limit=10
-        )
-        
-        if field_examples:
-            st.write(f"Found {len(field_examples)} examples for field '{selected_field}':")
-            
-            for example in field_examples:
-                expected_output = example.get('expected_output', '')
-                confidence = example.get('confidence_score', 0)
-                usage_count = example.get('usage_count', 0)
-                success_count = example.get('success_count', 0)
-                machine_type = example.get('machine_type', '')
-                template_type = example.get('template_type', '')
-                created_date = example.get('created_date', '')
-                
-                # Calculate success rate
-                success_rate = (success_count / usage_count * 100) if usage_count > 0 else 0
-                
-                # Truncate long outputs for display
-                display_output = expected_output[:100] + "..." if len(expected_output) > 100 else expected_output
-                
-                st.write(f"**Output**: `{display_output}`")
-                st.write(f"  Type: {machine_type}/{template_type} | Confidence: {confidence:.2f} | Usage: {usage_count} | Success: {success_rate:.1f}% | Created: {created_date}")
-                
-                # Show input context if available
-                input_context = example.get('input_context', '')
-                if input_context:
-                    with st.expander("Show Input Context"):
-                        st.text(input_context[:500] + "..." if len(input_context) > 500 else input_context)
-                
-                st.write("---")
-        else:
-            st.info(f"No examples found for field '{selected_field}' with current filters.")
-    
-    # Machine type and template type breakdown
-    if stats and stats.get('by_machine_type'):
-        st.subheader("📈 Examples by Machine Type")
-        
-        col_type1, col_type2 = st.columns(2)
-        
-        with col_type1:
-            st.write("**Machine Types:**")
-            for machine_type_data in stats.get('by_machine_type', []):
-                machine_type = machine_type_data.get('machine_type', '')
-                count = machine_type_data.get('count', 0)
-                st.write(f"- {machine_type}: {count} examples")
-        
-        with col_type2:
-            st.write("**Template Types:**")
-            for template_type_data in stats.get('by_template_type', []):
-                template_type = template_type_data.get('template_type', '')
-                count = template_type_data.get('count', 0)
-                st.write(f"- {template_type}: {count} examples")
 
 def show_template_report_page():
     """
@@ -2153,7 +2098,7 @@ def show_printable_summary_report(template_data, machine_name="", template_type=
 
 def show_quote_processing():
     st.title("📄 Quote Processing")
-    processing_steps = ["Upload Quote", "Identify Main Machines", "Select Common Options", "Process Machine"]
+    processing_steps = ["Load Quote", "Identify Main Machines", "Select Common Options", "Process Machine"]
     
     import base64
     from app import (
@@ -2168,44 +2113,7 @@ def show_quote_processing():
     st.subheader(f"Step {current_step + 1}: {processing_steps[current_step]}")
     
     if current_step == 0:
-        st.subheader("📄 Upload Quote PDF")
-        uploaded_pdf = st.file_uploader("Choose PDF document to process", type="pdf", key=f"pdf_upload_{st.session_state.run_key}")
-        
-        # Add option to associate with existing client
-        use_existing_client = st.checkbox("Associate with existing client?", key=f"goa_use_existing_client_{st.session_state.run_key}")
-        existing_client_id = None
-        
-        if use_existing_client and "all_crm_clients" in st.session_state and st.session_state.all_crm_clients:
-            client_options = [(c.get('id'), f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')}") for c in st.session_state.all_crm_clients]
-            selected_client_id = st.selectbox(
-                "Select existing client:", 
-                options=[c[0] for c in client_options],
-                format_func=lambda x: next((c[1] for c in client_options if c[0] == x), ""),
-                key=f"goa_existing_client_select_{st.session_state.run_key}"
-            )
-            existing_client_id = selected_client_id
-            st.info(f"Quote will be associated with selected client (ID: {existing_client_id})")
-            
-            # Store the client ID in session state to use in perform_initial_processing
-            st.session_state.selected_existing_client_id = existing_client_id
-        else:
-            # Clear the selected client ID if checkbox is unchecked
-            st.session_state.selected_existing_client_id = None
-        
-        if uploaded_pdf is not None:
-            st.success(f"📄 PDF uploaded: {uploaded_pdf.name}")
-            # Store file name for use in process_machine_specific_data
-            st.session_state.pdf_filename = uploaded_pdf.name
-            
-            if st.button("Process PDF", key=f"process_pdf_{st.session_state.run_key}", type="primary"):
-                if perform_initial_processing(uploaded_pdf, TEMPLATE_FILE):
-                    st.session_state.processing_step = 1
-                    st.rerun()
-                else:
-                    st.error("Failed to process PDF. Check errors above.")
-        
-        st.divider()
-        st.subheader("🔄 Or Load Previous Quote")
+        st.subheader("🔄 Load Previous Quote")
         
         # Previous quote loading section
         if st.session_state.all_crm_clients:
@@ -2260,10 +2168,23 @@ def show_quote_processing():
                             with st.expander("Full Description", expanded=False):
                                 st.text(item.get('description', ''))
                 
-                # Continue button
-                if st.button("Continue to Common Options ➡️", key="continue_to_common"):
-                    st.session_state.machine_confirmation_done = True
-                    st.rerun()
+                # Navigation buttons
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("⬅️ Select Another Quote", key="select_another_quote"):
+                        # Reset state
+                        st.session_state.processing_step = 0
+                        st.session_state.machine_confirmation_done = False
+                        st.session_state.common_options_confirmation_done = False
+                        st.session_state.items_for_confirmation = []
+                        st.session_state.selected_main_machines = []
+                        st.session_state.selected_common_options = []
+                        st.session_state.identified_machines_data = None
+                        st.rerun()
+                with col2:
+                    if st.button("Continue to Common Options ➡️", key="continue_to_common"):
+                        st.session_state.machine_confirmation_done = True
+                        st.rerun()
             else:
                 st.warning("No items available for selection.")
         else:
@@ -2348,6 +2269,16 @@ def show_quote_processing():
             st.rerun()
             
     elif current_step == 3:
+        if st.button("⬅️ Select Another Quote", key="select_another_quote_step4"):
+            # Reset state
+            st.session_state.processing_step = 0
+            st.session_state.machine_confirmation_done = False
+            st.session_state.common_options_confirmation_done = False
+            st.session_state.items_for_confirmation = []
+            st.session_state.selected_main_machines = []
+            st.session_state.selected_common_options = []
+            st.session_state.identified_machines_data = None
+            st.rerun()
         st.subheader("🔍 Select Machine to Process for GOA")
         machines = st.session_state.identified_machines_data.get("machines", [])
         if machines:
@@ -2389,29 +2320,6 @@ def show_crm_management_page():
 
     if st.button("Refresh CRM List", key=f"refresh_crm_main_tab_{st.session_state.run_key}"):
         load_crm_data(); st.success("CRM data refreshed.")
-    with st.expander("Quick Catalog New Quote", expanded=False):
-        st.markdown("Upload PDF to extract data and create new client record or associate with existing client.")
-        uploaded_pdf_crm = st.file_uploader("Choose PDF for CRM Quick Catalog", type="pdf", key=f"crm_quick_upload_{st.session_state.run_key}")
-        
-        # Add option to associate with existing client
-        use_existing_client = st.checkbox("Associate with existing client?", key=f"use_existing_client_{st.session_state.run_key}")
-        existing_client_id = None
-        
-        if use_existing_client and st.session_state.all_crm_clients:
-            client_options = [(c.get('id'), f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')}") for c in st.session_state.all_crm_clients]
-            selected_client_id = st.selectbox(
-                "Select existing client:", 
-                options=[c[0] for c in client_options],
-                format_func=lambda x: next((c[1] for c in client_options if c[0] == x), ""),
-                key=f"existing_client_select_{st.session_state.run_key}"
-            )
-            existing_client_id = selected_client_id
-            st.info(f"Quote will be associated with selected client (ID: {existing_client_id})")
-        
-        if uploaded_pdf_crm and st.button("Catalog This Quote", type="primary", key="crm_quick_catalog_btn"):
-            result = quick_extract_and_catalog(uploaded_pdf_crm, existing_client_id)
-            if result: st.success(f"Quote {result['quote_ref']} cataloged."); load_crm_data(); st.rerun()
-            else: st.error("Failed to catalog data.")
     
     st.subheader("Client Records")
     client_options_display = ["Select a Client Record..."] + [f"{c.get('customer_name', 'N/A')} - {c.get('quote_ref', 'N/A')} (ID: {c.get('id')})" for c in st.session_state.all_crm_clients]
@@ -2484,7 +2392,7 @@ def show_crm_management_page():
                             key=f"client_detail_editor_{client_to_display_and_edit.get('id', 'new')}",
                             num_rows="fixed",
                             hide_index=True,
-                            use_container_width=True,
+                            width="stretch",
                             column_order=column_order,
                             column_config={
                                 "id": None,  # Hide ID column
@@ -2565,7 +2473,7 @@ def show_crm_management_page():
                     if priced_items_for_quote:
                         df_priced_items = pd.DataFrame(priced_items_for_quote); editable_df = df_priced_items[['id', 'item_description', 'item_quantity', 'item_price_str']].copy()
                         st.markdown("**Edit Priced Items:**")
-                        edited_df = st.data_editor(editable_df, key=f"data_editor_priced_items_{st.session_state.editing_client_id}", num_rows="dynamic", hide_index=True, use_container_width=True, column_config={"id": None, "item_description": st.column_config.TextColumn("Description", width="large", required=True), "item_quantity": st.column_config.TextColumn("Qty"), "item_price_str": st.column_config.TextColumn("Price (Text)")})
+                        edited_df = st.data_editor(editable_df, key=f"data_editor_priced_items_{st.session_state.editing_client_id}", num_rows="dynamic", hide_index=True, width="stretch", column_config={"id": None, "item_description": st.column_config.TextColumn("Description", width="large", required=True), "item_quantity": st.column_config.TextColumn("Qty"), "item_price_str": st.column_config.TextColumn("Price (Text)")})
                         st.session_state.edited_priced_items_df = edited_df
                         if st.button("💾 Save Priced Item Changes", key=f"save_priced_items_btn_{st.session_state.editing_client_id}"):
                             changes_applied = 0
@@ -2620,7 +2528,7 @@ def show_crm_management_page():
             'customer_contact_person', 'processing_date'
         ]
         df_all_clients_final = df_all_clients[[c for c in all_clients_cols if c in df_all_clients.columns]]
-        st.dataframe(df_all_clients_final, use_container_width=True, hide_index=True)
+        st.dataframe(df_all_clients_final, width="stretch", hide_index=True)
     else: st.info("No client records found.")
     
     with st.expander("Manually Add New Client Record"):
@@ -2921,7 +2829,7 @@ def generate_machine_build_summary_html(template_data, machine_name="", template
         # --- End of Basic Filters ---
 
         # Determine display_value (checkmark or original string)
-        display_value = "✔" if (is_checked_suffix and value_str.upper() in ["YES", "TRUE"]) or \
+        display_value = '<input type="checkbox">' if (is_checked_suffix and value_str.upper() in ["YES", "TRUE"]) or \
                                  (not is_checked_suffix and isinstance(value, str) and value_str.upper() == "YES") else value_str
         
         # Get descriptive path and final label

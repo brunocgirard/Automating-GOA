@@ -1,0 +1,5654 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>General Order Acknowledgement</title>
+  <style>
+    :root {
+      --bg: #f3f5f8;
+      --card: #ffffff;
+      --ink: #1f2430;
+      --muted: #4b5563;
+      --accent: #c00000;      /* template docx red accent */
+      --header-fill: #e5e5e5; /* template docx gray strip */
+      --border: #cdd4e0;
+    }
+    * { box-sizing: border-box; font-family: "Calibri", "Segoe UI", Arial, sans-serif; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .page { max-width: 1200px; margin: 0 auto; }
+    header { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      color: var(--accent);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+    }
+    .subtitle { color: var(--muted); margin: 0 0 8px; font-size: 14px; }
+    .note { font-size: 13px; color: var(--muted); margin: 3px 0; }
+    .divider {
+      height: 6px;
+      background: var(--header-fill);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+      overflow: hidden;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--header-fill);
+      border-bottom: 1px solid var(--border);
+      border-top-left-radius: 10px;
+      border-top-right-radius: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .section-header.active + .section-content {
+        /* styles when open */
+    }
+    .section.collapsed > .section-header {
+        border-bottom-color: transparent;
+    }
+    .toggle-icon {
+        transition: transform 0.3s ease;
+        font-weight: bold;
+        font-size: 20px;
+        color: var(--muted);
+    }
+    .section-header.active .toggle-icon {
+        transform: rotate(45deg);
+    }
+    .section-content {
+        padding: 16px 14px;
+        overflow: hidden;
+        max-height: 10000px; /* A large enough value to not clip content */
+        transition: max-height 0.4s ease-in-out, padding 0.3s ease-in-out;
+    }
+    .section.collapsed > .section-content {
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    .section h2 {
+      margin: 0;
+      font-size: 18px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .pill {
+      background: var(--header-fill);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+    }
+    .group { margin: 10px 14px 0 14px; }
+    .group-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      margin: 6px 0 4px;
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 10px 12px;
+    }
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px 10px;
+    }
+    .field {
+      border-left: 3px solid #f3f3f3;
+    }
+    .field {
+      display: grid;
+      grid-template-rows: auto auto auto;
+      gap: 4px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .field.checkbox {
+      grid-template-columns: auto 1fr auto;
+      grid-template-rows: auto;
+      align-items: center;
+      gap: 8px;
+      background: #f8f9fc;
+      border-color: #d5dbe7;
+    }
+    .field.checkbox .label { font-weight: 600; color: var(--ink); }
+    .label { font-size: 13px; color: var(--ink); font-weight: 600; }
+    input[type="text"], input[type="number"], textarea {
+      width: 100%;
+      padding: 7px 9px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: #fdfdff;
+      font-size: 14px;
+      color: var(--ink);
+      font-family: inherit;
+    }
+    textarea { resize: vertical; }
+    input:focus { outline: 2px solid #b5c7e3; }
+    .token {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: "Consolas", "SFMono-Regular", monospace;
+      display: none; /* hide placeholders */
+    }
+    .header-fill {
+      background: var(--header-fill);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-weight: 700;
+      color: var(--accent);
+      display: inline-block;
+      margin-top: 6px;
+    }
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+    
+    /* Styles for Read-Only / Filled View */
+    body.readonly input {
+        border: none;
+        background: transparent;
+        pointer-events: none;
+    }
+    body.readonly input[type="checkbox"] {
+        /* Custom styling for checked box in print mode? Or just keep browser default */
+    }
+    body.readonly .field {
+        border: 1px solid transparent; /* Hide border or make lighter */
+        box-shadow: none;
+        background: transparent;
+    }
+    body.readonly .section {
+        box-shadow: none;
+        border: 1px solid #eee;
+    }
+    
+    /* Print Styles */
+    @media print {
+        .no-print { display: none; }
+        body { background: white; padding: 0; }
+        .page { max-width: 100%; }
+        .section { break-inside: avoid; border: 1px solid #ccc; }
+        .field { border: none; }
+        input { background: transparent; }
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 12px; }
+      .section { padding: 12px; }
+      .field-grid,
+      .checkbox-grid {
+        grid-template-columns: 1fr;
+      }
+      input[type="text"], input[type="number"] {
+        padding: 10px 12px;
+        font-size: 15px;
+      }
+      .field {
+        gap: 6px;
+      }
+      .field.checkbox {
+        grid-template-columns: auto 1fr;
+        grid-template-rows: auto auto;
+        row-gap: 4px;
+      }
+    }
+  </style>
+</head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>General Order Acknowledgement</h1>
+        <button class="no-print" onclick="window.print()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Print / Save as PDF</button>
+      </header>
+      <div class="divider"></div>
+      
+    <section class="section">
+      <div class="section-header">
+        <h2>Basic Information</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0001}}">
+      <span class="label">Proj. #</span>
+      <input type="text" name="f0001" data-placeholder="{{f0001}}" />
+      <span class="token">{{f0001}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0002}}">
+      <span class="label">Customer</span>
+      <input type="text" name="f0002" data-placeholder="{{f0002}}" />
+      <span class="token">{{f0002}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0003}}">
+      <span class="label">Machine</span>
+      <input type="text" name="f0003" data-placeholder="{{f0003}}" />
+      <span class="token">{{f0003}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0004}}">
+      <span class="label">Direction</span>
+      <input type="text" name="f0004" data-placeholder="{{f0004}}" />
+      <span class="token">{{f0004}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Order Identification</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0005}}">
+      <span class="label">Purchase Order #</span>
+      <input type="text" name="f0005" data-placeholder="{{f0005}}" />
+      <span class="token">{{f0005}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0006}}">
+      <span class="label">Quote #</span>
+      <input type="text" name="f0006" data-placeholder="{{f0006}}" />
+      <span class="token">{{f0006}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0007}}">
+      <span class="label">Internal Order #</span>
+      <input type="text" name="f0007" data-placeholder="{{f0007}}" />
+      <span class="token">{{f0007}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0008}}">
+      <span class="label">Customer #</span>
+      <input type="text" name="f0008" data-placeholder="{{f0008}}" />
+      <span class="token">{{f0008}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0009}}">
+      <span class="label">COR&#x27;s</span>
+      <input type="text" name="f0009" data-placeholder="{{f0009}}" />
+      <span class="token">{{f0009}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0010}}">
+      <span class="label">Revision</span>
+      <input type="text" name="f0010" data-placeholder="{{f0010}}" />
+      <span class="token">{{f0010}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0011}}">
+      <span class="label">Production speed</span>
+      <input type="text" name="f0011" data-placeholder="{{f0011}}" />
+      <span class="token">{{f0011}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0012}}">
+      <span class="label">URS Applicable Y/N</span>
+      <input type="text" name="f0012" data-placeholder="{{f0012}}" />
+      <span class="token">{{f0012}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0013}}">
+      <span class="label">Ref. Project</span>
+      <input type="text" name="f0013" data-placeholder="{{f0013}}" />
+      <span class="token">{{f0013}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0014}}">
+      <span class="label">Date / Version</span>
+      <input type="text" name="f0014" data-placeholder="{{f0014}}" />
+      <span class="token">{{f0014}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Utility Specifications</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0015}}">
+      <span class="label">Voltage</span>
+      <input type="text" name="f0015" data-placeholder="{{f0015}}" />
+      <span class="token">{{f0015}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0016}}">
+      <span class="label">Hz</span>
+      <input type="text" name="f0016" data-placeholder="{{f0016}}" />
+      <span class="token">{{f0016}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0017}}">
+      <span class="label">PSI</span>
+      <input type="text" name="f0017" data-placeholder="{{f0017}}" />
+      <span class="token">{{f0017}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0018}}">
+      <span class="label">Phases</span>
+      <input type="text" name="f0018" data-placeholder="{{f0018}}" />
+      <span class="token">{{f0018}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0019}}">
+      <span class="label">Amps</span>
+      <input type="text" name="f0019" data-placeholder="{{f0019}}" />
+      <span class="token">{{f0019}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0020}}">
+      <span class="label">CFM</span>
+      <input type="text" name="f0020" data-placeholder="{{f0020}}" />
+      <span class="token">{{f0020}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Conformity</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0021}}">
+          <input type="checkbox" name="f0021" data-placeholder="{{f0021}}" />
+          <span class="label">CSA</span>
+          <span class="token">{{f0021}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0022}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0022" data-placeholder="{{f0022}}" />
+      <span class="token">{{f0022}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Certification</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0023}}">
+          <input type="checkbox" name="f0023" data-placeholder="{{f0023}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0023}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0024}}">
+          <input type="checkbox" name="f0024" data-placeholder="{{f0024}}" />
+          <span class="label">CSA</span>
+          <span class="token">{{f0024}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0025}}">
+          <input type="checkbox" name="f0025" data-placeholder="{{f0025}}" />
+          <span class="label">CE</span>
+          <span class="token">{{f0025}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0026}}">
+          <input type="checkbox" name="f0026" data-placeholder="{{f0026}}" />
+          <span class="label">Explosion</span>
+          <span class="token">{{f0026}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0027}}">
+          <input type="checkbox" name="f0027" data-placeholder="{{f0027}}" />
+          <span class="label">Class1 Div 2</span>
+          <span class="token">{{f0027}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0028}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0028" data-placeholder="{{f0028}}" />
+      <span class="token">{{f0028}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0029}}">
+      <span class="label">Country of destination</span>
+      <input type="text" name="f0029" data-placeholder="{{f0029}}" />
+      <span class="token">{{f0029}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0030}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0030" data-placeholder="{{f0030}}" />
+      <span class="token">{{f0030}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Change Part Quantities and Construction Materials</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Bottle (qty)</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0032}}">
+          <input type="checkbox" name="f0032" data-placeholder="{{f0032}}" />
+          <span class="label">HDPE</span>
+          <span class="token">{{f0032}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0033}}">
+      <span class="label">Color</span>
+      <input type="text" name="f0033" data-placeholder="{{f0033}}" />
+      <span class="token">{{f0033}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0034}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0034" data-placeholder="{{f0034}}" />
+      <span class="token">{{f0034}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0035}}">
+          <input type="checkbox" name="f0035" data-placeholder="{{f0035}}" />
+          <span class="label">Linear Index</span>
+          <span class="token">{{f0035}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0036}}">
+          <input type="checkbox" name="f0036" data-placeholder="{{f0036}}" />
+          <span class="label">304SS / HDPE</span>
+          <span class="token">{{f0036}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0037}}">
+          <input type="checkbox" name="f0037" data-placeholder="{{f0037}}" />
+          <span class="label">Antistatic</span>
+          <span class="token">{{f0037}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Plug (qty)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0039}}">
+          <input type="checkbox" name="f0039" data-placeholder="{{f0039}}" />
+          <span class="label">SS 304</span>
+          <span class="token">{{f0039}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0040}}">
+          <input type="checkbox" name="f0040" data-placeholder="{{f0040}}" />
+          <span class="label">SS 316</span>
+          <span class="token">{{f0040}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Cap (qty)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0042}}">
+          <input type="checkbox" name="f0042" data-placeholder="{{f0042}}" />
+          <span class="label">SS 304</span>
+          <span class="token">{{f0042}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0043}}">
+          <input type="checkbox" name="f0043" data-placeholder="{{f0043}}" />
+          <span class="label">SS 316</span>
+          <span class="token">{{f0043}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0044}}">
+          <input type="checkbox" name="f0044" data-placeholder="{{f0044}}" />
+          <span class="label">Urethane Insert</span>
+          <span class="token">{{f0044}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Elevator Slats (qty)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0046}}">
+          <input type="checkbox" name="f0046" data-placeholder="{{f0046}}" />
+          <span class="label">Aluminum</span>
+          <span class="token">{{f0046}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0047}}">
+          <input type="checkbox" name="f0047" data-placeholder="{{f0047}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0047}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Seal Mat&#x27;l (qty) / Selected by</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0049}}">
+          <input type="checkbox" name="f0049" data-placeholder="{{f0049}}" />
+          <span class="label">Capmatic</span>
+          <span class="token">{{f0049}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0050}}">
+          <input type="checkbox" name="f0050" data-placeholder="{{f0050}}" />
+          <span class="label">Customer</span>
+          <span class="token">{{f0050}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Seal Mat&#x27;l (qty) / Material</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0051}}">
+          <input type="checkbox" name="f0051" data-placeholder="{{f0051}}" />
+          <span class="label">Viton</span>
+          <span class="token">{{f0051}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0052}}">
+          <input type="checkbox" name="f0052" data-placeholder="{{f0052}}" />
+          <span class="label">Silicone</span>
+          <span class="token">{{f0052}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0053}}">
+          <input type="checkbox" name="f0053" data-placeholder="{{f0053}}" />
+          <span class="label">Buna</span>
+          <span class="token">{{f0053}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0054}}">
+          <input type="checkbox" name="f0054" data-placeholder="{{f0054}}" />
+          <span class="label">EPDM</span>
+          <span class="token">{{f0054}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tubing Mat&#x27;l (qty) / Selected by</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0056}}">
+          <input type="checkbox" name="f0056" data-placeholder="{{f0056}}" />
+          <span class="label">Capmatic</span>
+          <span class="token">{{f0056}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0057}}">
+          <input type="checkbox" name="f0057" data-placeholder="{{f0057}}" />
+          <span class="label">Customer</span>
+          <span class="token">{{f0057}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tubing Mat&#x27;l (qty) / Material</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0058}}">
+          <input type="checkbox" name="f0058" data-placeholder="{{f0058}}" />
+          <span class="label">Polyethylene</span>
+          <span class="token">{{f0058}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0059}}">
+          <input type="checkbox" name="f0059" data-placeholder="{{f0059}}" />
+          <span class="label">Braided PVC</span>
+          <span class="token">{{f0059}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0060}}">
+          <input type="checkbox" name="f0060" data-placeholder="{{f0060}}" />
+          <span class="label">Silicone</span>
+          <span class="token">{{f0060}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0061}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0061" data-placeholder="{{f0061}}" />
+      <span class="token">{{f0061}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tablet (qty)</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0064}}">
+          <input type="checkbox" name="f0064" data-placeholder="{{f0064}}" />
+          <span class="label">Acetal</span>
+          <span class="token">{{f0064}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0065}}">
+      <span class="label">Color</span>
+      <input type="text" name="f0065" data-placeholder="{{f0065}}" />
+      <span class="token">{{f0065}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0066}}">
+      <span class="label">316L</span>
+      <input type="text" name="f0066" data-placeholder="{{f0066}}" />
+      <span class="token">{{f0066}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Desiccant (qty)</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0068}}">
+          <input type="checkbox" name="f0068" data-placeholder="{{f0068}}" />
+          <span class="label">Polycarbonate</span>
+          <span class="token">{{f0068}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0069}}">
+      <span class="label">Color</span>
+      <input type="text" name="f0069" data-placeholder="{{f0069}}" />
+      <span class="token">{{f0069}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0070}}">
+          <input type="checkbox" name="f0070" data-placeholder="{{f0070}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0070}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Cotton (qty)</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0072}}">
+          <input type="checkbox" name="f0072" data-placeholder="{{f0072}}" />
+          <span class="label">Pet-P</span>
+          <span class="token">{{f0072}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0073}}">
+      <span class="label">Color</span>
+      <input type="text" name="f0073" data-placeholder="{{f0073}}" />
+      <span class="token">{{f0073}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0074}}">
+          <input type="checkbox" name="f0074" data-placeholder="{{f0074}}" />
+          <span class="label">Type</span>
+          <span class="token">{{f0074}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Product Metal Contact Parts (qty)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0076}}">
+          <input type="checkbox" name="f0076" data-placeholder="{{f0076}}" />
+          <span class="label">SS 304</span>
+          <span class="token">{{f0076}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0077}}">
+          <input type="checkbox" name="f0077" data-placeholder="{{f0077}}" />
+          <span class="label">SS 316L</span>
+          <span class="token">{{f0077}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Label (qty)</div>
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0079}}">
+      <span class="label">No. of Peel Plates</span>
+      <input type="text" name="f0079" data-placeholder="{{f0079}}" />
+      <span class="token">{{f0079}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0080}}">
+      <span class="label">5-Panel Rollers</span>
+      <input type="text" name="f0080" data-placeholder="{{f0080}}" />
+      <span class="token">{{f0080}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0081}}">
+      <span class="label">Wiper</span>
+      <input type="text" name="f0081" data-placeholder="{{f0081}}" />
+      <span class="token">{{f0081}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0082}}">
+      <span class="label">Wrap Belt &amp; Bkplate</span>
+      <input type="text" name="f0082" data-placeholder="{{f0082}}" />
+      <span class="token">{{f0082}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0083}}">
+      <span class="label">Rollers</span>
+      <input type="text" name="f0083" data-placeholder="{{f0083}}" />
+      <span class="token">{{f0083}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tooling ID</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0084}}">
+          <input type="checkbox" name="f0084" data-placeholder="{{f0084}}" />
+          <span class="label">Customer Code</span>
+          <span class="token">{{f0084}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tooling Cart</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0085}}">
+          <input type="checkbox" name="f0085" data-placeholder="{{f0085}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0085}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0086}}">
+          <input type="checkbox" name="f0086" data-placeholder="{{f0086}}" />
+          <span class="label">No</span>
+          <span class="token">{{f0086}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Direct Product Contact</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0087}}">
+          <input type="checkbox" name="f0087" data-placeholder="{{f0087}}" />
+          <span class="label">Autoclavable</span>
+          <span class="token">{{f0087}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0088}}">
+          <input type="checkbox" name="f0088" data-placeholder="{{f0088}}" />
+          <span class="label">Material Certification</span>
+          <span class="token">{{f0088}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0089}}">
+          <input type="checkbox" name="f0089" data-placeholder="{{f0089}}" />
+          <span class="label">Electropolished</span>
+          <span class="token">{{f0089}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Option Listing</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+        <label class="field textarea" data-placeholder="{{options_listing}}">
+          <span class="label">Option Listing</span>
+          <textarea name="options_listing" data-placeholder="{{options_listing}}" rows="5"></textarea>
+          <span class="token">{{options_listing}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Remarks / Special Design</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0092}}">
+      <span class="label">Remarks / Special Design</span>
+      <input type="text" name="f0092" data-placeholder="{{f0092}}" />
+      <span class="token">{{f0092}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Critical URS Compliance Points</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0093}}">
+      <span class="label">Critical URS Compliance Points</span>
+      <input type="text" name="f0093" data-placeholder="{{f0093}}" />
+      <span class="token">{{f0093}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Productions Notes</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0094}}">
+      <span class="label">Productions Notes</span>
+      <input type="text" name="f0094" data-placeholder="{{f0094}}" />
+      <span class="token">{{f0094}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Control &amp; Programming Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Explosion proof (checkbox)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0096}}">
+          <input type="checkbox" name="f0096" data-placeholder="{{f0096}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0096}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">PLC</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0097}}">
+          <input type="checkbox" name="f0097" data-placeholder="{{f0097}}" />
+          <span class="label">B &amp; R</span>
+          <span class="token">{{f0097}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0098}}">
+          <input type="checkbox" name="f0098" data-placeholder="{{f0098}}" />
+          <span class="label">CompactLogix</span>
+          <span class="token">{{f0098}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0099}}">
+          <input type="checkbox" name="f0099" data-placeholder="{{f0099}}" />
+          <span class="label">Allen Bradley</span>
+          <span class="token">{{f0099}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0100}}">
+          <input type="checkbox" name="f0100" data-placeholder="{{f0100}}" />
+          <span class="label">ControlLogix</span>
+          <span class="token">{{f0100}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0101}}">
+          <input type="checkbox" name="f0101" data-placeholder="{{f0101}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0101}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">HMI</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0102}}">
+          <input type="checkbox" name="f0102" data-placeholder="{{f0102}}" />
+          <span class="label">Allen Bradley</span>
+          <span class="token">{{f0102}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0103}}">
+          <input type="checkbox" name="f0103" data-placeholder="{{f0103}}" />
+          <span class="label">PV + 7&quot;</span>
+          <span class="token">{{f0103}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0104}}">
+          <input type="checkbox" name="f0104" data-placeholder="{{f0104}}" />
+          <span class="label">PV+ 10&quot;</span>
+          <span class="token">{{f0104}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0105}}">
+          <input type="checkbox" name="f0105" data-placeholder="{{f0105}}" />
+          <span class="label">B &amp; R</span>
+          <span class="token">{{f0105}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0106}}">
+          <input type="checkbox" name="f0106" data-placeholder="{{f0106}}" />
+          <span class="label">PC Upgrade</span>
+          <span class="token">{{f0106}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Size</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0107}}">
+          <input type="checkbox" name="f0107" data-placeholder="{{f0107}}" />
+          <span class="label">5.7&quot; n/a for vision</span>
+          <span class="token">{{f0107}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0108}}">
+          <input type="checkbox" name="f0108" data-placeholder="{{f0108}}" />
+          <span class="label">10&quot;</span>
+          <span class="token">{{f0108}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0109}}">
+          <input type="checkbox" name="f0109" data-placeholder="{{f0109}}" />
+          <span class="label">15&quot;</span>
+          <span class="token">{{f0109}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Language</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0110}}">
+          <input type="checkbox" name="f0110" data-placeholder="{{f0110}}" />
+          <span class="label">English</span>
+          <span class="token">{{f0110}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0111}}">
+          <input type="checkbox" name="f0111" data-placeholder="{{f0111}}" />
+          <span class="label">French</span>
+          <span class="token">{{f0111}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Infeed Side (checkbox)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0113}}">
+          <input type="checkbox" name="f0113" data-placeholder="{{f0113}}" />
+          <span class="label">Outfeed Side</span>
+          <span class="token">{{f0113}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Operator side (checkbox)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0115}}">
+          <input type="checkbox" name="f0115" data-placeholder="{{f0115}}" />
+          <span class="label">Rear</span>
+          <span class="token">{{f0115}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Control Panel Post</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0117}}">
+          <input type="checkbox" name="f0117" data-placeholder="{{f0117}}" />
+          <span class="label">1 Axis</span>
+          <span class="token">{{f0117}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0118}}">
+          <input type="checkbox" name="f0118" data-placeholder="{{f0118}}" />
+          <span class="label">3 Axis</span>
+          <span class="token">{{f0118}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0119}}">
+          <input type="checkbox" name="f0119" data-placeholder="{{f0119}}" />
+          <span class="label">2 Axis</span>
+          <span class="token">{{f0119}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Beacon Light Tower</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0120}}">
+          <input type="checkbox" name="f0120" data-placeholder="{{f0120}}" />
+          <span class="label">Red</span>
+          <span class="token">{{f0120}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0121}}">
+          <input type="checkbox" name="f0121" data-placeholder="{{f0121}}" />
+          <span class="label">Green</span>
+          <span class="token">{{f0121}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0122}}">
+          <input type="checkbox" name="f0122" data-placeholder="{{f0122}}" />
+          <span class="label">Yellow</span>
+          <span class="token">{{f0122}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0123}}">
+          <input type="checkbox" name="f0123" data-placeholder="{{f0123}}" />
+          <span class="label">Audible</span>
+          <span class="token">{{f0123}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0124}}">
+      <span class="label">Operation</span>
+      <input type="text" name="f0124" data-placeholder="{{f0124}}" />
+      <span class="token">{{f0124}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0125}}">
+          <input type="checkbox" name="f0125" data-placeholder="{{f0125}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0125}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Extra E-Stops</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0126}}">
+          <input type="checkbox" name="f0126" data-placeholder="{{f0126}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0126}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0127}}">
+      <span class="label">Yes</span>
+      <input type="number" name="f0127" data-placeholder="{{f0127}}" />
+      <span class="token">{{f0127}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0128}}">
+      <span class="label">Location</span>
+      <input type="text" name="f0128" data-placeholder="{{f0128}}" />
+      <span class="token">{{f0128}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Batch / Data Report</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0129}}">
+          <input type="checkbox" name="f0129" data-placeholder="{{f0129}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0129}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Batch / Data Report / Type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0130}}">
+          <input type="checkbox" name="f0130" data-placeholder="{{f0130}}" />
+          <span class="label">Summary Page only</span>
+          <span class="token">{{f0130}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0131}}">
+          <input type="checkbox" name="f0131" data-placeholder="{{f0131}}" />
+          <span class="label">Summary Header with Tracking</span>
+          <span class="token">{{f0131}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0132}}">
+      <span class="label">req&#x27;d with scales (example text)</span>
+      <input type="text" name="f0132" data-placeholder="{{f0132}}" />
+      <span class="token">{{f0132}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0133}}">
+          <input type="checkbox" name="f0133" data-placeholder="{{f0133}}" />
+          <span class="label">Audit Trail</span>
+          <span class="token">{{f0133}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0134}}">
+      <span class="label">File Name</span>
+      <input type="text" name="f0134" data-placeholder="{{f0134}}" />
+      <span class="token">{{f0134}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0135}}">
+          <input type="checkbox" name="f0135" data-placeholder="{{f0135}}" />
+          <span class="label">Memory Expansion Module</span>
+          <span class="token">{{f0135}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0136}}">
+      <span class="label">Req&#x27;d to export to main machine (example text)</span>
+      <input type="text" name="f0136" data-placeholder="{{f0136}}" />
+      <span class="token">{{f0136}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0137}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0137" data-placeholder="{{f0137}}" />
+      <span class="token">{{f0137}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Remote Technical Service - (1 per line) (Secomea)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0138}}">
+          <input type="checkbox" name="f0138" data-placeholder="{{f0138}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0138}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0139}}">
+          <input type="checkbox" name="f0139" data-placeholder="{{f0139}}" />
+          <span class="label">Connection Only</span>
+          <span class="token">{{f0139}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Customer Specific Wiring Code (checkbox)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0141}}">
+          <input type="checkbox" name="f0141" data-placeholder="{{f0141}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0141}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Electronic Torque Readout w/10&quot; HMI (checkbox)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0143}}">
+          <input type="checkbox" name="f0143" data-placeholder="{{f0143}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0143}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tank/Hopper Level Output Signal</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0145}}">
+          <input type="checkbox" name="f0145" data-placeholder="{{f0145}}" />
+          <span class="label">Pneumatic</span>
+          <span class="token">{{f0145}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0146}}">
+          <input type="checkbox" name="f0146" data-placeholder="{{f0146}}" />
+          <span class="label">24V</span>
+          <span class="token">{{f0146}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Bottle Handling System Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Tube</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0148}}">
+          <input type="checkbox" name="f0148" data-placeholder="{{f0148}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0148}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0149}}">
+          <input type="checkbox" name="f0149" data-placeholder="{{f0149}}" />
+          <span class="label">Vibratory Feeder</span>
+          <span class="token">{{f0149}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0150}}">
+          <input type="checkbox" name="f0150" data-placeholder="{{f0150}}" />
+          <span class="label">Outfeed Chute</span>
+          <span class="token">{{f0150}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0151}}">
+          <input type="checkbox" name="f0151" data-placeholder="{{f0151}}" />
+          <span class="label">Acoustic Cover</span>
+          <span class="token">{{f0151}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0152}}">
+          <input type="checkbox" name="f0152" data-placeholder="{{f0152}}" />
+          <span class="label">Pedestal Vibratory</span>
+          <span class="token">{{f0152}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0153}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0153" data-placeholder="{{f0153}}" />
+      <span class="token">{{f0153}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0154}}">
+          <input type="checkbox" name="f0154" data-placeholder="{{f0154}}" />
+          <span class="label">Mechanical Feeder</span>
+          <span class="token">{{f0154}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0155}}">
+          <input type="checkbox" name="f0155" data-placeholder="{{f0155}}" />
+          <span class="label">Outfeed Track</span>
+          <span class="token">{{f0155}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0156}}">
+          <input type="checkbox" name="f0156" data-placeholder="{{f0156}}" />
+          <span class="label">Bulk Elevator</span>
+          <span class="token">{{f0156}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Vial / Bottle</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0157}}">
+          <input type="checkbox" name="f0157" data-placeholder="{{f0157}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0157}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0158}}">
+          <input type="checkbox" name="f0158" data-placeholder="{{f0158}}" />
+          <span class="label">Infeed Tray</span>
+          <span class="token">{{f0158}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0159}}">
+          <input type="checkbox" name="f0159" data-placeholder="{{f0159}}" />
+          <span class="label">Infeed Conveyor</span>
+          <span class="token">{{f0159}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0160}}">
+          <input type="checkbox" name="f0160" data-placeholder="{{f0160}}" />
+          <span class="label">Infeed Trsfer Guide</span>
+          <span class="token">{{f0160}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0161}}">
+          <input type="checkbox" name="f0161" data-placeholder="{{f0161}}" />
+          <span class="label">Double Side Belts</span>
+          <span class="token">{{f0161}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0162}}">
+          <input type="checkbox" name="f0162" data-placeholder="{{f0162}}" />
+          <span class="label">Bottle Unscrambler</span>
+          <span class="token">{{f0162}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0163}}">
+          <input type="checkbox" name="f0163" data-placeholder="{{f0163}}" />
+          <span class="label">Full Conveyor</span>
+          <span class="token">{{f0163}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0164}}">
+          <input type="checkbox" name="f0164" data-placeholder="{{f0164}}" />
+          <span class="label">Outfeed Tray</span>
+          <span class="token">{{f0164}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0165}}">
+          <input type="checkbox" name="f0165" data-placeholder="{{f0165}}" />
+          <span class="label">Outfeed Conveyor</span>
+          <span class="token">{{f0165}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0166}}">
+          <input type="checkbox" name="f0166" data-placeholder="{{f0166}}" />
+          <span class="label">Outfeed Trsfer Guide</span>
+          <span class="token">{{f0166}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0167}}">
+          <input type="checkbox" name="f0167" data-placeholder="{{f0167}}" />
+          <span class="label">Corner Transfer Disc</span>
+          <span class="token">{{f0167}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0168}}">
+          <input type="checkbox" name="f0168" data-placeholder="{{f0168}}" />
+          <span class="label">Bottle Bulk Elevator</span>
+          <span class="token">{{f0168}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0169}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0169" data-placeholder="{{f0169}}" />
+      <span class="token">{{f0169}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Puck System</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0170}}">
+          <input type="checkbox" name="f0170" data-placeholder="{{f0170}}" />
+          <span class="label">Puck Sys. None</span>
+          <span class="token">{{f0170}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0171}}">
+          <input type="checkbox" name="f0171" data-placeholder="{{f0171}}" />
+          <span class="label">De-Pucker System</span>
+          <span class="token">{{f0171}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0172}}">
+          <input type="checkbox" name="f0172" data-placeholder="{{f0172}}" />
+          <span class="label">Puck Return System</span>
+          <span class="token">{{f0172}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0173}}">
+          <input type="checkbox" name="f0173" data-placeholder="{{f0173}}" />
+          <span class="label">Infeed Conveyor</span>
+          <span class="token">{{f0173}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0174}}">
+          <input type="checkbox" name="f0174" data-placeholder="{{f0174}}" />
+          <span class="label">Outfeed Conveyor</span>
+          <span class="token">{{f0174}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0175}}">
+      <span class="label">QTY of Pucks</span>
+      <input type="text" name="f0175" data-placeholder="{{f0175}}" />
+      <span class="token">{{f0175}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0176}}">
+      <span class="label">Formats Pucks</span>
+      <input type="text" name="f0176" data-placeholder="{{f0176}}" />
+      <span class="token">{{f0176}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0177}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0177" data-placeholder="{{f0177}}" />
+      <span class="token">{{f0177}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Turn Tables</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0178}}">
+          <input type="checkbox" name="f0178" data-placeholder="{{f0178}}" />
+          <span class="label">Infeed w/o tray</span>
+          <span class="token">{{f0178}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0179}}">
+          <input type="checkbox" name="f0179" data-placeholder="{{f0179}}" />
+          <span class="label">Outfeed w/o tray</span>
+          <span class="token">{{f0179}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0180}}">
+          <input type="checkbox" name="f0180" data-placeholder="{{f0180}}" />
+          <span class="label">Buffer</span>
+          <span class="token">{{f0180}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0181}}">
+          <input type="checkbox" name="f0181" data-placeholder="{{f0181}}" />
+          <span class="label">Infeed Table w/tray</span>
+          <span class="token">{{f0181}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0182}}">
+          <input type="checkbox" name="f0182" data-placeholder="{{f0182}}" />
+          <span class="label">Outfeed table w/Tray</span>
+          <span class="token">{{f0182}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0183}}">
+          <input type="checkbox" name="f0183" data-placeholder="{{f0183}}" />
+          <span class="label">Orientor</span>
+          <span class="token">{{f0183}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0184}}">
+          <input type="checkbox" name="f0184" data-placeholder="{{f0184}}" />
+          <span class="label">39&quot;</span>
+          <span class="token">{{f0184}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0185}}">
+          <input type="checkbox" name="f0185" data-placeholder="{{f0185}}" />
+          <span class="label">48&quot;</span>
+          <span class="token">{{f0185}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0186}}">
+          <input type="checkbox" name="f0186" data-placeholder="{{f0186}}" />
+          <span class="label">60&quot;</span>
+          <span class="token">{{f0186}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0187}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0187" data-placeholder="{{f0187}}" />
+      <span class="token">{{f0187}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Index / Motion</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0188}}">
+          <input type="checkbox" name="f0188" data-placeholder="{{f0188}}" />
+          <span class="label">Single Index</span>
+          <span class="token">{{f0188}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0189}}">
+          <input type="checkbox" name="f0189" data-placeholder="{{f0189}}" />
+          <span class="label">Double Index</span>
+          <span class="token">{{f0189}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0190}}">
+          <input type="checkbox" name="f0190" data-placeholder="{{f0190}}" />
+          <span class="label">Walking Beam</span>
+          <span class="token">{{f0190}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0191}}">
+          <input type="checkbox" name="f0191" data-placeholder="{{f0191}}" />
+          <span class="label">Feed Screw</span>
+          <span class="token">{{f0191}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0192}}">
+          <input type="checkbox" name="f0192" data-placeholder="{{f0192}}" />
+          <span class="label">Rake</span>
+          <span class="token">{{f0192}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0193}}">
+          <input type="checkbox" name="f0193" data-placeholder="{{f0193}}" />
+          <span class="label">Starwheel</span>
+          <span class="token">{{f0193}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0194}}">
+          <input type="checkbox" name="f0194" data-placeholder="{{f0194}}" />
+          <span class="label">Gating</span>
+          <span class="token">{{f0194}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0195}}">
+          <input type="checkbox" name="f0195" data-placeholder="{{f0195}}" />
+          <span class="label">Single Belt</span>
+          <span class="token">{{f0195}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0196}}">
+          <input type="checkbox" name="f0196" data-placeholder="{{f0196}}" />
+          <span class="label">Dual Belt</span>
+          <span class="token">{{f0196}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0197}}">
+          <input type="checkbox" name="f0197" data-placeholder="{{f0197}}" />
+          <span class="label">Bottle Aligner</span>
+          <span class="token">{{f0197}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0198}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0198" data-placeholder="{{f0198}}" />
+      <span class="token">{{f0198}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Reject / Inspection System</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Reject Method</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0199}}">
+          <input type="checkbox" name="f0199" data-placeholder="{{f0199}}" />
+          <span class="label">Chute</span>
+          <span class="token">{{f0199}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0200}}">
+          <input type="checkbox" name="f0200" data-placeholder="{{f0200}}" />
+          <span class="label">Lockable</span>
+          <span class="token">{{f0200}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0201}}">
+          <input type="checkbox" name="f0201" data-placeholder="{{f0201}}" />
+          <span class="label">Track</span>
+          <span class="token">{{f0201}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0202}}">
+          <input type="checkbox" name="f0202" data-placeholder="{{f0202}}" />
+          <span class="label">Linear</span>
+          <span class="token">{{f0202}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0203}}">
+          <input type="checkbox" name="f0203" data-placeholder="{{f0203}}" />
+          <span class="label">Conveyor</span>
+          <span class="token">{{f0203}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0204}}">
+          <input type="checkbox" name="f0204" data-placeholder="{{f0204}}" />
+          <span class="label">Tray</span>
+          <span class="token">{{f0204}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0205}}">
+          <input type="checkbox" name="f0205" data-placeholder="{{f0205}}" />
+          <span class="label">Starwheel</span>
+          <span class="token">{{f0205}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0206}}">
+          <input type="checkbox" name="f0206" data-placeholder="{{f0206}}" />
+          <span class="label">High Speed</span>
+          <span class="token">{{f0206}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Reject Reasons</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0207}}">
+          <input type="checkbox" name="f0207" data-placeholder="{{f0207}}" />
+          <span class="label">Fill WT / Count</span>
+          <span class="token">{{f0207}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0208}}">
+          <input type="checkbox" name="f0208" data-placeholder="{{f0208}}" />
+          <span class="label">No Cotton</span>
+          <span class="token">{{f0208}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0209}}">
+          <input type="checkbox" name="f0209" data-placeholder="{{f0209}}" />
+          <span class="label">Cap Prs.</span>
+          <span class="token">{{f0209}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0210}}">
+          <input type="checkbox" name="f0210" data-placeholder="{{f0210}}" />
+          <span class="label">Stem Prs.</span>
+          <span class="token">{{f0210}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0211}}">
+          <input type="checkbox" name="f0211" data-placeholder="{{f0211}}" />
+          <span class="label">Pintle Prs.</span>
+          <span class="token">{{f0211}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0212}}">
+          <input type="checkbox" name="f0212" data-placeholder="{{f0212}}" />
+          <span class="label">Overcap Prs.</span>
+          <span class="token">{{f0212}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0213}}">
+          <input type="checkbox" name="f0213" data-placeholder="{{f0213}}" />
+          <span class="label">Plug Prs.</span>
+          <span class="token">{{f0213}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0214}}">
+          <input type="checkbox" name="f0214" data-placeholder="{{f0214}}" />
+          <span class="label">High/Cross THRD</span>
+          <span class="token">{{f0214}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0215}}">
+          <input type="checkbox" name="f0215" data-placeholder="{{f0215}}" />
+          <span class="label">No Foil</span>
+          <span class="token">{{f0215}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0216}}">
+          <input type="checkbox" name="f0216" data-placeholder="{{f0216}}" />
+          <span class="label">Torque</span>
+          <span class="token">{{f0216}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0217}}">
+          <input type="checkbox" name="f0217" data-placeholder="{{f0217}}" />
+          <span class="label">OCV</span>
+          <span class="token">{{f0217}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0218}}">
+          <input type="checkbox" name="f0218" data-placeholder="{{f0218}}" />
+          <span class="label">OCR</span>
+          <span class="token">{{f0218}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0219}}">
+          <input type="checkbox" name="f0219" data-placeholder="{{f0219}}" />
+          <span class="label">Bar Code</span>
+          <span class="token">{{f0219}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0220}}">
+          <input type="checkbox" name="f0220" data-placeholder="{{f0220}}" />
+          <span class="label">Label Position</span>
+          <span class="token">{{f0220}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0221}}">
+          <input type="checkbox" name="f0221" data-placeholder="{{f0221}}" />
+          <span class="label">Label Prs</span>
+          <span class="token">{{f0221}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0222}}">
+          <input type="checkbox" name="f0222" data-placeholder="{{f0222}}" />
+          <span class="label">No Desiccant</span>
+          <span class="token">{{f0222}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0223}}">
+          <input type="checkbox" name="f0223" data-placeholder="{{f0223}}" />
+          <span class="label">Sleeve Presence</span>
+          <span class="token">{{f0223}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0224}}">
+          <input type="checkbox" name="f0224" data-placeholder="{{f0224}}" />
+          <span class="label">UV Presence</span>
+          <span class="token">{{f0224}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0225}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0225" data-placeholder="{{f0225}}" />
+      <span class="token">{{f0225}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Street Fighter Tablet Counter</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Street Fighter model</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0226}}">
+          <input type="checkbox" name="f0226" data-placeholder="{{f0226}}" />
+          <span class="label">1</span>
+          <span class="token">{{f0226}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0227}}">
+          <input type="checkbox" name="f0227" data-placeholder="{{f0227}}" />
+          <span class="label">2</span>
+          <span class="token">{{f0227}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0228}}">
+          <input type="checkbox" name="f0228" data-placeholder="{{f0228}}" />
+          <span class="label">100</span>
+          <span class="token">{{f0228}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">No. Of Funnels</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0229}}">
+          <input type="checkbox" name="f0229" data-placeholder="{{f0229}}" />
+          <span class="label">1</span>
+          <span class="token">{{f0229}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0230}}">
+          <input type="checkbox" name="f0230" data-placeholder="{{f0230}}" />
+          <span class="label">2</span>
+          <span class="token">{{f0230}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0231}}">
+          <input type="checkbox" name="f0231" data-placeholder="{{f0231}}" />
+          <span class="label">5</span>
+          <span class="token">{{f0231}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0232}}">
+          <input type="checkbox" name="f0232" data-placeholder="{{f0232}}" />
+          <span class="label">Cleaning STN.</span>
+          <span class="token">{{f0232}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Hopper</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0233}}">
+          <input type="checkbox" name="f0233" data-placeholder="{{f0233}}" />
+          <span class="label">10L</span>
+          <span class="token">{{f0233}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0234}}">
+          <input type="checkbox" name="f0234" data-placeholder="{{f0234}}" />
+          <span class="label">60L</span>
+          <span class="token">{{f0234}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0235}}">
+          <input type="checkbox" name="f0235" data-placeholder="{{f0235}}" />
+          <span class="label">Dust Ext.</span>
+          <span class="token">{{f0235}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Lift Fighter</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0236}}">
+          <input type="checkbox" name="f0236" data-placeholder="{{f0236}}" />
+          <span class="label">100L</span>
+          <span class="token">{{f0236}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0237}}">
+          <input type="checkbox" name="f0237" data-placeholder="{{f0237}}" />
+          <span class="label">No Air</span>
+          <span class="token">{{f0237}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0238}}">
+          <input type="checkbox" name="f0238" data-placeholder="{{f0238}}" />
+          <span class="label">Load Cells</span>
+          <span class="token">{{f0238}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0239}}">
+          <input type="checkbox" name="f0239" data-placeholder="{{f0239}}" />
+          <span class="label">Int. Dust Collection</span>
+          <span class="token">{{f0239}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0240}}">
+          <input type="checkbox" name="f0240" data-placeholder="{{f0240}}" />
+          <span class="label">Interlocked</span>
+          <span class="token">{{f0240}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0241}}">
+          <input type="checkbox" name="f0241" data-placeholder="{{f0241}}" />
+          <span class="label">Twin Axis HMI</span>
+          <span class="token">{{f0241}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0242}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0242" data-placeholder="{{f0242}}" />
+      <span class="token">{{f0242}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Liquid Filling System Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Pump</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0243}}">
+          <input type="checkbox" name="f0243" data-placeholder="{{f0243}}" />
+          <span class="label">Volumetric</span>
+          <span class="token">{{f0243}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0244}}">
+          <input type="checkbox" name="f0244" data-placeholder="{{f0244}}" />
+          <span class="label">Pneumatic</span>
+          <span class="token">{{f0244}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0245}}">
+          <input type="checkbox" name="f0245" data-placeholder="{{f0245}}" />
+          <span class="label">Liquid/Semi</span>
+          <span class="token">{{f0245}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0246}}">
+          <input type="checkbox" name="f0246" data-placeholder="{{f0246}}" />
+          <span class="label">Servo Bottom-Up fill</span>
+          <span class="token">{{f0246}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0247}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0247" data-placeholder="{{f0247}}" />
+      <span class="token">{{f0247}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0248}}">
+      <span class="label">Servo</span>
+      <input type="number" name="f0248" data-placeholder="{{f0248}}" />
+      <span class="token">{{f0248}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0249}}">
+          <input type="checkbox" name="f0249" data-placeholder="{{f0249}}" />
+          <span class="label">Viscous</span>
+          <span class="token">{{f0249}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0250}}">
+          <input type="checkbox" name="f0250" data-placeholder="{{f0250}}" />
+          <span class="label">Positive Displacement</span>
+          <span class="token">{{f0250}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Pump Volume</div>
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0251}}">
+      <span class="label">10cc</span>
+      <input type="number" name="f0251" data-placeholder="{{f0251}}" />
+      <span class="token">{{f0251}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0252}}">
+      <span class="label">100cc</span>
+      <input type="number" name="f0252" data-placeholder="{{f0252}}" />
+      <span class="token">{{f0252}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0253}}">
+      <span class="label">1000cc</span>
+      <input type="number" name="f0253" data-placeholder="{{f0253}}" />
+      <span class="token">{{f0253}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0254}}">
+      <span class="label">50cc</span>
+      <input type="number" name="f0254" data-placeholder="{{f0254}}" />
+      <span class="token">{{f0254}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0255}}">
+      <span class="label">500cc</span>
+      <input type="number" name="f0255" data-placeholder="{{f0255}}" />
+      <span class="token">{{f0255}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0256}}">
+      <span class="label">Mass Meter</span>
+      <input type="number" name="f0256" data-placeholder="{{f0256}}" />
+      <span class="token">{{f0256}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0257}}">
+      <span class="label">250cc</span>
+      <input type="number" name="f0257" data-placeholder="{{f0257}}" />
+      <span class="token">{{f0257}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0258}}">
+      <span class="label">850cc</span>
+      <input type="number" name="f0258" data-placeholder="{{f0258}}" />
+      <span class="token">{{f0258}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0259}}">
+          <input type="checkbox" name="f0259" data-placeholder="{{f0259}}" />
+          <span class="label">Hard Chrome</span>
+          <span class="token">{{f0259}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Valve type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0260}}">
+          <input type="checkbox" name="f0260" data-placeholder="{{f0260}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0260}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0261}}">
+          <input type="checkbox" name="f0261" data-placeholder="{{f0261}}" />
+          <span class="label">Ball Weight</span>
+          <span class="token">{{f0261}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0262}}">
+          <input type="checkbox" name="f0262" data-placeholder="{{f0262}}" />
+          <span class="label">Rotary</span>
+          <span class="token">{{f0262}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0263}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0263" data-placeholder="{{f0263}}" />
+      <span class="token">{{f0263}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0264}}">
+          <input type="checkbox" name="f0264" data-placeholder="{{f0264}}" />
+          <span class="label">Air Pilot</span>
+          <span class="token">{{f0264}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Nozzle type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0265}}">
+          <input type="checkbox" name="f0265" data-placeholder="{{f0265}}" />
+          <span class="label">Straight</span>
+          <span class="token">{{f0265}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0266}}">
+          <input type="checkbox" name="f0266" data-placeholder="{{f0266}}" />
+          <span class="label">Straight with check valve</span>
+          <span class="token">{{f0266}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0267}}">
+          <input type="checkbox" name="f0267" data-placeholder="{{f0267}}" />
+          <span class="label">IBSO</span>
+          <span class="token">{{f0267}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0268}}">
+          <input type="checkbox" name="f0268" data-placeholder="{{f0268}}" />
+          <span class="label">OBSO</span>
+          <span class="token">{{f0268}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0269}}">
+          <input type="checkbox" name="f0269" data-placeholder="{{f0269}}" />
+          <span class="label">Double wall â€“ Nitro &amp; Fill</span>
+          <span class="token">{{f0269}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0270}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0270" data-placeholder="{{f0270}}" />
+      <span class="token">{{f0270}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Nozzle Body Size ~</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0271}}">
+          <input type="checkbox" name="f0271" data-placeholder="{{f0271}}" />
+          <span class="label">6 mm</span>
+          <span class="token">{{f0271}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0272}}">
+          <input type="checkbox" name="f0272" data-placeholder="{{f0272}}" />
+          <span class="label">8mm</span>
+          <span class="token">{{f0272}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0273}}">
+          <input type="checkbox" name="f0273" data-placeholder="{{f0273}}" />
+          <span class="label">10mm</span>
+          <span class="token">{{f0273}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0274}}">
+          <input type="checkbox" name="f0274" data-placeholder="{{f0274}}" />
+          <span class="label">12mm</span>
+          <span class="token">{{f0274}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0275}}">
+          <input type="checkbox" name="f0275" data-placeholder="{{f0275}}" />
+          <span class="label">Â½&quot;</span>
+          <span class="token">{{f0275}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0276}}">
+          <input type="checkbox" name="f0276" data-placeholder="{{f0276}}" />
+          <span class="label">â…œ</span>
+          <span class="token">{{f0276}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0277}}">
+          <input type="checkbox" name="f0277" data-placeholder="{{f0277}}" />
+          <span class="label">Â¾</span>
+          <span class="token">{{f0277}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0278}}">
+          <input type="checkbox" name="f0278" data-placeholder="{{f0278}}" />
+          <span class="label">â€”</span>
+          <span class="token">{{f0278}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0279}}">
+          <input type="checkbox" name="f0279" data-placeholder="{{f0279}}" />
+          <span class="label">1</span>
+          <span class="token">{{f0279}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Nozzle Bar / Stations</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0280}}">
+          <input type="checkbox" name="f0280" data-placeholder="{{f0280}}" />
+          <span class="label">Offset Nozzle bar</span>
+          <span class="token">{{f0280}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Centering Device</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0281}}">
+          <input type="checkbox" name="f0281" data-placeholder="{{f0281}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0281}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0282}}">
+          <input type="checkbox" name="f0282" data-placeholder="{{f0282}}" />
+          <span class="label">Cone</span>
+          <span class="token">{{f0282}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0283}}">
+          <input type="checkbox" name="f0283" data-placeholder="{{f0283}}" />
+          <span class="label">Neck</span>
+          <span class="token">{{f0283}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0284}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0284" data-placeholder="{{f0284}}" />
+      <span class="token">{{f0284}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tank / Hopper / Infeed Hose</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0285}}">
+          <input type="checkbox" name="f0285" data-placeholder="{{f0285}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0285}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0286}}">
+          <input type="checkbox" name="f0286" data-placeholder="{{f0286}}" />
+          <span class="label">Agitator</span>
+          <span class="token">{{f0286}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0287}}">
+          <input type="checkbox" name="f0287" data-placeholder="{{f0287}}" />
+          <span class="label">18L</span>
+          <span class="token">{{f0287}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0288}}">
+          <input type="checkbox" name="f0288" data-placeholder="{{f0288}}" />
+          <span class="label">Tank</span>
+          <span class="token">{{f0288}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0289}}">
+          <input type="checkbox" name="f0289" data-placeholder="{{f0289}}" />
+          <span class="label">Spray Ball</span>
+          <span class="token">{{f0289}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0290}}">
+          <input type="checkbox" name="f0290" data-placeholder="{{f0290}}" />
+          <span class="label">60L</span>
+          <span class="token">{{f0290}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0291}}">
+          <input type="checkbox" name="f0291" data-placeholder="{{f0291}}" />
+          <span class="label">Hopper</span>
+          <span class="token">{{f0291}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0292}}">
+          <input type="checkbox" name="f0292" data-placeholder="{{f0292}}" />
+          <span class="label">Electropolished</span>
+          <span class="token">{{f0292}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0293}}">
+          <input type="checkbox" name="f0293" data-placeholder="{{f0293}}" />
+          <span class="label">100L</span>
+          <span class="token">{{f0293}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0294}}">
+          <input type="checkbox" name="f0294" data-placeholder="{{f0294}}" />
+          <span class="label">Jacketed</span>
+          <span class="token">{{f0294}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0295}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0295" data-placeholder="{{f0295}}" />
+      <span class="token">{{f0295}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0296}}">
+          <input type="checkbox" name="f0296" data-placeholder="{{f0296}}" />
+          <span class="label">Incl. Transfer Pump</span>
+          <span class="token">{{f0296}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0297}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0297" data-placeholder="{{f0297}}" />
+      <span class="token">{{f0297}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Gutter System</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0298}}">
+          <input type="checkbox" name="f0298" data-placeholder="{{f0298}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0298}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0299}}">
+          <input type="checkbox" name="f0299" data-placeholder="{{f0299}}" />
+          <span class="label">Drip Style</span>
+          <span class="token">{{f0299}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0300}}">
+          <input type="checkbox" name="f0300" data-placeholder="{{f0300}}" />
+          <span class="label">Prime/Purge/Rinse</span>
+          <span class="token">{{f0300}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Cleaning</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0301}}">
+          <input type="checkbox" name="f0301" data-placeholder="{{f0301}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0301}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0302}}">
+          <input type="checkbox" name="f0302" data-placeholder="{{f0302}}" />
+          <span class="label">Ionization Cleaning</span>
+          <span class="token">{{f0302}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0303}}">
+          <input type="checkbox" name="f0303" data-placeholder="{{f0303}}" />
+          <span class="label">Vacuum Air Cleaning</span>
+          <span class="token">{{f0303}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0304}}">
+      <span class="label">No. of Stations</span>
+      <input type="text" name="f0304" data-placeholder="{{f0304}}" />
+      <span class="token">{{f0304}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Options</div>
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0305}}">
+      <span class="label">No. of Cells</span>
+      <input type="text" name="f0305" data-placeholder="{{f0305}}" />
+      <span class="token">{{f0305}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0306}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0306" data-placeholder="{{f0306}}" />
+      <span class="token">{{f0306}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Gas Purge</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0307}}">
+          <input type="checkbox" name="f0307" data-placeholder="{{f0307}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0307}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Type</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0308}}">
+          <input type="checkbox" name="f0308" data-placeholder="{{f0308}}" />
+          <span class="label">Nitrogen</span>
+          <span class="token">{{f0308}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0309}}">
+          <input type="checkbox" name="f0309" data-placeholder="{{f0309}}" />
+          <span class="label">Argon</span>
+          <span class="token">{{f0309}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Location / Type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0310}}">
+          <input type="checkbox" name="f0310" data-placeholder="{{f0310}}" />
+          <span class="label">Before Fill ST</span>
+          <span class="token">{{f0310}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0311}}">
+          <input type="checkbox" name="f0311" data-placeholder="{{f0311}}" />
+          <span class="label">AT Fill ST.</span>
+          <span class="token">{{f0311}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0312}}">
+          <input type="checkbox" name="f0312" data-placeholder="{{f0312}}" />
+          <span class="label">After Fill</span>
+          <span class="token">{{f0312}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0313}}">
+          <input type="checkbox" name="f0313" data-placeholder="{{f0313}}" />
+          <span class="label">Tunnel</span>
+          <span class="token">{{f0313}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0314}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0314" data-placeholder="{{f0314}}" />
+      <span class="token">{{f0314}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0315}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0315" data-placeholder="{{f0315}}" />
+      <span class="token">{{f0315}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Desiccant</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0316}}">
+          <input type="checkbox" name="f0316" data-placeholder="{{f0316}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0316}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Type</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0317}}">
+          <input type="checkbox" name="f0317" data-placeholder="{{f0317}}" />
+          <span class="label">Roll / Pouch</span>
+          <span class="token">{{f0317}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0318}}">
+          <input type="checkbox" name="f0318" data-placeholder="{{f0318}}" />
+          <span class="label">Cannister</span>
+          <span class="token">{{f0318}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Bulk feeder</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0319}}">
+          <input type="checkbox" name="f0319" data-placeholder="{{f0319}}" />
+          <span class="label">Internal</span>
+          <span class="token">{{f0319}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0320}}">
+          <input type="checkbox" name="f0320" data-placeholder="{{f0320}}" />
+          <span class="label">Pedestal Vibratory</span>
+          <span class="token">{{f0320}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0321}}">
+          <input type="checkbox" name="f0321" data-placeholder="{{f0321}}" />
+          <span class="label">Elevator</span>
+          <span class="token">{{f0321}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0322}}">
+          <input type="checkbox" name="f0322" data-placeholder="{{f0322}}" />
+          <span class="label">Cover</span>
+          <span class="token">{{f0322}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0323}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0323" data-placeholder="{{f0323}}" />
+      <span class="token">{{f0323}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Cottoner</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0324}}">
+          <input type="checkbox" name="f0324" data-placeholder="{{f0324}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0324}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Sensing</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0325}}">
+          <input type="checkbox" name="f0325" data-placeholder="{{f0325}}" />
+          <span class="label">Presence</span>
+          <span class="token">{{f0325}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0326}}">
+          <input type="checkbox" name="f0326" data-placeholder="{{f0326}}" />
+          <span class="label">High</span>
+          <span class="token">{{f0326}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Cotton Bin</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0327}}">
+          <input type="checkbox" name="f0327" data-placeholder="{{f0327}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0327}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0328}}">
+          <input type="checkbox" name="f0328" data-placeholder="{{f0328}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0328}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0329}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0329" data-placeholder="{{f0329}}" />
+      <span class="token">{{f0329}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Plugging System Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Plug Placement</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0330}}">
+          <input type="checkbox" name="f0330" data-placeholder="{{f0330}}" />
+          <span class="label">Push Through</span>
+          <span class="token">{{f0330}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0331}}">
+          <input type="checkbox" name="f0331" data-placeholder="{{f0331}}" />
+          <span class="label">Pick &amp; Place</span>
+          <span class="token">{{f0331}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0332}}">
+          <input type="checkbox" name="f0332" data-placeholder="{{f0332}}" />
+          <span class="label">Vacuum</span>
+          <span class="token">{{f0332}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0333}}">
+          <input type="checkbox" name="f0333" data-placeholder="{{f0333}}" />
+          <span class="label">Mechanical</span>
+          <span class="token">{{f0333}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0334}}">
+          <input type="checkbox" name="f0334" data-placeholder="{{f0334}}" />
+          <span class="label">Rotary</span>
+          <span class="token">{{f0334}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0335}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0335" data-placeholder="{{f0335}}" />
+      <span class="token">{{f0335}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0336}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0336" data-placeholder="{{f0336}}" />
+      <span class="token">{{f0336}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Plug Sorting</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0337}}">
+          <input type="checkbox" name="f0337" data-placeholder="{{f0337}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0337}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0338}}">
+          <input type="checkbox" name="f0338" data-placeholder="{{f0338}}" />
+          <span class="label">Mechanical</span>
+          <span class="token">{{f0338}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0339}}">
+          <input type="checkbox" name="f0339" data-placeholder="{{f0339}}" />
+          <span class="label">Centrifugal</span>
+          <span class="token">{{f0339}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0340}}">
+          <input type="checkbox" name="f0340" data-placeholder="{{f0340}}" />
+          <span class="label">Docking Station</span>
+          <span class="token">{{f0340}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0341}}">
+          <input type="checkbox" name="f0341" data-placeholder="{{f0341}}" />
+          <span class="label">Acoustic Cover</span>
+          <span class="token">{{f0341}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0342}}">
+          <input type="checkbox" name="f0342" data-placeholder="{{f0342}}" />
+          <span class="label">Elevator</span>
+          <span class="token">{{f0342}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0343}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0343" data-placeholder="{{f0343}}" />
+      <span class="token">{{f0343}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Bulk Feeder</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0344}}">
+          <input type="checkbox" name="f0344" data-placeholder="{{f0344}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0344}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0345}}">
+          <input type="checkbox" name="f0345" data-placeholder="{{f0345}}" />
+          <span class="label">Pedestal Vibratory</span>
+          <span class="token">{{f0345}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0346}}">
+          <input type="checkbox" name="f0346" data-placeholder="{{f0346}}" />
+          <span class="label">Pneumatic</span>
+          <span class="token">{{f0346}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0347}}">
+          <input type="checkbox" name="f0347" data-placeholder="{{f0347}}" />
+          <span class="label">Electric</span>
+          <span class="token">{{f0347}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0348}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0348" data-placeholder="{{f0348}}" />
+      <span class="token">{{f0348}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0349}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0349" data-placeholder="{{f0349}}" />
+      <span class="token">{{f0349}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Capping System Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Cap Placement</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0350}}">
+          <input type="checkbox" name="f0350" data-placeholder="{{f0350}}" />
+          <span class="label">Push Through</span>
+          <span class="token">{{f0350}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0351}}">
+          <input type="checkbox" name="f0351" data-placeholder="{{f0351}}" />
+          <span class="label">Pick &amp; Place</span>
+          <span class="token">{{f0351}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0352}}">
+          <input type="checkbox" name="f0352" data-placeholder="{{f0352}}" />
+          <span class="label">Rotary</span>
+          <span class="token">{{f0352}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0353}}">
+          <input type="checkbox" name="f0353" data-placeholder="{{f0353}}" />
+          <span class="label">Rotation</span>
+          <span class="token">{{f0353}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0354}}">
+          <input type="checkbox" name="f0354" data-placeholder="{{f0354}}" />
+          <span class="label">Air</span>
+          <span class="token">{{f0354}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0355}}">
+          <input type="checkbox" name="f0355" data-placeholder="{{f0355}}" />
+          <span class="label">Servo</span>
+          <span class="token">{{f0355}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0356}}">
+          <input type="checkbox" name="f0356" data-placeholder="{{f0356}}" />
+          <span class="label">Servo Index</span>
+          <span class="token">{{f0356}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0357}}">
+          <input type="checkbox" name="f0357" data-placeholder="{{f0357}}" />
+          <span class="label">Servo Up Down</span>
+          <span class="token">{{f0357}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0358}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0358" data-placeholder="{{f0358}}" />
+      <span class="token">{{f0358}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0359}}">
+          <input type="checkbox" name="f0359" data-placeholder="{{f0359}}" />
+          <span class="label">On the Fly</span>
+          <span class="token">{{f0359}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0360}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0360" data-placeholder="{{f0360}}" />
+      <span class="token">{{f0360}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Torque</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0361}}">
+          <input type="checkbox" name="f0361" data-placeholder="{{f0361}}" />
+          <span class="label">Air motor</span>
+          <span class="token">{{f0361}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0362}}">
+          <input type="checkbox" name="f0362" data-placeholder="{{f0362}}" />
+          <span class="label">Magnet clutch</span>
+          <span class="token">{{f0362}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0363}}">
+          <input type="checkbox" name="f0363" data-placeholder="{{f0363}}" />
+          <span class="label">Servo</span>
+          <span class="token">{{f0363}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0364}}">
+          <input type="checkbox" name="f0364" data-placeholder="{{f0364}}" />
+          <span class="label">Feedback</span>
+          <span class="token">{{f0364}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0365}}">
+          <input type="checkbox" name="f0365" data-placeholder="{{f0365}}" />
+          <span class="label">Servo Calibration Sys.</span>
+          <span class="token">{{f0365}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0366}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0366" data-placeholder="{{f0366}}" />
+      <span class="token">{{f0366}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0367}}">
+      <span class="label">Copy of Bottle</span>
+      <input type="text" name="f0367" data-placeholder="{{f0367}}" />
+      <span class="token">{{f0367}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0368}}">
+      <span class="label">Copy of Neck</span>
+      <input type="text" name="f0368" data-placeholder="{{f0368}}" />
+      <span class="token">{{f0368}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0369}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0369" data-placeholder="{{f0369}}" />
+      <span class="token">{{f0369}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Cap Sorting</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0370}}">
+          <input type="checkbox" name="f0370" data-placeholder="{{f0370}}" />
+          <span class="label">Centrifugal</span>
+          <span class="token">{{f0370}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0371}}">
+          <input type="checkbox" name="f0371" data-placeholder="{{f0371}}" />
+          <span class="label">Elevator</span>
+          <span class="token">{{f0371}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0372}}">
+          <input type="checkbox" name="f0372" data-placeholder="{{f0372}}" />
+          <span class="label">Mechanical</span>
+          <span class="token">{{f0372}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0373}}">
+          <input type="checkbox" name="f0373" data-placeholder="{{f0373}}" />
+          <span class="label">Docking Station</span>
+          <span class="token">{{f0373}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0374}}">
+          <input type="checkbox" name="f0374" data-placeholder="{{f0374}}" />
+          <span class="label">Acoustic Cover</span>
+          <span class="token">{{f0374}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Centering Device</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0375}}">
+          <input type="checkbox" name="f0375" data-placeholder="{{f0375}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0375}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0376}}">
+          <input type="checkbox" name="f0376" data-placeholder="{{f0376}}" />
+          <span class="label">Cone</span>
+          <span class="token">{{f0376}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0377}}">
+          <input type="checkbox" name="f0377" data-placeholder="{{f0377}}" />
+          <span class="label">Tube</span>
+          <span class="token">{{f0377}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0378}}">
+          <input type="checkbox" name="f0378" data-placeholder="{{f0378}}" />
+          <span class="label">Neck</span>
+          <span class="token">{{f0378}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0379}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0379" data-placeholder="{{f0379}}" />
+      <span class="token">{{f0379}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tube Aligner</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0380}}">
+          <input type="checkbox" name="f0380" data-placeholder="{{f0380}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0380}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0381}}">
+          <input type="checkbox" name="f0381" data-placeholder="{{f0381}}" />
+          <span class="label">Cone</span>
+          <span class="token">{{f0381}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0382}}">
+          <input type="checkbox" name="f0382" data-placeholder="{{f0382}}" />
+          <span class="label">Grip &amp; Dive</span>
+          <span class="token">{{f0382}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0383}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0383" data-placeholder="{{f0383}}" />
+      <span class="token">{{f0383}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Bulk Feeder</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0384}}">
+          <input type="checkbox" name="f0384" data-placeholder="{{f0384}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0384}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0385}}">
+          <input type="checkbox" name="f0385" data-placeholder="{{f0385}}" />
+          <span class="label">Pedestal Vibratory</span>
+          <span class="token">{{f0385}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0386}}">
+          <input type="checkbox" name="f0386" data-placeholder="{{f0386}}" />
+          <span class="label">Cover</span>
+          <span class="token">{{f0386}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0387}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0387" data-placeholder="{{f0387}}" />
+      <span class="token">{{f0387}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0388}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0388" data-placeholder="{{f0388}}" />
+      <span class="token">{{f0388}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>BeltStar System Specifications â€“ Cap or Torque</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Cap Placement</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0389}}">
+          <input type="checkbox" name="f0389" data-placeholder="{{f0389}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0389}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0390}}">
+          <input type="checkbox" name="f0390" data-placeholder="{{f0390}}" />
+          <span class="label">Belts â€“ on the fly</span>
+          <span class="token">{{f0390}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0391}}">
+          <input type="checkbox" name="f0391" data-placeholder="{{f0391}}" />
+          <span class="label">AC</span>
+          <span class="token">{{f0391}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0392}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0392" data-placeholder="{{f0392}}" />
+      <span class="token">{{f0392}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Torque</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0393}}">
+          <input type="checkbox" name="f0393" data-placeholder="{{f0393}}" />
+          <span class="label">Air motor</span>
+          <span class="token">{{f0393}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0394}}">
+          <input type="checkbox" name="f0394" data-placeholder="{{f0394}}" />
+          <span class="label">Magnet clutch</span>
+          <span class="token">{{f0394}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0395}}">
+          <input type="checkbox" name="f0395" data-placeholder="{{f0395}}" />
+          <span class="label">Servo</span>
+          <span class="token">{{f0395}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0396}}">
+          <input type="checkbox" name="f0396" data-placeholder="{{f0396}}" />
+          <span class="label">Belts</span>
+          <span class="token">{{f0396}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0397}}">
+          <input type="checkbox" name="f0397" data-placeholder="{{f0397}}" />
+          <span class="label">AC motor DC Brake</span>
+          <span class="token">{{f0397}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0398}}">
+          <input type="checkbox" name="f0398" data-placeholder="{{f0398}}" />
+          <span class="label">Feedback</span>
+          <span class="token">{{f0398}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0399}}">
+          <input type="checkbox" name="f0399" data-placeholder="{{f0399}}" />
+          <span class="label">HMI Adj. Torque</span>
+          <span class="token">{{f0399}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0400}}">
+      <span class="label">Copy of Bottle</span>
+      <input type="text" name="f0400" data-placeholder="{{f0400}}" />
+      <span class="token">{{f0400}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0401}}">
+      <span class="label">Copy of Neck</span>
+      <input type="text" name="f0401" data-placeholder="{{f0401}}" />
+      <span class="token">{{f0401}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Cap Sorting</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0402}}">
+          <input type="checkbox" name="f0402" data-placeholder="{{f0402}}" />
+          <span class="label">Elevator</span>
+          <span class="token">{{f0402}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0403}}">
+          <input type="checkbox" name="f0403" data-placeholder="{{f0403}}" />
+          <span class="label">Docking Station</span>
+          <span class="token">{{f0403}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Motorized Adj.</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0404}}">
+          <input type="checkbox" name="f0404" data-placeholder="{{f0404}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0404}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0405}}">
+          <input type="checkbox" name="f0405" data-placeholder="{{f0405}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0405}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0406}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0406" data-placeholder="{{f0406}}" />
+      <span class="token">{{f0406}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Labeling System Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Label HD model</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0407}}">
+          <input type="checkbox" name="f0407" data-placeholder="{{f0407}}" />
+          <span class="label">LS100</span>
+          <span class="token">{{f0407}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0408}}">
+          <input type="checkbox" name="f0408" data-placeholder="{{f0408}}" />
+          <span class="label">LS200</span>
+          <span class="token">{{f0408}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Support reel DIA.</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0409}}">
+          <input type="checkbox" name="f0409" data-placeholder="{{f0409}}" />
+          <span class="label">300 mm</span>
+          <span class="token">{{f0409}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0410}}">
+          <input type="checkbox" name="f0410" data-placeholder="{{f0410}}" />
+          <span class="label">380 mm</span>
+          <span class="token">{{f0410}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Arm type</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0411}}">
+          <input type="checkbox" name="f0411" data-placeholder="{{f0411}}" />
+          <span class="label">Standard</span>
+          <span class="token">{{f0411}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0412}}">
+          <input type="checkbox" name="f0412" data-placeholder="{{f0412}}" />
+          <span class="label">&quot;L&quot; shaped</span>
+          <span class="token">{{f0412}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Application SYS</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0413}}">
+          <input type="checkbox" name="f0413" data-placeholder="{{f0413}}" />
+          <span class="label">Wrap around</span>
+          <span class="token">{{f0413}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0414}}">
+          <input type="checkbox" name="f0414" data-placeholder="{{f0414}}" />
+          <span class="label">3-Panel</span>
+          <span class="token">{{f0414}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0415}}">
+          <input type="checkbox" name="f0415" data-placeholder="{{f0415}}" />
+          <span class="label">4-Panel</span>
+          <span class="token">{{f0415}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0416}}">
+          <input type="checkbox" name="f0416" data-placeholder="{{f0416}}" />
+          <span class="label">5-Panel</span>
+          <span class="token">{{f0416}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0417}}">
+          <input type="checkbox" name="f0417" data-placeholder="{{f0417}}" />
+          <span class="label">Case label</span>
+          <span class="token">{{f0417}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0418}}">
+          <input type="checkbox" name="f0418" data-placeholder="{{f0418}}" />
+          <span class="label">Wipe Front &amp; Back</span>
+          <span class="token">{{f0418}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0419}}">
+          <input type="checkbox" name="f0419" data-placeholder="{{f0419}}" />
+          <span class="label">Prism</span>
+          <span class="token">{{f0419}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0420}}">
+          <input type="checkbox" name="f0420" data-placeholder="{{f0420}}" />
+          <span class="label">Wrap around in Puck</span>
+          <span class="token">{{f0420}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0421}}">
+      <span class="label">Belts QTY</span>
+      <input type="text" name="f0421" data-placeholder="{{f0421}}" />
+      <span class="token">{{f0421}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0422}}">
+          <input type="checkbox" name="f0422" data-placeholder="{{f0422}}" />
+          <span class="label">Low Label Sense</span>
+          <span class="token">{{f0422}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Type</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0423}}">
+          <input type="checkbox" name="f0423" data-placeholder="{{f0423}}" />
+          <span class="label">Rotary</span>
+          <span class="token">{{f0423}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Label Head Orientation</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0424}}">
+          <input type="checkbox" name="f0424" data-placeholder="{{f0424}}" />
+          <span class="label">DX</span>
+          <span class="token">{{f0424}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0425}}">
+          <input type="checkbox" name="f0425" data-placeholder="{{f0425}}" />
+          <span class="label">SX</span>
+          <span class="token">{{f0425}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Separator Wheel</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0426}}">
+          <input type="checkbox" name="f0426" data-placeholder="{{f0426}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0426}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0427}}">
+          <input type="checkbox" name="f0427" data-placeholder="{{f0427}}" />
+          <span class="label">Belt</span>
+          <span class="token">{{f0427}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0428}}">
+          <input type="checkbox" name="f0428" data-placeholder="{{f0428}}" />
+          <span class="label">Wheel</span>
+          <span class="token">{{f0428}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0429}}">
+          <input type="checkbox" name="f0429" data-placeholder="{{f0429}}" />
+          <span class="label">Starwheel</span>
+          <span class="token">{{f0429}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0430}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0430" data-placeholder="{{f0430}}" />
+      <span class="token">{{f0430}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Top Hold Down</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0431}}">
+          <input type="checkbox" name="f0431" data-placeholder="{{f0431}}" />
+          <span class="label">Bottle Aligner</span>
+          <span class="token">{{f0431}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0432}}">
+          <input type="checkbox" name="f0432" data-placeholder="{{f0432}}" />
+          <span class="label">Twin Feedscrew</span>
+          <span class="token">{{f0432}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0433}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0433" data-placeholder="{{f0433}}" />
+      <span class="token">{{f0433}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Coding and Inspection System Specifications</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0434}}">
+          <input type="checkbox" name="f0434" data-placeholder="{{f0434}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0434}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Coder</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0435}}">
+          <input type="checkbox" name="f0435" data-placeholder="{{f0435}}" />
+          <span class="label">Hot stamp</span>
+          <span class="token">{{f0435}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0436}}">
+      <span class="label">Make &amp; Model</span>
+      <input type="text" name="f0436" data-placeholder="{{f0436}}" />
+      <span class="token">{{f0436}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0437}}">
+          <input type="checkbox" name="f0437" data-placeholder="{{f0437}}" />
+          <span class="label">Extra Foil Cassette Holder</span>
+          <span class="token">{{f0437}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0438}}">
+          <input type="checkbox" name="f0438" data-placeholder="{{f0438}}" />
+          <span class="label">Extra Character Holders</span>
+          <span class="token">{{f0438}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0439}}">
+          <input type="checkbox" name="f0439" data-placeholder="{{f0439}}" />
+          <span class="label">Startup Kit</span>
+          <span class="token">{{f0439}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0440}}">
+          <input type="checkbox" name="f0440" data-placeholder="{{f0440}}" />
+          <span class="label">Thermal Transfer</span>
+          <span class="token">{{f0440}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0441}}">
+          <input type="checkbox" name="f0441" data-placeholder="{{f0441}}" />
+          <span class="label">Laser</span>
+          <span class="token">{{f0441}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0442}}">
+          <input type="checkbox" name="f0442" data-placeholder="{{f0442}}" />
+          <span class="label">Thermal Ink jet</span>
+          <span class="token">{{f0442}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0443}}">
+      <span class="label">Additional Ink</span>
+      <input type="text" name="f0443" data-placeholder="{{f0443}}" />
+      <span class="token">{{f0443}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0444}}">
+          <input type="checkbox" name="f0444" data-placeholder="{{f0444}}" />
+          <span class="label">Ink Jet Clean. Sol.</span>
+          <span class="token">{{f0444}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0445}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0445" data-placeholder="{{f0445}}" />
+      <span class="token">{{f0445}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Videojet</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0446}}">
+          <input type="checkbox" name="f0446" data-placeholder="{{f0446}}" />
+          <span class="label">8520</span>
+          <span class="token">{{f0446}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0447}}">
+          <input type="checkbox" name="f0447" data-placeholder="{{f0447}}" />
+          <span class="label">Ink jet VJ 1520</span>
+          <span class="token">{{f0447}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0448}}">
+          <input type="checkbox" name="f0448" data-placeholder="{{f0448}}" />
+          <span class="label">Laser 3330</span>
+          <span class="token">{{f0448}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0449}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0449" data-placeholder="{{f0449}}" />
+      <span class="token">{{f0449}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Laser</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0450}}">
+          <input type="checkbox" name="f0450" data-placeholder="{{f0450}}" />
+          <span class="label">Videojet</span>
+          <span class="token">{{f0450}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0451}}">
+      <span class="label">Model</span>
+      <input type="text" name="f0451" data-placeholder="{{f0451}}" />
+      <span class="token">{{f0451}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0452}}">
+          <input type="checkbox" name="f0452" data-placeholder="{{f0452}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0452}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0453}}">
+          <input type="checkbox" name="f0453" data-placeholder="{{f0453}}" />
+          <span class="label">Customer suppl&#x27;d</span>
+          <span class="token">{{f0453}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0454}}">
+          <input type="checkbox" name="f0454" data-placeholder="{{f0454}}" />
+          <span class="label">Fume Extraction</span>
+          <span class="token">{{f0454}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0455}}">
+      <span class="label">Model</span>
+      <input type="text" name="f0455" data-placeholder="{{f0455}}" />
+      <span class="token">{{f0455}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0456}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0456" data-placeholder="{{f0456}}" />
+      <span class="token">{{f0456}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Vision</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0457}}">
+          <input type="checkbox" name="f0457" data-placeholder="{{f0457}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0457}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0458}}">
+          <input type="checkbox" name="f0458" data-placeholder="{{f0458}}" />
+          <span class="label">Cognex</span>
+          <span class="token">{{f0458}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0459}}">
+          <input type="checkbox" name="f0459" data-placeholder="{{f0459}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0459}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0460}}">
+      <span class="label">QTY</span>
+      <input type="text" name="f0460" data-placeholder="{{f0460}}" />
+      <span class="token">{{f0460}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0461}}">
+          <input type="checkbox" name="f0461" data-placeholder="{{f0461}}" />
+          <span class="label">OCR</span>
+          <span class="token">{{f0461}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0462}}">
+          <input type="checkbox" name="f0462" data-placeholder="{{f0462}}" />
+          <span class="label">OCV</span>
+          <span class="token">{{f0462}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0463}}">
+          <input type="checkbox" name="f0463" data-placeholder="{{f0463}}" />
+          <span class="label">Barcode</span>
+          <span class="token">{{f0463}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0464}}">
+          <input type="checkbox" name="f0464" data-placeholder="{{f0464}}" />
+          <span class="label">Orientation/Skew</span>
+          <span class="token">{{f0464}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0465}}">
+          <input type="checkbox" name="f0465" data-placeholder="{{f0465}}" />
+          <span class="label">Presence</span>
+          <span class="token">{{f0465}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0466}}">
+          <input type="checkbox" name="f0466" data-placeholder="{{f0466}}" />
+          <span class="label">Position</span>
+          <span class="token">{{f0466}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0467}}">
+          <input type="checkbox" name="f0467" data-placeholder="{{f0467}}" />
+          <span class="label">On Bottle</span>
+          <span class="token">{{f0467}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0468}}">
+          <input type="checkbox" name="f0468" data-placeholder="{{f0468}}" />
+          <span class="label">On Web</span>
+          <span class="token">{{f0468}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Print</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0469}}">
+          <input type="checkbox" name="f0469" data-placeholder="{{f0469}}" />
+          <span class="label">Lot</span>
+          <span class="token">{{f0469}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0470}}">
+          <input type="checkbox" name="f0470" data-placeholder="{{f0470}}" />
+          <span class="label">Bar Code</span>
+          <span class="token">{{f0470}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0471}}">
+          <input type="checkbox" name="f0471" data-placeholder="{{f0471}}" />
+          <span class="label">Exp. Date</span>
+          <span class="token">{{f0471}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0472}}">
+          <input type="checkbox" name="f0472" data-placeholder="{{f0472}}" />
+          <span class="label">2D</span>
+          <span class="token">{{f0472}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0473}}">
+          <input type="checkbox" name="f0473" data-placeholder="{{f0473}}" />
+          <span class="label">Package On</span>
+          <span class="token">{{f0473}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0474}}">
+          <input type="checkbox" name="f0474" data-placeholder="{{f0474}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0474}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0475}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0475" data-placeholder="{{f0475}}" />
+      <span class="token">{{f0475}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0476}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0476" data-placeholder="{{f0476}}" />
+      <span class="token">{{f0476}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Synergy Excise Tax Labeller 12 (Bottle)</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0477}}">
+          <input type="checkbox" name="f0477" data-placeholder="{{f0477}}" />
+          <span class="label">2 Bottle Orientation SYS</span>
+          <span class="token">{{f0477}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0478}}">
+          <input type="checkbox" name="f0478" data-placeholder="{{f0478}}" />
+          <span class="label">8 HD P/P Servo</span>
+          <span class="token">{{f0478}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0479}}">
+          <input type="checkbox" name="f0479" data-placeholder="{{f0479}}" />
+          <span class="label">1 Mag w/12 Rows</span>
+          <span class="token">{{f0479}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Inspection</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0480}}">
+          <input type="checkbox" name="f0480" data-placeholder="{{f0480}}" />
+          <span class="label">Top</span>
+          <span class="token">{{f0480}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0481}}">
+          <input type="checkbox" name="f0481" data-placeholder="{{f0481}}" />
+          <span class="label">Side</span>
+          <span class="token">{{f0481}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0482}}">
+          <input type="checkbox" name="f0482" data-placeholder="{{f0482}}" />
+          <span class="label">Corner</span>
+          <span class="token">{{f0482}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Application</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0483}}">
+          <input type="checkbox" name="f0483" data-placeholder="{{f0483}}" />
+          <span class="label">Cap &amp; Body</span>
+          <span class="token">{{f0483}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0484}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0484" data-placeholder="{{f0484}}" />
+      <span class="token">{{f0484}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Induction Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Enercon Model</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0485}}">
+          <input type="checkbox" name="f0485" data-placeholder="{{f0485}}" />
+          <span class="label">500</span>
+          <span class="token">{{f0485}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0486}}">
+          <input type="checkbox" name="f0486" data-placeholder="{{f0486}}" />
+          <span class="label">700</span>
+          <span class="token">{{f0486}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Voltage</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0487}}">
+          <input type="checkbox" name="f0487" data-placeholder="{{f0487}}" />
+          <span class="label">200 to 240</span>
+          <span class="token">{{f0487}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">HZ</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0488}}">
+          <input type="checkbox" name="f0488" data-placeholder="{{f0488}}" />
+          <span class="label">50</span>
+          <span class="token">{{f0488}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0489}}">
+          <input type="checkbox" name="f0489" data-placeholder="{{f0489}}" />
+          <span class="label">60</span>
+          <span class="token">{{f0489}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Sealing HD c/w IO Cable</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0490}}">
+          <input type="checkbox" name="f0490" data-placeholder="{{f0490}}" />
+          <span class="label">Tunnel</span>
+          <span class="token">{{f0490}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Stand (Enercon)</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0491}}">
+          <input type="checkbox" name="f0491" data-placeholder="{{f0491}}" />
+          <span class="label">Fixed</span>
+          <span class="token">{{f0491}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0492}}">
+          <input type="checkbox" name="f0492" data-placeholder="{{f0492}}" />
+          <span class="label">Mobile</span>
+          <span class="token">{{f0492}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Status Light</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0493}}">
+          <input type="checkbox" name="f0493" data-placeholder="{{f0493}}" />
+          <span class="label">Enercon</span>
+          <span class="token">{{f0493}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Separator Wheel</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0494}}">
+          <input type="checkbox" name="f0494" data-placeholder="{{f0494}}" />
+          <span class="label">Capmatic</span>
+          <span class="token">{{f0494}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Cap Inspection From Enercon</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0495}}">
+          <input type="checkbox" name="f0495" data-placeholder="{{f0495}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0495}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0496}}">
+          <input type="checkbox" name="f0496" data-placeholder="{{f0496}}" />
+          <span class="label">Stalled Bottle</span>
+          <span class="token">{{f0496}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0497}}">
+          <input type="checkbox" name="f0497" data-placeholder="{{f0497}}" />
+          <span class="label">Crooked Cap</span>
+          <span class="token">{{f0497}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">No Foil</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0498}}">
+          <input type="checkbox" name="f0498" data-placeholder="{{f0498}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0498}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0499}}">
+          <input type="checkbox" name="f0499" data-placeholder="{{f0499}}" />
+          <span class="label">Enercon</span>
+          <span class="token">{{f0499}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0500}}">
+          <input type="checkbox" name="f0500" data-placeholder="{{f0500}}" />
+          <span class="label">Capmatic m/c</span>
+          <span class="token">{{f0500}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0501}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0501" data-placeholder="{{f0501}}" />
+      <span class="token">{{f0501}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Retorquer</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0502}}">
+          <input type="checkbox" name="f0502" data-placeholder="{{f0502}}" />
+          <span class="label">Beltsar Model</span>
+          <span class="token">{{f0502}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Features</div>
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0503}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0503" data-placeholder="{{f0503}}" />
+      <span class="token">{{f0503}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Shrink Sleeve Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Sleever Application Area</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0504}}">
+          <input type="checkbox" name="f0504" data-placeholder="{{f0504}}" />
+          <span class="label">Neck Appl&#x27;n</span>
+          <span class="token">{{f0504}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0505}}">
+          <input type="checkbox" name="f0505" data-placeholder="{{f0505}}" />
+          <span class="label">Body Appl&#x27;n</span>
+          <span class="token">{{f0505}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0506}}">
+          <input type="checkbox" name="f0506" data-placeholder="{{f0506}}" />
+          <span class="label">Full Body Appl&#x27;n</span>
+          <span class="token">{{f0506}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0507}}">
+          <input type="checkbox" name="f0507" data-placeholder="{{f0507}}" />
+          <span class="label">Photo Registration</span>
+          <span class="token">{{f0507}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0508}}">
+          <input type="checkbox" name="f0508" data-placeholder="{{f0508}}" />
+          <span class="label">Band Tacker</span>
+          <span class="token">{{f0508}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Sleeve Pres. Sensor</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0509}}">
+          <input type="checkbox" name="f0509" data-placeholder="{{f0509}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0509}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0510}}">
+          <input type="checkbox" name="f0510" data-placeholder="{{f0510}}" />
+          <span class="label">Non-UV</span>
+          <span class="token">{{f0510}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0511}}">
+          <input type="checkbox" name="f0511" data-placeholder="{{f0511}}" />
+          <span class="label">UV</span>
+          <span class="token">{{f0511}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0512}}">
+          <input type="checkbox" name="f0512" data-placeholder="{{f0512}}" />
+          <span class="label">Vertical Perf.</span>
+          <span class="token">{{f0512}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0513}}">
+          <input type="checkbox" name="f0513" data-placeholder="{{f0513}}" />
+          <span class="label">Horizontal Perf.</span>
+          <span class="token">{{f0513}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0514}}">
+      <span class="label">Spare Knife qty</span>
+      <input type="text" name="f0514" data-placeholder="{{f0514}}" />
+      <span class="token">{{f0514}}</span>
+    </label>
+    
+
+        <label class="field checkbox" data-placeholder="{{f0515}}">
+          <input type="checkbox" name="f0515" data-placeholder="{{f0515}}" />
+          <span class="label">Pneumatic Set-down</span>
+          <span class="token">{{f0515}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0516}}">
+          <input type="checkbox" name="f0516" data-placeholder="{{f0516}}" />
+          <span class="label">Rotary Brush Set-down</span>
+          <span class="token">{{f0516}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0517}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0517" data-placeholder="{{f0517}}" />
+      <span class="token">{{f0517}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Shrink Tunnel</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0518}}">
+          <input type="checkbox" name="f0518" data-placeholder="{{f0518}}" />
+          <span class="label">From 3rd Party</span>
+          <span class="token">{{f0518}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0519}}">
+          <input type="checkbox" name="f0519" data-placeholder="{{f0519}}" />
+          <span class="label">SS Tunnel</span>
+          <span class="token">{{f0519}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0520}}">
+          <input type="checkbox" name="f0520" data-placeholder="{{f0520}}" />
+          <span class="label">Auto lift Device</span>
+          <span class="token">{{f0520}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0521}}">
+          <input type="checkbox" name="f0521" data-placeholder="{{f0521}}" />
+          <span class="label">24in Long</span>
+          <span class="token">{{f0521}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0522}}">
+          <input type="checkbox" name="f0522" data-placeholder="{{f0522}}" />
+          <span class="label">28in Long</span>
+          <span class="token">{{f0522}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0523}}">
+          <input type="checkbox" name="f0523" data-placeholder="{{f0523}}" />
+          <span class="label">Angle adjustment system</span>
+          <span class="token">{{f0523}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0524}}">
+          <input type="checkbox" name="f0524" data-placeholder="{{f0524}}" />
+          <span class="label">HMI temp Monitor</span>
+          <span class="token">{{f0524}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0525}}">
+      <span class="label">Comment</span>
+      <input type="text" name="f0525" data-placeholder="{{f0525}}" />
+      <span class="token">{{f0525}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0526}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0526" data-placeholder="{{f0526}}" />
+      <span class="token">{{f0526}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Conveyor Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Width</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0527}}">
+          <input type="checkbox" name="f0527" data-placeholder="{{f0527}}" />
+          <span class="label">3Â¼&quot;</span>
+          <span class="token">{{f0527}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0528}}">
+          <input type="checkbox" name="f0528" data-placeholder="{{f0528}}" />
+          <span class="label">4Â½&quot;</span>
+          <span class="token">{{f0528}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0529}}">
+          <input type="checkbox" name="f0529" data-placeholder="{{f0529}}" />
+          <span class="label">7Â½&quot;</span>
+          <span class="token">{{f0529}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0530}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0530" data-placeholder="{{f0530}}" />
+      <span class="token">{{f0530}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Length O.L</div>
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0531}}">
+      <span class="label">Infeed</span>
+      <input type="text" name="f0531" data-placeholder="{{f0531}}" />
+      <span class="token">{{f0531}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0532}}">
+      <span class="label">Outfeed</span>
+      <input type="text" name="f0532" data-placeholder="{{f0532}}" />
+      <span class="token">{{f0532}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0533}}">
+      <span class="label">Single</span>
+      <input type="text" name="f0533" data-placeholder="{{f0533}}" />
+      <span class="token">{{f0533}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Height</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0534}}">
+          <input type="checkbox" name="f0534" data-placeholder="{{f0534}}" />
+          <span class="label">36&quot;</span>
+          <span class="token">{{f0534}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0535}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0535" data-placeholder="{{f0535}}" />
+      <span class="token">{{f0535}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Shape</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0536}}">
+          <input type="checkbox" name="f0536" data-placeholder="{{f0536}}" />
+          <span class="label">Straight</span>
+          <span class="token">{{f0536}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0537}}">
+          <input type="checkbox" name="f0537" data-placeholder="{{f0537}}" />
+          <span class="label">U</span>
+          <span class="token">{{f0537}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0538}}">
+          <input type="checkbox" name="f0538" data-placeholder="{{f0538}}" />
+          <span class="label">90Â°</span>
+          <span class="token">{{f0538}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Chain Type</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0539}}">
+          <input type="checkbox" name="f0539" data-placeholder="{{f0539}}" />
+          <span class="label">STD</span>
+          <span class="token">{{f0539}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0540}}">
+          <input type="checkbox" name="f0540" data-placeholder="{{f0540}}" />
+          <span class="label">Anti-Static</span>
+          <span class="token">{{f0540}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0541}}">
+          <input type="checkbox" name="f0541" data-placeholder="{{f0541}}" />
+          <span class="label">High Temp</span>
+          <span class="token">{{f0541}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Bed Type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0542}}">
+          <input type="checkbox" name="f0542" data-placeholder="{{f0542}}" />
+          <span class="label">Standard</span>
+          <span class="token">{{f0542}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0543}}">
+          <input type="checkbox" name="f0543" data-placeholder="{{f0543}}" />
+          <span class="label">Raised Bed</span>
+          <span class="token">{{f0543}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0544}}">
+      <span class="label">Layout #</span>
+      <input type="text" name="f0544" data-placeholder="{{f0544}}" />
+      <span class="token">{{f0544}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Tunnel Guard</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0545}}">
+          <input type="checkbox" name="f0545" data-placeholder="{{f0545}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0545}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0546}}">
+          <input type="checkbox" name="f0546" data-placeholder="{{f0546}}" />
+          <span class="label">Infeed</span>
+          <span class="token">{{f0546}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0547}}">
+          <input type="checkbox" name="f0547" data-placeholder="{{f0547}}" />
+          <span class="label">Outfeed</span>
+          <span class="token">{{f0547}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Transf. Guide</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0548}}">
+          <input type="checkbox" name="f0548" data-placeholder="{{f0548}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0548}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0549}}">
+          <input type="checkbox" name="f0549" data-placeholder="{{f0549}}" />
+          <span class="label">Infeed</span>
+          <span class="token">{{f0549}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0550}}">
+          <input type="checkbox" name="f0550" data-placeholder="{{f0550}}" />
+          <span class="label">Outfeed</span>
+          <span class="token">{{f0550}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Wirecovers</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0551}}">
+          <input type="checkbox" name="f0551" data-placeholder="{{f0551}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0551}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0552}}">
+          <input type="checkbox" name="f0552" data-placeholder="{{f0552}}" />
+          <span class="label">4-section wireway</span>
+          <span class="token">{{f0552}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0553}}">
+          <input type="checkbox" name="f0553" data-placeholder="{{f0553}}" />
+          <span class="label">Trough</span>
+          <span class="token">{{f0553}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Bottle Transfer / Conveyor Infeed</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0554}}">
+          <input type="checkbox" name="f0554" data-placeholder="{{f0554}}" />
+          <span class="label">End</span>
+          <span class="token">{{f0554}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0555}}">
+          <input type="checkbox" name="f0555" data-placeholder="{{f0555}}" />
+          <span class="label">Machine Side</span>
+          <span class="token">{{f0555}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0556}}">
+          <input type="checkbox" name="f0556" data-placeholder="{{f0556}}" />
+          <span class="label">Oper. Side</span>
+          <span class="token">{{f0556}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Bottle Transfer / Conveyor Outfeed</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0557}}">
+          <input type="checkbox" name="f0557" data-placeholder="{{f0557}}" />
+          <span class="label">End</span>
+          <span class="token">{{f0557}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0558}}">
+          <input type="checkbox" name="f0558" data-placeholder="{{f0558}}" />
+          <span class="label">Machine Side</span>
+          <span class="token">{{f0558}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0559}}">
+          <input type="checkbox" name="f0559" data-placeholder="{{f0559}}" />
+          <span class="label">Oper. Side</span>
+          <span class="token">{{f0559}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0560}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0560" data-placeholder="{{f0560}}" />
+      <span class="token">{{f0560}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Euro Guarding</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0561}}">
+          <input type="checkbox" name="f0561" data-placeholder="{{f0561}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0561}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Panel material</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0562}}">
+          <input type="checkbox" name="f0562" data-placeholder="{{f0562}}" />
+          <span class="label">Lexan</span>
+          <span class="token">{{f0562}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0563}}">
+          <input type="checkbox" name="f0563" data-placeholder="{{f0563}}" />
+          <span class="label">Tempered glass</span>
+          <span class="token">{{f0563}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Switch type</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0564}}">
+          <input type="checkbox" name="f0564" data-placeholder="{{f0564}}" />
+          <span class="label">Key switch</span>
+          <span class="token">{{f0564}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0565}}">
+          <input type="checkbox" name="f0565" data-placeholder="{{f0565}}" />
+          <span class="label">Magnetic</span>
+          <span class="token">{{f0565}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0566}}">
+          <input type="checkbox" name="f0566" data-placeholder="{{f0566}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0566}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Reject Cover</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0567}}">
+          <input type="checkbox" name="f0567" data-placeholder="{{f0567}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0567}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0568}}">
+          <input type="checkbox" name="f0568" data-placeholder="{{f0568}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0568}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Top Cover</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0569}}">
+          <input type="checkbox" name="f0569" data-placeholder="{{f0569}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0569}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0570}}">
+          <input type="checkbox" name="f0570" data-placeholder="{{f0570}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0570}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Customer Location Dim</div>
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0571}}">
+      <span class="label">Room HT</span>
+      <input type="text" name="f0571" data-placeholder="{{f0571}}" />
+      <span class="token">{{f0571}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0572}}">
+      <span class="label">Room Doorway HT</span>
+      <input type="text" name="f0572" data-placeholder="{{f0572}}" />
+      <span class="token">{{f0572}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0573}}">
+      <span class="label">Room Doorway W</span>
+      <input type="text" name="f0573" data-placeholder="{{f0573}}" />
+      <span class="token">{{f0573}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0574}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0574" data-placeholder="{{f0574}}" />
+      <span class="token">{{f0574}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Fat &amp; Sample Requirements</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">FAT</div>
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0575}}">
+      <span class="label">Formats</span>
+      <input type="text" name="f0575" data-placeholder="{{f0575}}" />
+      <span class="token">{{f0575}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Sample Return to</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0576}}">
+          <input type="checkbox" name="f0576" data-placeholder="{{f0576}}" />
+          <span class="label">Customer</span>
+          <span class="token">{{f0576}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0577}}">
+          <input type="checkbox" name="f0577" data-placeholder="{{f0577}}" />
+          <span class="label">Capmatic</span>
+          <span class="token">{{f0577}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0578}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0578" data-placeholder="{{f0578}}" />
+      <span class="token">{{f0578}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Manual Specifications</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Language</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0579}}">
+          <input type="checkbox" name="f0579" data-placeholder="{{f0579}}" />
+          <span class="label">English</span>
+          <span class="token">{{f0579}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0580}}">
+          <input type="checkbox" name="f0580" data-placeholder="{{f0580}}" />
+          <span class="label">French</span>
+          <span class="token">{{f0580}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0581}}">
+      <span class="label">Other</span>
+      <input type="text" name="f0581" data-placeholder="{{f0581}}" />
+      <span class="token">{{f0581}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Contact Material Certification</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0582}}">
+          <input type="checkbox" name="f0582" data-placeholder="{{f0582}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0582}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0583}}">
+          <input type="checkbox" name="f0583" data-placeholder="{{f0583}}" />
+          <span class="label">No</span>
+          <span class="token">{{f0583}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Calibration Certification</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0584}}">
+          <input type="checkbox" name="f0584" data-placeholder="{{f0584}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0584}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0585}}">
+          <input type="checkbox" name="f0585" data-placeholder="{{f0585}}" />
+          <span class="label">No</span>
+          <span class="token">{{f0585}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Preventive Maintenance Program</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0586}}">
+          <input type="checkbox" name="f0586" data-placeholder="{{f0586}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0586}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0587}}">
+          <input type="checkbox" name="f0587" data-placeholder="{{f0587}}" />
+          <span class="label">No</span>
+          <span class="token">{{f0587}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0588}}">
+          <input type="checkbox" name="f0588" data-placeholder="{{f0588}}" />
+          <span class="label">Electronic</span>
+          <span class="token">{{f0588}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0589}}">
+          <input type="checkbox" name="f0589" data-placeholder="{{f0589}}" />
+          <span class="label">Paper</span>
+          <span class="token">{{f0589}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0590}}">
+      <span class="label">Quantity</span>
+      <input type="text" name="f0590" data-placeholder="{{f0590}}" />
+      <span class="token">{{f0590}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0591}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0591" data-placeholder="{{f0591}}" />
+      <span class="token">{{f0591}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Validation Documents</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0592}}">
+          <input type="checkbox" name="f0592" data-placeholder="{{f0592}}" />
+          <span class="label">FAT</span>
+          <span class="token">{{f0592}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0593}}">
+          <input type="checkbox" name="f0593" data-placeholder="{{f0593}}" />
+          <span class="label">SAT</span>
+          <span class="token">{{f0593}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0594}}">
+          <input type="checkbox" name="f0594" data-placeholder="{{f0594}}" />
+          <span class="label">DQ</span>
+          <span class="token">{{f0594}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0595}}">
+          <input type="checkbox" name="f0595" data-placeholder="{{f0595}}" />
+          <span class="label">HDS/SDS</span>
+          <span class="token">{{f0595}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0596}}">
+          <input type="checkbox" name="f0596" data-placeholder="{{f0596}}" />
+          <span class="label">FS/DS</span>
+          <span class="token">{{f0596}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0597}}">
+          <input type="checkbox" name="f0597" data-placeholder="{{f0597}}" />
+          <span class="label">IQ/OQ</span>
+          <span class="token">{{f0597}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0598}}">
+          <input type="checkbox" name="f0598" data-placeholder="{{f0598}}" />
+          <span class="label">English</span>
+          <span class="token">{{f0598}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0599}}">
+          <input type="checkbox" name="f0599" data-placeholder="{{f0599}}" />
+          <span class="label">French</span>
+          <span class="token">{{f0599}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0600}}">
+          <input type="checkbox" name="f0600" data-placeholder="{{f0600}}" />
+          <span class="label">Other</span>
+          <span class="token">{{f0600}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0601}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0601" data-placeholder="{{f0601}}" />
+      <span class="token">{{f0601}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Packaging &amp; Transport</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Transport charges</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0602}}">
+          <input type="checkbox" name="f0602" data-placeholder="{{f0602}}" />
+          <span class="label">Capmatic</span>
+          <span class="token">{{f0602}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0603}}">
+          <input type="checkbox" name="f0603" data-placeholder="{{f0603}}" />
+          <span class="label">Customer</span>
+          <span class="token">{{f0603}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Packaging by:</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0604}}">
+          <input type="checkbox" name="f0604" data-placeholder="{{f0604}}" />
+          <span class="label">Capmatic</span>
+          <span class="token">{{f0604}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0605}}">
+          <input type="checkbox" name="f0605" data-placeholder="{{f0605}}" />
+          <span class="label">Customer / Not Incl.</span>
+          <span class="token">{{f0605}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Packaging type</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0606}}">
+          <input type="checkbox" name="f0606" data-placeholder="{{f0606}}" />
+          <span class="label">Skid</span>
+          <span class="token">{{f0606}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0607}}">
+          <input type="checkbox" name="f0607" data-placeholder="{{f0607}}" />
+          <span class="label">Crate</span>
+          <span class="token">{{f0607}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0608}}">
+          <input type="checkbox" name="f0608" data-placeholder="{{f0608}}" />
+          <span class="label">Sea Worthy</span>
+          <span class="token">{{f0608}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0609}}">
+      <span class="label">Comments</span>
+      <input type="text" name="f0609" data-placeholder="{{f0609}}" />
+      <span class="token">{{f0609}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Warranty &amp; Install &amp; Spares</h2>
+      </div>
+      
+    <div class="group">
+      <div class="group-title">Warranty</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0610}}">
+          <input type="checkbox" name="f0610" data-placeholder="{{f0610}}" />
+          <span class="label">1YR</span>
+          <span class="token">{{f0610}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0611}}">
+          <input type="checkbox" name="f0611" data-placeholder="{{f0611}}" />
+          <span class="label">2YR</span>
+          <span class="token">{{f0611}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Spares Kit</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0612}}">
+          <input type="checkbox" name="f0612" data-placeholder="{{f0612}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0612}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0613}}">
+          <input type="checkbox" name="f0613" data-placeholder="{{f0613}}" />
+          <span class="label">1YR</span>
+          <span class="token">{{f0613}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0614}}">
+          <input type="checkbox" name="f0614" data-placeholder="{{f0614}}" />
+          <span class="label">2YR</span>
+          <span class="token">{{f0614}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Remote Tech. Service</div>
+      <div class="checkbox-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0615}}">
+          <input type="checkbox" name="f0615" data-placeholder="{{f0615}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0615}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0616}}">
+          <input type="checkbox" name="f0616" data-placeholder="{{f0616}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0616}}</span>
+        </label>
+        
+      </div>
+    </div>
+    
+    <div class="group">
+      <div class="group-title">Start-up Commissioning</div>
+      <div class="field-grid">
+        
+        <label class="field checkbox" data-placeholder="{{f0617}}">
+          <input type="checkbox" name="f0617" data-placeholder="{{f0617}}" />
+          <span class="label">None</span>
+          <span class="token">{{f0617}}</span>
+        </label>
+        
+
+        <label class="field checkbox" data-placeholder="{{f0618}}">
+          <input type="checkbox" name="f0618" data-placeholder="{{f0618}}" />
+          <span class="label">Yes</span>
+          <span class="token">{{f0618}}</span>
+        </label>
+        
+
+    <label class="field" data-placeholder="{{f0619}}">
+      <span class="label">Comments - Cut &amp; Paste from Quote</span>
+      <input type="text" name="f0619" data-placeholder="{{f0619}}" />
+      <span class="token">{{f0619}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Revision Log</h2>
+      </div>
+      
+    <div class="group">
+      
+      <div class="field-grid">
+        
+    <label class="field" data-placeholder="{{f0620}}">
+      <span class="label">Revision ID</span>
+      <input type="text" name="f0620" data-placeholder="{{f0620}}" />
+      <span class="token">{{f0620}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0621}}">
+      <span class="label">Date</span>
+      <input type="text" name="f0621" data-placeholder="{{f0621}}" />
+      <span class="token">{{f0621}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0622}}">
+      <span class="label">Description</span>
+      <input type="text" name="f0622" data-placeholder="{{f0622}}" />
+      <span class="token">{{f0622}}</span>
+    </label>
+    
+
+    <label class="field" data-placeholder="{{f0623}}">
+      <span class="label">By</span>
+      <input type="text" name="f0623" data-placeholder="{{f0623}}" />
+      <span class="token">{{f0623}}</span>
+    </label>
+    
+      </div>
+    </div>
+    
+    </section>
+    
+    </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+          const sections = document.querySelectorAll('.section');
+      
+          sections.forEach((section, index) => {
+              const header = section.querySelector('.section-header');
+              if (header) {
+                  // Create content wrapper
+                  const content = document.createElement('div');
+                  content.className = 'section-content';
+      
+                  // Move all group elements into the content wrapper
+                  const groups = Array.from(section.children).filter(child => child.classList.contains('group'));
+                  groups.forEach(group => {
+                      content.appendChild(group);
+                  });
+                  section.appendChild(content);
+      
+                  // Add toggle icon
+                  const icon = document.createElement('span');
+                  icon.className = 'toggle-icon';
+                  icon.textContent = '+';
+                  header.appendChild(icon);
+
+                  // Add click listener
+                  header.addEventListener('click', () => {
+                      section.classList.toggle('collapsed');
+                      header.classList.toggle('active');
+                  });
+      
+                  // Initially collapse all but the first section
+                  if (index > 0) {
+                      section.classList.add('collapsed');
+                  } else {
+                      header.classList.add('active');
+                  }
+              }
+          });
+      });
+    </script>
+  </body>
+</html>
