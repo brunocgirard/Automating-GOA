@@ -48,3 +48,6 @@ tmp/
 # Project specific
 *.pdf  # PDF files that might be uploaded for testing
 crm_data.db  # Specific database file
+
+# Auto Claude data directory
+.auto-claude/
