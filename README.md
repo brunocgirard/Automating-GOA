@@ -10,7 +10,14 @@ This project automates the generation of General Offer Arrangement (GOA) documen
 
 ## How It Works
 
-The system uses PDF quotes to populate documents and build a customer database. The workflow extracts data once for use in multiple document types.
+The system utilizes a comprehensive workflow to process PDF quotes, manage data, and generate documents:
+
+1.  **PDF Ingestion & Extraction**: The system ingests PDF quotes, extracting line items, machine details, and pricing information. This data is structured and stored in a local SQLite database, building a reusable CRM for future operations.
+2.  **Dual-Pipeline Document Generation**:
+    *   **Standard Machines**: Uses a sophisticated Excel-driven HTML template system (over 600 fields). The LLM extracts data to map against a complex schema, generating a previewable HTML form that converts to a final document.
+    *   **SortStar Machines**: Follows a direct Word template manipulation path, utilizing specific prompts for this machine type.
+3.  **Few-Shot Learning Loop**: Successful extractions are saved as examples. The system uses vector embeddings (ChromaDB) to retrieve semantically similar examples for future extractions, continuously improving accuracy over time.
+4.  **CRM & Modification Management**: Users can manage client profiles, view processing history, and manually edit generated data. Changes are tracked, allowing for regeneration of documents with user-validated inputs.
 
 ```mermaid
 flowchart TB
