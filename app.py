@@ -9,9 +9,10 @@ import traceback
 import shutil
 from datetime import datetime
 
-# Import from new modules
-from src.ui.ui_pages import (
-    show_welcome_page, show_client_dashboard_page, show_quote_processing, 
+# Import from modular page structure (refactored from monolithic ui_pages.py)
+# Note: Can also import from src.ui.ui_pages for backward compatibility
+from src.ui.pages import (
+    show_welcome_page, show_client_dashboard_page, show_quote_processing,
     show_crm_management_page, show_chat_page, render_chat_ui, show_template_report_page
 )
 from src.workflows.profile_workflow import (
