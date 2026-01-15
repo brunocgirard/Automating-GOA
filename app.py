@@ -23,17 +23,21 @@ from src.workflows.profile_workflow import (
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils import template_utils # Import the module itself
 from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, extract_placeholder_schema # Import specific functions
-from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
+from src.utils.llm_handler import (
+    configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question,
+    get_machine_specific_fields_with_confidence, get_confidence_level,
+    CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_LOW
+)
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.html_doc_filler import fill_and_generate_html
 from src.utils.form_generator import generate_goa_form, extract_schema_from_excel, OUTPUT_HTML_PATH
-from src.utils.crm_utils import (
-    init_db, save_client_info, load_all_clients, get_client_by_id, 
-    update_client_record, save_priced_items, load_priced_items_for_quote, 
-    update_single_priced_item, delete_client_record, save_machines_data, 
-    load_machines_for_quote, save_machine_template_data, load_machine_template_data, 
+from src.utils.db import (
+    init_db, save_client_info, load_all_clients, get_client_by_id,
+    update_client_record, save_priced_items, load_priced_items_for_quote,
+    update_single_priced_item, delete_client_record, save_machines_data,
+    load_machines_for_quote, save_machine_template_data, load_machine_template_data,
     save_document_content, load_document_content, save_goa_modification,
-    load_goa_modifications, load_machine_templates_with_modifications, 
+    load_goa_modifications, load_machine_templates_with_modifications,
     update_template_after_modifications, find_machines_by_name, load_all_processed_machines
 )
 
@@ -94,15 +98,16 @@ def initialize_session_state(is_new_processing_run=False):
         'full_pdf_text', 'processing_done', 'selected_pdf_descs', 'template_contexts',
         'llm_initial_filled_data', 'llm_corrected_filled_data', 'initial_docx_path',
         'corrected_docx_path', 'error_message', 'chat_log', 'correction_applied',
-        'identified_machines_data', 'selected_machine_index', 'machine_specific_filled_data', 
+        'identified_machines_data', 'selected_machine_index', 'machine_specific_filled_data',
         'machine_docx_path', 'selected_machine_id', 'machine_confirmation_done',
         'common_options_confirmation_done', 'items_for_confirmation', 'selected_main_machines',
         'selected_common_options', 'manual_machine_grouping',
-        'processing_step' 
+        'processing_step', 'preview_step_active', 'selected_machine_data', 'selected_machine_name',
+        'original_llm_extraction'
     ]
     goa_defaults = {
         'full_pdf_text': "", 'processing_done': False, 'selected_pdf_descs': [], 'template_contexts': {},
-        'llm_initial_filled_data': {}, 'llm_corrected_filled_data': {}, 
+        'llm_initial_filled_data': {}, 'llm_corrected_filled_data': {},
         'initial_docx_path': f"output_llm_initial_run{st.session_state.get('run_key',0)}.docx",
         'corrected_docx_path': f"output_llm_corrected_run{st.session_state.get('run_key',0)}.docx",
         'error_message': "", 'chat_log': [], 'correction_applied': False,
@@ -112,7 +117,9 @@ def initialize_session_state(is_new_processing_run=False):
         'common_options_confirmation_done': False, 'items_for_confirmation': [],
         'selected_main_machines': [], 'selected_common_options': [],
         'manual_machine_grouping': {},
-        'processing_step': 0 
+        'processing_step': 0,
+        'preview_step_active': False, 'selected_machine_data': None, 'selected_machine_name': "",
+        'original_llm_extraction': {}
     }
     for key in goa_processing_keys:
         if key not in st.session_state:
@@ -299,26 +306,41 @@ def perform_initial_processing(uploaded_pdf_file, template_file_path):
     finally: 
         if temp_pdf_path and os.path.exists(temp_pdf_path): os.remove(temp_pdf_path)
 
-def process_machine_specific_data(machine_data):
+def run_llm_extraction_only(machine_data):
+    """
+    Runs LLM extraction and stores results in session state.
+    Does NOT generate document or save to database.
+
+    Args:
+        machine_data: Dictionary containing machine information
+
+    Returns:
+        bool: Success status
+
+    Session State Output:
+        - machine_specific_filled_data: Dict of extracted fields
+        - selected_machine_data: Full machine data for later use
+        - selected_machine_name: Machine name
+    """
     try:
-        if not configure_gemini_client(): 
+        if not configure_gemini_client():
             st.session_state.error_message = "LLM client config failed."
             return False
-        
-        st.info(f"Processing machine: {machine_data.get('machine_name', 'Unknown')}")
-        
+
+        st.info(f"Extracting data for machine: {machine_data.get('machine_name', 'Unknown')}")
+
         common_items = machine_data.get("common_items", [])
         if not common_items and st.session_state.identified_machines_data:
              common_items = st.session_state.identified_machines_data.get("common_items", [])
 
         # --- DEBUG LOGGING ---
-        print("\n--- DEBUG: process_machine_specific_data ---")
+        print("\n--- DEBUG: run_llm_extraction_only ---")
         print(f"Machine Data: {json.dumps(machine_data, indent=2)}")
         print(f"Common Items: {json.dumps(common_items, indent=2)}")
         print("------------------------------------------\n")
         # --- END DEBUG LOGGING ---
 
-        with st.spinner(f"Processing GOA for: {machine_data.get('machine_name')}..."):
+        with st.spinner(f"Extracting fields for: {machine_data.get('machine_name')}..."):
             template_contexts, template_file_path, is_sortstar_template = get_contexts_for_machine(machine_data)
 
             if not template_contexts:
@@ -344,14 +366,150 @@ def process_machine_specific_data(machine_data):
                 common_items = refreshed_machine_data.get("common_items", common_items)
             machine_data_for_processing = refreshed_machine_data or machine_data
 
-            machine_filled_data = get_machine_specific_fields_via_llm(machine_data_for_processing, common_items, template_contexts, st.session_state.full_pdf_text)
+            # Use the enhanced extraction with confidence scoring
+            machine_filled_data, confidence_scores, suggestions = get_machine_specific_fields_with_confidence(
+                machine_data_for_processing,
+                common_items,
+                template_contexts,
+                st.session_state.full_pdf_text
+            )
 
-            # The evidence gate has been removed to rely solely on the stricter LLM prompt.
-
+            # Store extracted data in session state for preview
             st.session_state.machine_specific_filled_data = machine_filled_data
+            # IMPORTANT: Save original extraction for comparison (for few-shot learning)
+            st.session_state.original_llm_extraction = machine_filled_data.copy()
+            # Store confidence scores for UI display
+            st.session_state.field_confidence_scores = confidence_scores
+            # Store field dependency suggestions
+            st.session_state.field_dependency_suggestions = suggestions
+            st.session_state.selected_machine_data = machine_data_for_processing
+            st.session_state.selected_machine_name = machine_data.get('machine_name', 'machine')
 
-            machine_name = machine_data.get('machine_name', 'machine')
-            clean_name = re.sub(r'[\\/*?:"<>|]', "_", machine_name.replace(' ', '_')) # Sanitize name more robustly
+            # Calculate confidence summary for display
+            high_conf = sum(1 for c in confidence_scores.values() if c >= CONFIDENCE_HIGH)
+            med_conf = sum(1 for c in confidence_scores.values() if CONFIDENCE_MEDIUM <= c < CONFIDENCE_HIGH)
+            low_conf = sum(1 for c in confidence_scores.values() if c < CONFIDENCE_MEDIUM)
+
+            st.success(f"Extracted {len(machine_filled_data)} fields successfully!")
+
+            # Show confidence summary
+            if low_conf > 0:
+                st.warning(f"Confidence Summary: {high_conf} high, {med_conf} medium, {low_conf} low-confidence fields that may need review")
+            return True
+
+    except Exception as e:
+        st.session_state.error_message = f"LLM extraction error: {e}"
+        traceback.print_exc()
+        st.error(f"Detailed error: {traceback.format_exc()}")
+        return False
+
+
+def save_user_corrections_as_training_examples(
+    original_data: Dict[str, Any],
+    edited_data: Dict[str, Any],
+    machine_data: Dict,
+    common_items: List[Dict],
+    full_pdf_text: str,
+    machine_type: str
+) -> int:
+    """
+    Compares original LLM extraction with user-edited data and saves corrections
+    as high-quality training examples for few-shot learning.
+
+    Args:
+        original_data: Original LLM extraction
+        edited_data: User-edited data from preview
+        machine_data: Machine information
+        common_items: Common items list
+        full_pdf_text: Full PDF text
+        machine_type: Determined machine type
+
+    Returns:
+        int: Number of corrections saved
+    """
+    from src.utils.few_shot_learning import (
+        determine_machine_type,
+        save_successful_extraction_as_example,
+        extract_field_context_for_example
+    )
+
+    corrections_count = 0
+
+    for field_key, edited_value in edited_data.items():
+        original_value = original_data.get(field_key)
+
+        # Check if user made a correction
+        if edited_value != original_value:
+            # Skip if user just cleared a suspicious value to empty
+            if edited_value in [None, ""]:
+                continue
+
+            # Save the corrected value as a high-quality training example
+            try:
+                success = save_successful_extraction_as_example(
+                    field_name=field_key,
+                    field_value=edited_value,
+                    machine_data=machine_data,
+                    common_items=common_items,
+                    full_pdf_text=full_pdf_text,
+                    machine_type=machine_type,
+                    template_type="GOA",
+                    source_machine_id=machine_data.get('id'),
+                    confidence_score=1.0  # User-corrected = highest confidence
+                )
+
+                if success:
+                    corrections_count += 1
+                    print(f"[Few-Shot] Saved user correction for field: {field_key}")
+
+            except Exception as e:
+                print(f"[Few-Shot] Failed to save correction for {field_key}: {e}")
+
+    return corrections_count
+
+
+def generate_and_save_document():
+    """
+    Generates document from session state data and saves to database.
+    Assumes LLM extraction already completed via run_llm_extraction_only().
+
+    Session State Input:
+        - machine_specific_filled_data: Edited field values
+        - selected_machine_data: Machine info
+        - selected_machine_name: Machine name
+        - identified_machines_data: For common items
+
+    Returns:
+        bool: Success status
+
+    Session State Output:
+        - machine_docx_path: Path to generated document
+        - selected_machine_id: Database machine ID
+    """
+    try:
+        # Retrieve data from session state
+        machine_filled_data = st.session_state.get('machine_specific_filled_data')
+        machine_data = st.session_state.get('selected_machine_data')
+        machine_name = st.session_state.get('selected_machine_name', 'machine')
+
+        if not machine_filled_data or not machine_data:
+            st.error("No extracted data found in session. Please run LLM extraction first.")
+            return False
+
+        # Get common items
+        common_items = machine_data.get("common_items", [])
+        if not common_items and st.session_state.identified_machines_data:
+            common_items = st.session_state.identified_machines_data.get("common_items", [])
+
+        with st.spinner(f"Generating document for: {machine_name}..."):
+            # Load template contexts to determine machine type
+            template_contexts, template_file_path, is_sortstar_template = get_contexts_for_machine(machine_data)
+
+            if not template_contexts:
+                st.error(f"Could not load template contexts for machine: {machine_name}")
+                return False
+
+            clean_name = re.sub(r'[\\/*?:"<>|]', "_", machine_name.replace(' ', '_'))
 
             # --- Always regenerate options_listing from the currently selected machine items ---
             selected_details = []
@@ -386,7 +544,7 @@ def process_machine_specific_data(machine_data):
             # Ensure the filled data includes options_listing for downstream HTML/Docx generation
             if "options_listing" in st.session_state.machine_specific_filled_data:
                 machine_filled_data["options_listing"] = st.session_state.machine_specific_filled_data["options_listing"]
-            
+
             # Set the output path based on machine type
             is_sortstar_machine = is_sortstar_template
             if is_sortstar_machine:
@@ -396,16 +554,9 @@ def process_machine_specific_data(machine_data):
 
             # Check that we have data before filling
             if not machine_filled_data:
-                st.error("No data received from LLM to fill the template.")
+                st.error("No data available to fill the template.")
                 return False
 
-            # Show sample of the data for debugging
-            with st.expander("Preview of data from LLM", expanded=False):
-                # Take first 5 fields to show as example
-                sample_data = {k: v for i, (k, v) in enumerate(machine_filled_data.items()) if i < 5}
-                st.write(sample_data)
-                st.write(f"Total fields: {len(machine_filled_data)}")
-            
             if is_sortstar_machine:
                 # Keep Word logic for SortStar for now
                 fill_word_document_from_llm_data(template_file_path, machine_filled_data, machine_specific_output_path)
@@ -415,17 +566,17 @@ def process_machine_specific_data(machine_data):
                 if not generate_goa_form():
                     st.error("Failed to generate HTML form template.")
                     return False
-                
+
                 # 2. Fill HTML and save
                 # We use the generated OUTPUT_HTML_PATH as the template source
                 fill_and_generate_html(str(OUTPUT_HTML_PATH), machine_filled_data, machine_specific_output_path)
-            
+
             if not os.path.exists(machine_specific_output_path):
                 st.error(f"Failed to create output file: {machine_specific_output_path}")
                 return False
-                
+
             st.session_state.machine_docx_path = machine_specific_output_path
-            
+
             # Save machine template data to database
             # Make sure we have a machine ID - check for "id" in machine_data
             machine_id = None
@@ -436,7 +587,7 @@ def process_machine_specific_data(machine_data):
                 # We need to find or create a machine record in the database
                 # First, determine the quote_ref
                 quote_ref = None
-                
+
                 # Try several methods to get the quote_ref
                 if "client_quote_ref" in machine_data:
                     quote_ref = machine_data["client_quote_ref"]
@@ -445,7 +596,7 @@ def process_machine_specific_data(machine_data):
                     quote_ref = st.session_state.items_for_confirmation[0].get("client_quote_ref", "")
                     if quote_ref:
                         st.info(f"Found quote_ref in items_for_confirmation: {quote_ref}")
-                
+
                 # If still not found, try to extract from file info
                 if not quote_ref:
                     # Try to extract from the file name if available
@@ -454,33 +605,33 @@ def process_machine_specific_data(machine_data):
                         if match:
                             quote_ref = match.group(1)
                             st.info(f"Extracted quote_ref from filename: {quote_ref}")
-                    
+
                     # If still no quote_ref, use machine name as fallback
                     if not quote_ref:
-                        machine_name = machine_data.get("machine_name", "")
-                        if machine_name:
+                        machine_name_ref = machine_data.get("machine_name", "")
+                        if machine_name_ref:
                             # Sanitize machine name to use as quote_ref
-                            quote_ref = re.sub(r'[^A-Za-z0-9-]', '_', machine_name)
+                            quote_ref = re.sub(r'[^A-Za-z0-9-]', '_', machine_name_ref)
                             st.warning(f"Using machine name as quote_ref fallback: {quote_ref}")
                         else:
                             quote_ref = f"unknown_quote_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                             st.warning(f"Using generated quote_ref fallback: {quote_ref}")
-                
+
                 # Ensure we have a valid quote_ref
                 if not quote_ref:
                     st.error("Could not determine quote_ref. Cannot save machine data.")
                     return False
-                
+
                 st.info(f"Using quote_ref: {quote_ref}")
-                
+
                 # Check if we already have this machine in the database
-                
+
                 # First check if a machine with this name already exists in any quote
-                machine_name = machine_data.get("machine_name", "")
-                matching_machines = find_machines_by_name(machine_name)
-                
+                machine_name_db = machine_data.get("machine_name", "")
+                matching_machines = find_machines_by_name(machine_name_db)
+
                 if matching_machines:
-                    st.success(f"Found {len(matching_machines)} existing machine(s) with name '{machine_name}'")
+                    st.success(f"Found {len(matching_machines)} existing machine(s) with name '{machine_name_db}'")
                     # Use the first matching machine
                     machine_id = matching_machines[0]["id"]
                     st.success(f"Using existing machine ID: {machine_id}")
@@ -489,30 +640,30 @@ def process_machine_specific_data(machine_data):
                     client_info = {"quote_ref": quote_ref, "customer_name": "", "machine_model": machine_data.get("machine_name", "")}
                     st.info(f"Ensuring client record exists for quote_ref: {quote_ref}")
                     save_client_info(client_info)
-                    
+
                     # Now check for existing machines in this quote
                     machines_from_db = load_machines_for_quote(quote_ref)
-                    
+
                     # Look for a matching machine name
-                    matching_machine = next((m for m in machines_from_db if m["machine_name"] == machine_name), None)
-                    
+                    matching_machine = next((m for m in machines_from_db if m["machine_name"] == machine_name_db), None)
+
                     if matching_machine:
                         machine_id = matching_machine["id"]
                         st.success(f"Found existing machine ID: {machine_id}")
                     else:
                         # Need to create a new machine record
-                        st.info(f"Creating new machine record for {machine_name} with quote_ref: {quote_ref}")
-                        
+                        st.info(f"Creating new machine record for {machine_name_db} with quote_ref: {quote_ref}")
+
                         # Make sure machine_data has client_quote_ref
                         machine_data_copy = machine_data.copy()
                         machine_data_copy["client_quote_ref"] = quote_ref
-                        
+
                         machine_group = {"machines": [machine_data_copy], "common_items": common_items}
-                        
+
                         if save_machines_data(quote_ref, machine_group):
                             # Get the newly created machine ID
                             machines_from_db = load_machines_for_quote(quote_ref)
-                            matching_machine = next((m for m in machines_from_db if m["machine_name"] == machine_name), None)
+                            matching_machine = next((m for m in machines_from_db if m["machine_name"] == machine_name_db), None)
                             if matching_machine:
                                 machine_id = matching_machine["id"]
                                 st.success(f"Created new machine with ID: {machine_id}")
@@ -527,27 +678,71 @@ def process_machine_specific_data(machine_data):
                             # Additional error details
                             st.info(f"Machine data: {machine_data_copy}")
                             st.info(f"Common items: {len(common_items)} items")
-            
+
             # Now save the template data
             if machine_id:
-                from src.utils.crm_utils import save_machine_template_data
+                from src.utils.db import save_machine_template_data
                 st.info(f"Saving template data for machine ID: {machine_id}")
                 if save_machine_template_data(machine_id, "GOA", machine_filled_data, machine_specific_output_path):
-                    st.success(f"Saved GOA template data for machine ID: {machine_id}")
-                    
+                    st.success(f"Document generated and saved successfully: {machine_specific_output_path}")
+
                     # Store the machine ID in the session for future use
                     st.session_state.selected_machine_id = machine_id
+
+                    # Save user corrections as training examples for few-shot learning
+                    try:
+                        original_data = st.session_state.get('original_llm_extraction', {})
+                        if original_data:
+                            from src.utils.few_shot_learning import determine_machine_type
+                            machine_name = machine_data.get("machine_name", "")
+                            machine_type = determine_machine_type(machine_name)
+
+                            corrections_saved = save_user_corrections_as_training_examples(
+                                original_data=original_data,
+                                edited_data=machine_filled_data,
+                                machine_data=machine_data,
+                                common_items=common_items,
+                                full_pdf_text=st.session_state.get('full_pdf_text', ''),
+                                machine_type=machine_type
+                            )
+
+                            if corrections_saved > 0:
+                                st.info(f"[Few-Shot Learning] Saved {corrections_saved} user correction(s) as training examples")
+                    except Exception as correction_error:
+                        print(f"[Few-Shot] Failed to save corrections: {correction_error}")
+                        # Don't fail the whole operation if correction saving fails
                 else:
                     st.warning("Failed to save template data to database")
             else:
                 st.error("No machine ID available, template data not saved to database")
-                
+
             return True
-    except Exception as e: 
-        st.session_state.error_message = f"Machine GOA processing error: {e}"
+
+    except Exception as e:
+        st.session_state.error_message = f"Document generation error: {e}"
         traceback.print_exc()
         st.error(f"Detailed error: {traceback.format_exc()}")
         return False
+
+
+def process_machine_specific_data(machine_data):
+    """
+    Backward-compatible wrapper for direct processing without preview.
+    Used by CRM Management and other non-quote-processing flows.
+
+    Combines LLM extraction and document generation into a single operation.
+
+    Args:
+        machine_data: Dictionary containing machine information
+
+    Returns:
+        bool: Success status
+    """
+    # Call the two-step process: extraction then generation
+    if run_llm_extraction_only(machine_data):
+        return generate_and_save_document()
+    return False
+
 
 def load_crm_data(): st.session_state.all_crm_clients = load_all_clients(); st.session_state.crm_data_loaded = True
 

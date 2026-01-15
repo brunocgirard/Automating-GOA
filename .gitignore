@@ -51,3 +51,9 @@ crm_data.db  # Specific database file
 
 # Auto Claude data directory
 .auto-claude/
+
+# Generated reports
+output_*.html
+
+# Backup files
+*.backup

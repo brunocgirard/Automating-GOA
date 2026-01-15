@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import json
-from src.utils.crm_utils import DB_PATH
+from src.utils.db import DB_PATH
 
 def check_database():
     """Check the database for machines and templates."""

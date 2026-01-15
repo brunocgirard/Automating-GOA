@@ -14,6 +14,7 @@ import random
 from src.utils.template_utils import DEFAULT_EXPLICIT_MAPPINGS, SORTSTAR_EXPLICIT_MAPPINGS, parse_full_fields_outline
 from src.utils.form_generator import get_all_fields_from_excel, OUTPUT_HTML_PATH
 from src.utils.html_doc_filler import fill_html_template, fill_and_generate_html
+from src.ui.template_preview_editor import render_field_editor, get_suspicious_fields_summary
 from bs4 import BeautifulSoup
 from src.utils.few_shot_learning import (
     save_successful_extraction_as_example,
@@ -31,11 +32,11 @@ from src.workflows.profile_workflow import (
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question
 from src.utils.doc_filler import fill_word_document_from_llm_data
-from src.utils.crm_utils import (
-    init_db, save_client_info, load_all_clients, get_client_by_id, 
-    update_client_record, save_priced_items, load_priced_items_for_quote, 
-    update_single_priced_item, delete_client_record, save_machines_data, 
-    load_machines_for_quote, save_machine_template_data, load_machine_template_data, 
+from src.utils.db import (
+    init_db, save_client_info, load_all_clients, get_client_by_id,
+    update_client_record, save_priced_items, load_priced_items_for_quote,
+    update_single_priced_item, delete_client_record, save_machines_data,
+    load_machines_for_quote, save_machine_template_data, load_machine_template_data,
     save_document_content, load_document_content,
     load_machine_templates_with_modifications, save_goa_modification,
     update_template_after_modifications, find_machines_by_name, load_all_processed_machines,
@@ -157,7 +158,7 @@ def show_client_dashboard_page():
 
                 # If for some reason it's missing, try to load it directly as a fallback
                 if not full_text:
-                    from src.utils.crm_utils import load_document_content
+                    from src.utils.db import load_document_content
                     loaded_doc = load_document_content(quote_ref)
                     full_text = loaded_doc.get("full_pdf_text", "") if loaded_doc else ""
 
@@ -1040,8 +1041,8 @@ def show_goa_modifications_ui(machine_id: int = None, machine_name: Optional[str
         machine_name: Optional name of the machine.
     """
     try:
-        from src.utils.crm_utils import load_machine_templates_with_modifications, save_goa_modification
-        
+        from src.utils.db import load_machine_templates_with_modifications, save_goa_modification
+
         st.subheader("🔄 Template Modifications")
         
         if machine_id is None:
@@ -1078,7 +1079,7 @@ def show_goa_modifications_ui(machine_id: int = None, machine_name: Optional[str
 def display_template_editor(template, machine_id: Optional[int] = None, machine_name: Optional[str] = None):
     """Helper function to display and edit a single template"""
     try:
-        from src.utils.crm_utils import save_goa_modification, save_bulk_goa_modifications
+        from src.utils.db import save_goa_modification, save_bulk_goa_modifications
         # Imports for explicit_placeholder_mappings are already at the top of the file
         import re
         
@@ -1150,8 +1151,8 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
             
             if machine_id:
                 # Load machine data from the database to get add-ons
-                from src.utils.crm_utils import load_machines_for_quote
-                
+                from src.utils.db import load_machines_for_quote
+
                 # First find the quote_ref for this machine
                 for client in st.session_state.all_crm_clients:
                     machines = load_machines_for_quote(client.get('quote_ref', ''))
@@ -1297,21 +1298,64 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                     {"key": k, "label": friendly_label, "value": v, "is_boolean": is_boolean}
                 )
 
-            # Order sections to match GOA form (HTML) order if possible
+            # Order sections AND fields within sections to match GOA form (HTML) order
+            # Also extract subsection groupings from div.group > div.group-title
             section_order = []
+            # Maps section_name -> list of field keys in HTML order
+            section_field_order: Dict[str, List[str]] = {}
+            # Maps field_key -> subsection_name (or None if no subsection)
+            field_to_subsection: Dict[str, Optional[str]] = {}
+            # Maps section_name -> list of (subsection_name, list_of_field_keys) in HTML order
+            section_subsection_order: Dict[str, List[tuple]] = {}
             try:
                 if os.path.exists(OUTPUT_HTML_PATH):
                     with open(OUTPUT_HTML_PATH, "r", encoding="utf-8") as f:
                         soup = BeautifulSoup(f.read(), "html.parser")
-                    for hdr in soup.select("div.section-header > h2"):
-                        name = hdr.get_text(strip=True)
-                        if name and name not in section_order:
-                            section_order.append(name)
+                    # Iterate through all sections to get section order, subsection order, and field order
+                    for section_elem in soup.select("section.section"):
+                        hdr = section_elem.select_one("div.section-header > h2")
+                        if hdr:
+                            section_name = hdr.get_text(strip=True)
+                            if section_name and section_name not in section_order:
+                                section_order.append(section_name)
+                                field_keys_in_section = []
+                                subsection_list = []  # List of (subsection_name, [field_keys])
+
+                                # Extract groups (subsections) within this section
+                                for group_elem in section_elem.select("div.group"):
+                                    group_title_elem = group_elem.select_one("div.group-title")
+                                    subsection_name = group_title_elem.get_text(strip=True) if group_title_elem else None
+
+                                    # Get fields within this group
+                                    group_field_keys = []
+                                    for field_elem in group_elem.select("label.field"):
+                                        input_elem = field_elem.select_one("input[name], textarea[name]")
+                                        if input_elem and input_elem.get("name"):
+                                            field_key = input_elem.get("name")
+                                            field_keys_in_section.append(field_key)
+                                            group_field_keys.append(field_key)
+                                            field_to_subsection[field_key] = subsection_name
+
+                                    if group_field_keys:
+                                        subsection_list.append((subsection_name, group_field_keys))
+
+                                section_field_order[section_name] = field_keys_in_section
+                                section_subsection_order[section_name] = subsection_list
             except Exception as e:
-                print(f"Warning: could not parse section order from goa_form.html: {e}")
+                print(f"Warning: could not parse section/field order from goa_form.html: {e}")
 
             def section_rank(name: str) -> int:
                 return section_order.index(name) if name in section_order else len(section_order) + sorted(section_fields.keys()).index(name)
+
+            def field_rank(field_info: Dict[str, Any], section_name: str) -> int:
+                """Return field position based on HTML template order, falling back to alphabetical."""
+                field_key = field_info["key"]
+                if section_name in section_field_order:
+                    field_order_list = section_field_order[section_name]
+                    if field_key in field_order_list:
+                        return field_order_list.index(field_key)
+                # Fallback: fields not in HTML order go at end, sorted alphabetically
+                return 10000 + ord(field_info["label"][0].lower()) if field_info["label"] else 10000
 
             section_options = sorted(section_fields.keys(), key=section_rank)
             selected_section = st.selectbox(
@@ -1323,25 +1367,93 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
             edited_data = dict(template_data)
             if selected_section:
                 st.markdown(f"##### Fields in {selected_section}")
-                for field_info in sorted(section_fields[selected_section], key=lambda x: x["label"]):
-                    field_key = field_info["key"]
-                    field_label = field_info["label"]
-                    current_value = field_info["value"]
-                    is_boolean = field_info["is_boolean"]
-                    widget_key = f"edit_{template_id}_{field_key}"
-                    if is_boolean:
-                        checked = str(current_value).upper() in ["YES", "TRUE"]
-                        new_val = st.checkbox(field_label, value=checked, key=widget_key)
-                        edited_data[field_key] = "YES" if new_val else "NO"
-                    else:
-                        height = 150 if field_key == "options_listing" else 60
-                        new_val = st.text_area(
-                            field_label,
-                            value=current_value if current_value is not None else "",
-                            height=height,
-                            key=widget_key
-                        )
-                        edited_data[field_key] = new_val
+
+                # Build a lookup from field_key to field_info for this section
+                section_field_lookup = {f["key"]: f for f in section_fields[selected_section]}
+
+                # Get the subsection order for this section (if available)
+                subsection_groups = section_subsection_order.get(selected_section, [])
+
+                # Track which fields we have rendered to avoid duplicates
+                rendered_fields = set()
+
+                if subsection_groups:
+                    # Render fields grouped by subsection with headers
+                    for subsection_name, group_field_keys in subsection_groups:
+                        # Display subsection header if it exists
+                        if subsection_name:
+                            st.markdown(f"###### {subsection_name}")
+
+                        # Render fields in this subsection (in HTML order)
+                        for field_key in group_field_keys:
+                            if field_key in section_field_lookup and field_key not in rendered_fields:
+                                field_info = section_field_lookup[field_key]
+                                field_label = field_info["label"]
+                                current_value = field_info["value"]
+                                is_boolean = field_info["is_boolean"]
+                                widget_key = f"edit_{template_id}_{field_key}"
+
+                                if is_boolean:
+                                    checked = str(current_value).upper() in ["YES", "TRUE"]
+                                    new_val = st.checkbox(field_label, value=checked, key=widget_key)
+                                    edited_data[field_key] = "YES" if new_val else "NO"
+                                else:
+                                    height = 150 if field_key == "options_listing" else 60
+                                    new_val = st.text_area(
+                                        field_label,
+                                        value=current_value if current_value is not None else "",
+                                        height=height,
+                                        key=widget_key
+                                    )
+                                    edited_data[field_key] = new_val
+
+                                rendered_fields.add(field_key)
+
+                    # Render any remaining fields not in the HTML structure (fallback)
+                    remaining_fields = [f for f in section_fields[selected_section] if f["key"] not in rendered_fields]
+                    if remaining_fields:
+                        st.markdown("###### Other Fields")
+                        for field_info in sorted(remaining_fields, key=lambda x: field_rank(x, selected_section)):
+                            field_key = field_info["key"]
+                            field_label = field_info["label"]
+                            current_value = field_info["value"]
+                            is_boolean = field_info["is_boolean"]
+                            widget_key = f"edit_{template_id}_{field_key}"
+
+                            if is_boolean:
+                                checked = str(current_value).upper() in ["YES", "TRUE"]
+                                new_val = st.checkbox(field_label, value=checked, key=widget_key)
+                                edited_data[field_key] = "YES" if new_val else "NO"
+                            else:
+                                height = 150 if field_key == "options_listing" else 60
+                                new_val = st.text_area(
+                                    field_label,
+                                    value=current_value if current_value is not None else "",
+                                    height=height,
+                                    key=widget_key
+                                )
+                                edited_data[field_key] = new_val
+                else:
+                    # Fallback: no subsection info, render all fields in order
+                    for field_info in sorted(section_fields[selected_section], key=lambda x: field_rank(x, selected_section)):
+                        field_key = field_info["key"]
+                        field_label = field_info["label"]
+                        current_value = field_info["value"]
+                        is_boolean = field_info["is_boolean"]
+                        widget_key = f"edit_{template_id}_{field_key}"
+                        if is_boolean:
+                            checked = str(current_value).upper() in ["YES", "TRUE"]
+                            new_val = st.checkbox(field_label, value=checked, key=widget_key)
+                            edited_data[field_key] = "YES" if new_val else "NO"
+                        else:
+                            height = 150 if field_key == "options_listing" else 60
+                            new_val = st.text_area(
+                                field_label,
+                                value=current_value if current_value is not None else "",
+                                height=height,
+                                key=widget_key
+                            )
+                            edited_data[field_key] = new_val
 
             # Live preview with edits applied using base GOA form (no highlights)
             try:
@@ -1630,7 +1742,7 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                                 
                                 # Try to find the machine record and quote ref
                                 if machine_id and st.session_state.all_crm_clients:
-                                    from src.utils.crm_utils import load_machines_for_quote, load_document_content
+                                    from src.utils.db import load_machines_for_quote, load_document_content
                                     found_machine = False
                                     for client in st.session_state.all_crm_clients:
                                         c_quote_ref = client.get('quote_ref', '')
@@ -1802,7 +1914,7 @@ def show_template_report_page():
     # Load all clients
     # Ensure all_processed_machines is loaded if not already
     if "all_processed_machines" not in st.session_state or not st.session_state.all_processed_machines:
-        st.session_state.all_processed_machines = load_all_processed_machines() # from crm_utils
+        st.session_state.all_processed_machines = load_all_processed_machines() # from db
 
     processed_machines = st.session_state.all_processed_machines
     
@@ -1922,7 +2034,7 @@ def show_template_report_page():
 
     if selected_client_id_batch and selected_client_id_batch != "placeholder_batch":
         # selected_client_id_batch is now the actual client_id (integer)
-        from src.utils.crm_utils import get_client_by_id, load_machines_for_quote # Ensure imports are here
+        from src.utils.db import get_client_by_id, load_machines_for_quote # Ensure imports are here
         client_for_batch = get_client_by_id(selected_client_id_batch)
         
         if client_for_batch:
@@ -2102,15 +2214,25 @@ def show_quote_processing():
     
     import base64
     from app import (
-        perform_initial_processing, process_machine_specific_data, 
-        load_previous_document, TEMPLATE_FILE, 
+        perform_initial_processing, process_machine_specific_data,
+        run_llm_extraction_only, generate_and_save_document,
+        load_previous_document, TEMPLATE_FILE,
         calculate_machine_price, calculate_common_items_price
     )
     
     current_step = st.session_state.processing_step
-    progress_percentage = current_step / (len(processing_steps) - 1) if len(processing_steps) > 1 else 0
+
+    # Account for preview step (Step 3.5) in progress calculation
+    if current_step == 3 and st.session_state.get('preview_step_active', False):
+        # Show intermediate progress during preview
+        progress_percentage = 3.5 / len(processing_steps)
+        step_label = "Step 3.5: Review & Edit Fields"
+    else:
+        progress_percentage = current_step / (len(processing_steps) - 1) if len(processing_steps) > 1 else 0
+        step_label = f"Step {current_step + 1}: {processing_steps[current_step]}"
+
     st.progress(progress_percentage)
-    st.subheader(f"Step {current_step + 1}: {processing_steps[current_step]}")
+    st.subheader(step_label)
     
     if current_step == 0:
         st.subheader("🔄 Load Previous Quote")
@@ -2269,50 +2391,151 @@ def show_quote_processing():
             st.rerun()
             
     elif current_step == 3:
-        if st.button("⬅️ Select Another Quote", key="select_another_quote_step4"):
-            # Reset state
-            st.session_state.processing_step = 0
-            st.session_state.machine_confirmation_done = False
-            st.session_state.common_options_confirmation_done = False
-            st.session_state.items_for_confirmation = []
-            st.session_state.selected_main_machines = []
-            st.session_state.selected_common_options = []
-            st.session_state.identified_machines_data = None
-            st.rerun()
-        st.subheader("🔍 Select Machine to Process for GOA")
-        machines = st.session_state.identified_machines_data.get("machines", [])
-        if machines:
-            machine_options = [m.get('machine_name', 'Unknown Machine') for m in machines]
-            selected_machine_idx = st.selectbox("Choose machine for GOA:", range(len(machine_options)), format_func=lambda i: machine_options[i], key=f"goa_machine_select_{st.session_state.run_key}")
-            st.session_state.selected_machine_index = selected_machine_idx
-            selected_machine = machines[selected_machine_idx]
-            with st.expander(f"Details: {selected_machine.get('machine_name')}", expanded=True):
-                st.markdown(f"**Main Item:** {selected_machine.get('main_item', {}).get('description', 'N/A')}")
-                st.markdown(f"**Add-ons:** {len(selected_machine.get('add_ons', []))} items")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("⬅️ Back (GOA Common Options)", key="goa_back_common"): st.session_state.common_options_confirmation_done = False; st.session_state.processing_step = 2; st.rerun()
-            with col2:
-                if st.button("Process This Machine for GOA", type="primary", key=f"process_machine_btn_{st.session_state.run_key}"):
-                    with st.spinner(f"Processing {selected_machine.get('machine_name')} for GOA..."):
-                        success = process_machine_specific_data(selected_machine)
-                        if success:
-                            st.success(f"Machine '{selected_machine.get('machine_name')}' processed successfully!")
-                            st.session_state.selected_machine_id = selected_machine.get('id')
-                            
-                            # Note about template modifications
-                            st.info("To view or modify the GOA template for this machine, go to CRM Management and select this client.")
-                            
-                            st.rerun()
-                        else:
-                            st.error(f"Failed to process machine for GOA. Check errors above.")
+        # Check if preview is active - if so, show preview instead
+        if st.session_state.get('preview_step_active', False):
+            # Step 3.5: Preview & Edit Extracted Fields
+            st.subheader("📋 Review & Edit Extracted Fields")
+
+            machine_filled_data = st.session_state.get('machine_specific_filled_data', {})
+            machine_name = st.session_state.get('selected_machine_name', 'machine')
+
+            if not machine_filled_data:
+                st.error("No extracted data found. Please run extraction again.")
+                if st.button("← Back to Machine Selection"):
+                    st.session_state.preview_step_active = False
+                    st.rerun()
+            else:
+                # Show summary stats including confidence metrics
+                summary = get_suspicious_fields_summary(machine_filled_data)
+
+                # Get confidence scores from session state
+                conf_scores = st.session_state.get('field_confidence_scores', {})
+                high_conf = sum(1 for c in conf_scores.values() if c >= 0.8)
+                med_conf = sum(1 for c in conf_scores.values() if 0.5 <= c < 0.8)
+                low_conf = sum(1 for c in conf_scores.values() if c < 0.5)
+
+                col1, col2, col3, col4, col5 = st.columns(5)
+                with col1:
+                    st.metric("Total Fields", summary['total_fields'])
+                with col2:
+                    st.metric("Filled Fields", summary['filled_fields'])
+                with col3:
+                    st.metric("High Confidence", high_conf)
+                with col4:
+                    st.metric("Medium Confidence", med_conf)
+                with col5:
+                    st.metric("Low Confidence", low_conf)
+
+                # Show warnings for issues
+                if summary['suspicious_fields'] > 0:
+                    st.warning(f"[WARN] {summary['suspicious_fields']} field(s) contain suspicious values (placeholder text like 'N/A' or 'Not specified').")
+
+                if low_conf > 0:
+                    st.info(f"[INFO] {low_conf} field(s) have low confidence and may need verification. Look for [LOW] indicators in field labels.")
+
+                st.markdown("---")
+
+                # Get confidence scores and suggestions from session state
+                confidence_scores = st.session_state.get('field_confidence_scores', {})
+                field_suggestions = st.session_state.get('field_dependency_suggestions', [])
+
+                # Render the field editor with preview and confidence indicators
+                edited_data = render_field_editor(
+                    template_data=machine_filled_data,
+                    template_type="GOA",
+                    machine_name=machine_name,
+                    widget_key_prefix="preview_edit",
+                    highlight_empty=True,
+                    show_preview=True,
+                    confidence_scores=confidence_scores,
+                    field_suggestions=field_suggestions
+                )
+
+                # Update session state with edited data (real-time)
+                st.session_state.machine_specific_filled_data = edited_data
+
+                st.markdown("---")
+
+                # Action buttons
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col1:
+                    if st.button("← Back to Machine Selection", key="preview_back"):
+                        st.session_state.preview_step_active = False
+                        st.rerun()
+                with col2:
+                    if st.button("🔄 Re-run LLM Extraction", key="preview_rerun"):
+                        # Get selected machine again and re-extract
+                        machines = st.session_state.identified_machines_data.get("machines", [])
+                        selected_machine_idx = st.session_state.selected_machine_index
+                        selected_machine = machines[selected_machine_idx]
+
+                        with st.spinner("Re-extracting data from PDF..."):
+                            success = run_llm_extraction_only(selected_machine)
+                            if success:
+                                st.success("Data re-extracted successfully!")
+                                st.rerun()
+                            else:
+                                st.error("Re-extraction failed. Check errors above.")
+                with col3:
+                    if st.button("✅ Approve & Generate Document", type="primary", key="preview_approve"):
+                        with st.spinner("Generating document and saving to database..."):
+                            success = generate_and_save_document()
+                            if success:
+                                st.success("Document generated and saved successfully!")
+                                st.session_state.preview_step_active = False
+
+                                # Note about template modifications
+                                st.info("To view or modify the GOA template, go to CRM Management and select this client.")
+                                st.rerun()
+                            else:
+                                st.error("Failed to generate document. Check errors above.")
         else:
-            st.warning("No machines identified. Go back to Step 1 to select main machines.")
-            if st.button("⬅️ Back to Step 1", key="back_to_step1"): 
-                st.session_state.processing_step = 1
+            # Step 3: Select Machine and Extract Data
+            if st.button("⬅️ Select Another Quote", key="select_another_quote_step4"):
+                # Reset state
+                st.session_state.processing_step = 0
                 st.session_state.machine_confirmation_done = False
                 st.session_state.common_options_confirmation_done = False
+                st.session_state.items_for_confirmation = []
+                st.session_state.selected_main_machines = []
+                st.session_state.selected_common_options = []
+                st.session_state.identified_machines_data = None
+                st.session_state.preview_step_active = False
                 st.rerun()
+            st.subheader("🔍 Select Machine to Process for GOA")
+            machines = st.session_state.identified_machines_data.get("machines", [])
+            if machines:
+                machine_options = [m.get('machine_name', 'Unknown Machine') for m in machines]
+                selected_machine_idx = st.selectbox("Choose machine for GOA:", range(len(machine_options)), format_func=lambda i: machine_options[i], key=f"goa_machine_select_{st.session_state.run_key}")
+                st.session_state.selected_machine_index = selected_machine_idx
+                selected_machine = machines[selected_machine_idx]
+                with st.expander(f"Details: {selected_machine.get('machine_name')}", expanded=True):
+                    st.markdown(f"**Main Item:** {selected_machine.get('main_item', {}).get('description', 'N/A')}")
+                    st.markdown(f"**Add-ons:** {len(selected_machine.get('add_ons', []))} items")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("⬅️ Back (GOA Common Options)", key="goa_back_common"):
+                        st.session_state.common_options_confirmation_done = False
+                        st.session_state.processing_step = 2
+                        st.session_state.preview_step_active = False
+                        st.rerun()
+                with col2:
+                    if st.button("Extract Data with LLM →", type="primary", key=f"extract_machine_btn_{st.session_state.run_key}"):
+                        with st.spinner(f"Extracting data for {selected_machine.get('machine_name')}..."):
+                            success = run_llm_extraction_only(selected_machine)
+                            if success:
+                                st.success(f"Extracted {len(st.session_state.machine_specific_filled_data)} fields successfully!")
+                                st.session_state.preview_step_active = True
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to extract data. Check errors above.")
+            else:
+                st.warning("No machines identified. Go back to Step 1 to select main machines.")
+                if st.button("⬅️ Back to Step 1", key="back_to_step1"):
+                    st.session_state.processing_step = 1
+                    st.session_state.machine_confirmation_done = False
+                    st.session_state.common_options_confirmation_done = False
+                    st.rerun()
 
 def show_crm_management_page():
     st.title("📒 CRM Management")
@@ -2495,7 +2718,7 @@ def show_crm_management_page():
                     # Logic for client-specific PDF upload and processing would go here
                 with client_tab4:
                     # Find machines for this client
-                    from src.utils.crm_utils import load_machines_for_quote
+                    from src.utils.db import load_machines_for_quote
                     machines = load_machines_for_quote(client_to_display_and_edit.get('quote_ref', ''))
                     
                     if not machines:
@@ -2671,7 +2894,7 @@ def handle_chat_context_switch():
     st.session_state.chat_history = []
 
     if selected_id and selected_id != "placeholder":
-        from src.utils.crm_utils import get_client_by_id, load_document_content
+        from src.utils.db import get_client_by_id, load_document_content
         client_data = get_client_by_id(selected_id)
         if client_data:
             quote_ref = client_data.get('quote_ref')

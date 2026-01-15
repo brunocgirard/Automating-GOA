@@ -4,7 +4,7 @@ Script to initialize the database with the goa_modifications table.
 Run this to ensure the database schema is up-to-date.
 """
 
-from src.utils.crm_utils import init_db, DB_PATH
+from src.utils.db import init_db, DB_PATH
 import os
 
 if __name__ == "__main__":

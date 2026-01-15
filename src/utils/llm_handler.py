@@ -2,7 +2,7 @@ import re
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 import json
 import traceback # For more detailed error logging
  
@@ -33,7 +33,320 @@ except ImportError as e:
     get_few_shot_manager = None  # type: ignore
 
 # Import Pydantic BaseModel and Field for dynamic model creation
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, validator
+
+
+# Model for fields with confidence scoring
+class FieldWithConfidence(BaseModel):
+    """Model for a field extraction result with confidence scoring."""
+    value: Optional[str] = Field(default=None, description="The extracted value for the field")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Confidence score from 0.0 to 1.0")
+
+    @validator('confidence', pre=True, always=True)
+    def clamp_confidence(cls, v):
+        """Ensure confidence is within valid range."""
+        if v is None:
+            return 0.5
+        try:
+            v = float(v)
+            return max(0.0, min(1.0, v))
+        except (ValueError, TypeError):
+            return 0.5
+
+
+# Constants for confidence thresholds
+CONFIDENCE_HIGH = 0.8  # Green indicator
+CONFIDENCE_MEDIUM = 0.5  # Yellow indicator
+CONFIDENCE_LOW = 0.3  # Red indicator - needs review
+
+
+def get_confidence_level(confidence: float) -> str:
+    """
+    Returns the confidence level category based on score.
+
+    Args:
+        confidence: Float between 0.0 and 1.0
+
+    Returns:
+        str: 'high', 'medium', or 'low'
+    """
+    if confidence >= CONFIDENCE_HIGH:
+        return 'high'
+    elif confidence >= CONFIDENCE_MEDIUM:
+        return 'medium'
+    else:
+        return 'low'
+
+
+def estimate_field_confidence(
+    field_key: str,
+    field_value: Any,
+    template_contexts: Dict[str, Any],
+    full_pdf_text: str,
+    selected_descriptions: List[str]
+) -> float:
+    """
+    Estimates confidence score for a single extracted field based on evidence quality.
+
+    Args:
+        field_key: The field key
+        field_value: The extracted value
+        template_contexts: Template field context/schema
+        full_pdf_text: Full PDF text for evidence checking
+        selected_descriptions: List of selected item descriptions
+
+    Returns:
+        float: Confidence score between 0.0 and 1.0
+    """
+    # Base confidence
+    confidence = 0.5
+
+    # Get field context if available
+    field_context = template_contexts.get(field_key, {})
+    if isinstance(field_context, str):
+        field_context = {"description": field_context}
+
+    # Empty or None values get low confidence (they are defaults)
+    if field_value is None or field_value == "":
+        return 0.3  # Low confidence - we just defaulted to empty
+
+    # Combine all text for evidence search
+    all_text = (full_pdf_text + " " + " ".join(selected_descriptions)).lower()
+
+    # Check for checkbox fields
+    is_checkbox = field_key.endswith("_check")
+
+    if is_checkbox:
+        if str(field_value).upper() == "YES":
+            # For YES values, check if we have evidence
+            positive_indicators = field_context.get("positive_indicators", [])
+            synonyms = field_context.get("synonyms", [])
+            evidence_terms = positive_indicators + synonyms
+
+            # Also check field name parts as potential evidence
+            field_parts = field_key.replace("_check", "").replace("_", " ").split()
+            evidence_terms.extend([p.lower() for p in field_parts if len(p) > 2])
+
+            # Count how many evidence terms are found
+            evidence_found = sum(1 for term in evidence_terms if term.lower() in all_text)
+
+            if evidence_found >= 3:
+                confidence = 0.95  # Very high - multiple evidence points
+            elif evidence_found >= 2:
+                confidence = 0.85  # High - good evidence
+            elif evidence_found >= 1:
+                confidence = 0.7   # Medium-high - some evidence
+            else:
+                confidence = 0.4   # Low - no direct evidence for YES
+        else:
+            # NO is the default, usually more confident if we found nothing
+            confidence = 0.75
+    else:
+        # Text field - check if value appears in the text
+        value_lower = str(field_value).lower().strip()
+
+        # Check for suspicious placeholder values
+        suspicious_phrases = [
+            "n/a", "not applicable", "not specified", "not selected",
+            "none selected", "to be determined", "tbd", "pending",
+            "not available", "unknown", "not provided"
+        ]
+
+        if value_lower in suspicious_phrases:
+            confidence = 0.2  # Very low - suspicious value
+
+        elif value_lower in all_text:
+            # Exact match found in text
+            confidence = 0.9
+        elif any(word in all_text for word in value_lower.split() if len(word) > 3):
+            # Partial match found
+            confidence = 0.7
+        else:
+            # Value not found in text - might be inferred
+            confidence = 0.5
+
+    return round(confidence, 2)
+
+
+def estimate_extraction_confidence(
+    extracted_data: Dict[str, str],
+    template_contexts: Dict[str, Any],
+    full_pdf_text: str,
+    machine_data: Dict,
+    common_items: List[Dict]
+) -> Dict[str, float]:
+    """
+    Estimates confidence scores for all extracted fields.
+
+    Args:
+        extracted_data: Dictionary of extracted field values
+        template_contexts: Template field contexts/schema
+        full_pdf_text: Full PDF text
+        machine_data: Machine data with main item and add-ons
+        common_items: List of common items
+
+    Returns:
+        Dict[str, float]: Dictionary mapping field keys to confidence scores (0.0-1.0)
+    """
+    # Build selected descriptions list
+    selected_descriptions = []
+
+    main_item_desc = machine_data.get("main_item", {}).get("description", "")
+    if main_item_desc:
+        selected_descriptions.append(main_item_desc)
+
+    for addon in machine_data.get("add_ons", []):
+        desc = addon.get("description", "")
+        if desc:
+            selected_descriptions.append(desc)
+
+    for common in common_items:
+        desc = common.get("description", "")
+        if desc:
+            selected_descriptions.append(desc)
+
+    # Estimate confidence for each field
+    confidence_scores = {}
+
+    for field_key, field_value in extracted_data.items():
+        confidence = estimate_field_confidence(
+            field_key=field_key,
+            field_value=field_value,
+            template_contexts=template_contexts,
+            full_pdf_text=full_pdf_text,
+            selected_descriptions=selected_descriptions
+        )
+        confidence_scores[field_key] = confidence
+
+    print(f"Estimated confidence for {len(confidence_scores)} fields")
+
+    # Log summary statistics
+    high_conf = sum(1 for c in confidence_scores.values() if c >= CONFIDENCE_HIGH)
+    med_conf = sum(1 for c in confidence_scores.values() if CONFIDENCE_MEDIUM <= c < CONFIDENCE_HIGH)
+    low_conf = sum(1 for c in confidence_scores.values() if c < CONFIDENCE_MEDIUM)
+
+    print(f"  High confidence: {high_conf} fields")
+    print(f"  Medium confidence: {med_conf} fields")
+    print(f"  Low confidence (needs review): {low_conf} fields")
+
+    return confidence_scores
+
+
+# Field dependency rules for cross-field validation
+FIELD_DEPENDENCIES = {
+    # Voltage-Frequency relationship
+    "hz": {
+        "depends_on": "voltage",
+        "rules": [
+            {"if_value_contains": ["480", "460", "440"], "suggest_value": "60", "suggest_hz": True},
+            {"if_value_contains": ["400", "380", "415"], "suggest_value": "50", "suggest_hz": True},
+            {"if_value_contains": ["230", "220", "240"], "suggest_value": "50", "suggest_hz": True},  # Typically EU
+            {"if_value_contains": ["120", "110", "115"], "suggest_value": "60", "suggest_hz": True},  # Typically NA
+        ]
+    },
+    # Country-Voltage relationship
+    "voltage": {
+        "depends_on": "country_destination",
+        "rules": [
+            {"if_value_contains": ["USA", "United States", "Canada", "Mexico"], "suggest_value": "480V", "suggest_hz": False},
+            {"if_value_contains": ["UK", "United Kingdom", "EU", "Europe", "Germany", "France"], "suggest_value": "400V", "suggest_hz": False},
+        ]
+    },
+    # Pneumatic fields should be consistent
+    "psi": {
+        "depends_on": None,
+        "related_fields": ["cfm"],
+        "validation": "if_psi_filled_check_cfm"
+    }
+}
+
+
+def validate_field_dependencies(
+    extracted_data: Dict[str, str],
+    confidence_scores: Dict[str, float]
+) -> Tuple[Dict[str, str], Dict[str, float], List[Dict[str, Any]]]:
+    """
+    Validates and potentially adjusts field values based on cross-field dependencies.
+
+    Args:
+        extracted_data: Dictionary of extracted field values
+        confidence_scores: Dictionary of confidence scores
+
+    Returns:
+        Tuple of:
+        - Updated extracted data
+        - Updated confidence scores
+        - List of suggestions/warnings about field inconsistencies
+    """
+    suggestions = []
+    updated_data = extracted_data.copy()
+    updated_confidence = confidence_scores.copy()
+
+    # Check voltage-frequency relationship
+    voltage = extracted_data.get("voltage", "").upper()
+    hz = extracted_data.get("hz", "")
+
+    if voltage and not hz:
+        # Suggest Hz based on voltage
+        if any(v in voltage for v in ["480", "460", "440", "120", "110", "115"]):
+            suggestions.append({
+                "field": "hz",
+                "current_value": hz,
+                "suggested_value": "60 Hz",
+                "reason": f"Based on voltage {voltage}, frequency should typically be 60 Hz (North American standard)",
+                "type": "suggestion"
+            })
+        elif any(v in voltage for v in ["400", "380", "415", "230", "220", "240"]):
+            suggestions.append({
+                "field": "hz",
+                "current_value": hz,
+                "suggested_value": "50 Hz",
+                "reason": f"Based on voltage {voltage}, frequency should typically be 50 Hz (European standard)",
+                "type": "suggestion"
+            })
+
+    # Check Hz-Voltage consistency if both are filled
+    if voltage and hz:
+        hz_value = hz.replace("Hz", "").replace("hz", "").strip()
+        is_consistent = True
+
+        if hz_value == "60" and any(v in voltage for v in ["400", "380", "415"]):
+            is_consistent = False
+            suggestions.append({
+                "field": "hz",
+                "current_value": hz,
+                "suggested_value": "50 Hz",
+                "reason": f"Voltage {voltage} typically uses 50 Hz, not 60 Hz. Please verify.",
+                "type": "warning"
+            })
+            updated_confidence["hz"] = min(updated_confidence.get("hz", 0.5), 0.4)
+
+        if hz_value == "50" and any(v in voltage for v in ["480", "460", "440"]):
+            is_consistent = False
+            suggestions.append({
+                "field": "hz",
+                "current_value": hz,
+                "suggested_value": "60 Hz",
+                "reason": f"Voltage {voltage} typically uses 60 Hz, not 50 Hz. Please verify.",
+                "type": "warning"
+            })
+            updated_confidence["hz"] = min(updated_confidence.get("hz", 0.5), 0.4)
+
+    # Check PSI and CFM relationship
+    psi = extracted_data.get("psi", "")
+    cfm = extracted_data.get("cfm", "")
+
+    if psi and not cfm:
+        suggestions.append({
+            "field": "cfm",
+            "current_value": cfm,
+            "suggested_value": None,
+            "reason": "PSI is specified but CFM is missing. Consider checking pneumatic requirements.",
+            "type": "info"
+        })
+        updated_confidence["cfm"] = min(updated_confidence.get("cfm", 0.5), 0.4)
+
+    return updated_data, updated_confidence, suggestions
 
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
@@ -1286,13 +1599,27 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
         base_prompt_template = f"""
         You are an AI assistant specializing in extracting information from packaging machinery quotes.
         Your task is to populate a structured data model for the '{group_name}' section based on the provided context.
-        
-        INSTRUCTIONS:
-        - For checkbox fields (ending in '_check'):
-          - You MUST find direct evidence in the context. The 'positive indicators' provided in the field descriptions are REQUIRED keywords. If none of these indicators are present, you MUST output "NO".
-          - Conversely, if any 'negative indicators' (keywords that explicitly negate the feature) are present in the context, you MUST output "NO", even if some positive indicators are also present. Negative indicators override positive ones.
-        - For text fields, extract the information as requested. If not found, leave it null.
-        - Be precise and do not guess. Your accuracy is critical.
+
+        CRITICAL INSTRUCTIONS - BE CONSERVATIVE:
+        - ONLY fill fields that are directly relevant to the selected machine items (Main Machine Item, Machine Add-ons, Common/Shared Items listed above).
+        - If a field is not clearly related to what was actually selected/quoted, leave it null/empty.
+        - Better to leave a field empty than to guess or infer information not clearly present.
+
+        For checkbox fields (ending in '_check'):
+          - Output "YES" ONLY if you find direct evidence in the selected items or their descriptions.
+          - The 'positive indicators' in field descriptions are REQUIRED keywords. If none are present in the selected items, output "NO".
+          - If 'negative indicators' are present, you MUST output "NO" (negative indicators override positive ones).
+          - Default to "NO" when uncertain - do not assume features are included.
+
+        For text fields:
+          - Extract information ONLY if clearly stated in the context.
+          - If not found or not clearly related to selected items, leave it null (do not use placeholder text like "N/A", "Not specified", "TBD", etc.).
+          - For specifications (voltage, speed, dimensions, etc.), only extract if explicitly mentioned for THIS specific machine.
+
+        DO NOT:
+          - Use generic placeholder text like "N/A", "Not applicable", "Not specified", "TBD", "See quote"
+          - Guess or infer values not clearly present in the context
+          - Fill fields just because they exist in the template - only fill what's actually relevant
 
         CONTEXT:
         - Machine Name: {{machine_name}}
@@ -1301,9 +1628,9 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
         - Common/Shared Items: {{common_item_descs}}
         - Full PDF Text (for context and details): {{full_pdf_text}}
 
-        Based on the context above, extract the information for the following fields.
-        Pay close attention to the descriptions and positive indicators for each field to guide your extraction.
-        
+        Based on the context above, extract ONLY the information that is clearly present and relevant.
+        Pay close attention to the descriptions and positive indicators for each field.
+
         {{format_instructions}}
         """
 
@@ -1316,7 +1643,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
                     template_placeholder_contexts=group_contexts, # Pass only group contexts
                     common_items=common_items,
                     full_pdf_text=full_pdf_text,
-                    max_examples_per_field=1 # Reduce examples per group
+                    max_examples_per_field=3 # Increased from 1 to 3 for better context
                 )
             except Exception as semantic_error:
                 print(f"Semantic few-shot enhancement failed for {group_name}: {semantic_error}")
@@ -1330,7 +1657,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
                     template_placeholder_contexts=group_contexts,
                     common_items=common_items,
                     full_pdf_text=full_pdf_text,
-                    max_examples_per_field=1
+                    max_examples_per_field=3 # Increased from 1 to 3 for better context
                 )
             except Exception as basic_error:
                 print(f"Basic few-shot enhancement failed for {group_name}: {basic_error}")
@@ -1348,7 +1675,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
 
         input_data = {
             "machine_name": machine_name,
-            "full_pdf_text": full_pdf_text[:20000], 
+            "full_pdf_text": full_pdf_text[:100000],  # Increased from 20k to 100k for better context (Gemini 2.5 supports large context)
             "main_item_desc": main_item_desc,
             "add_on_descs": add_on_descs,
             "common_item_descs": common_item_descs,
@@ -1419,6 +1746,65 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     )
 
     return final_data
+
+
+def get_machine_specific_fields_with_confidence(
+    machine_data: Dict,
+    common_items: List[Dict],
+    template_placeholder_contexts: Dict[str, Any],
+    full_pdf_text: str,
+    template_metadata: Optional[Dict] = None
+) -> Tuple[Dict[str, str], Dict[str, float], List[Dict[str, Any]]]:
+    """
+    Enhanced version of get_machine_specific_fields_via_llm that also returns
+    confidence scores and field dependency suggestions.
+
+    Args:
+        machine_data: Dictionary containing machine information
+        common_items: List of common items
+        template_placeholder_contexts: Template field contexts
+        full_pdf_text: Full PDF text
+        template_metadata: Optional template metadata
+
+    Returns:
+        Tuple containing:
+        - Dict[str, str]: Extracted field values
+        - Dict[str, float]: Confidence scores for each field (0.0-1.0)
+        - List[Dict]: Field dependency suggestions/warnings
+    """
+    # First, run the standard extraction
+    extracted_data = get_machine_specific_fields_via_llm(
+        machine_data=machine_data,
+        common_items=common_items,
+        template_placeholder_contexts=template_placeholder_contexts,
+        full_pdf_text=full_pdf_text,
+        template_metadata=template_metadata
+    )
+
+    # Estimate confidence for each field
+    print("\n--- Estimating field confidence scores ---")
+    confidence_scores = estimate_extraction_confidence(
+        extracted_data=extracted_data,
+        template_contexts=template_placeholder_contexts,
+        full_pdf_text=full_pdf_text,
+        machine_data=machine_data,
+        common_items=common_items
+    )
+
+    # Validate field dependencies and get suggestions
+    print("\n--- Validating field dependencies ---")
+    updated_data, updated_confidence, suggestions = validate_field_dependencies(
+        extracted_data=extracted_data,
+        confidence_scores=confidence_scores
+    )
+
+    if suggestions:
+        print(f"Field dependency validation found {len(suggestions)} suggestion(s)/warning(s):")
+        for s in suggestions:
+            print(f"  [{s['type'].upper()}] {s['field']}: {s['reason']}")
+
+    return updated_data, updated_confidence, suggestions
+
 
 # Example Usage:
 if __name__ == '__main__':

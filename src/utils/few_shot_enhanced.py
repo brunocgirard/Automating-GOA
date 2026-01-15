@@ -19,7 +19,7 @@ from langchain_community.vectorstores import Chroma
 
 from langchain_core.example_selectors.base import BaseExampleSelector
 
-from src.utils.crm_utils import (
+from src.utils.db.few_shot import (
     get_few_shot_examples, save_few_shot_example, add_few_shot_feedback
 )
 from src.utils.few_shot_learning import determine_machine_type
@@ -515,17 +515,17 @@ def get_enhanced_few_shot_examples(
 ) -> List[Dict]:
     """
     Gets few-shot examples using semantic similarity.
-    
+
     This is a drop-in replacement for the original get_few_shot_examples
     that uses semantic matching.
-    
+
     Args:
         machine_type: Type of machine
         template_type: Template type
         field_name: Field name
         input_context: Input context for similarity matching
         limit: Maximum number of examples
-        
+
     Returns:
         List of semantically similar examples
     """
@@ -542,3 +542,193 @@ def get_enhanced_few_shot_examples(
         print(f"Error getting enhanced examples: {e}")
         # Fall back to basic retrieval
         return get_few_shot_examples(machine_type, template_type, field_name, limit)
+
+
+def get_prioritized_few_shot_examples(
+    machine_type: str,
+    template_type: str,
+    field_name: str,
+    input_context: str,
+    customer_name: Optional[str] = None,
+    quote_ref: Optional[str] = None,
+    limit: int = 3
+) -> List[Dict]:
+    """
+    Gets few-shot examples with smart prioritization based on:
+    1. Same customer (highest priority)
+    2. Same machine type
+    3. Recent high-confidence corrections (user-verified)
+    4. Semantic similarity to current context
+
+    Args:
+        machine_type: Type of machine (sortstar, filling, labeling, etc.)
+        template_type: Template type (default, sortstar)
+        field_name: Name of the field to get examples for
+        input_context: Current input context for similarity matching
+        customer_name: Optional customer name for prioritization
+        quote_ref: Optional quote reference for context
+        limit: Maximum number of examples to return
+
+    Returns:
+        List of prioritized examples with priority metadata
+    """
+    try:
+        manager = get_few_shot_manager()
+
+        # Get more examples than needed for prioritization
+        fetch_limit = limit * 3  # Fetch 3x to allow for prioritization
+
+        # Get semantically similar examples
+        base_examples = manager.select_best_examples(
+            input_context,
+            machine_type,
+            template_type,
+            field_name,
+            k=fetch_limit
+        )
+
+        if not base_examples:
+            return []
+
+        # Score and prioritize examples
+        scored_examples = []
+
+        for example in base_examples:
+            score = 0.0
+
+            # Base score from confidence
+            confidence = float(example.get("confidence_score", 0.5))
+            score += confidence * 0.3  # Weight: 30%
+
+            # Boost for high confidence (user-verified examples)
+            if confidence >= 0.95:
+                score += 0.2  # User corrections get a boost
+
+            # Boost for same machine type in context
+            example_context = example.get("input_context", "").lower()
+            if machine_type and machine_type.lower() in example_context:
+                score += 0.15
+
+            # Boost for customer match (if available in context)
+            if customer_name:
+                customer_lower = customer_name.lower()
+                if customer_lower in example_context:
+                    score += 0.25  # Highest boost for same customer
+
+            # Boost for quote reference match
+            if quote_ref:
+                quote_lower = quote_ref.lower()
+                if quote_lower in example_context:
+                    score += 0.1
+
+            scored_examples.append({
+                **example,
+                "priority_score": score
+            })
+
+        # Sort by priority score (descending)
+        scored_examples.sort(key=lambda x: x.get("priority_score", 0), reverse=True)
+
+        # Return top examples
+        return scored_examples[:limit]
+
+    except Exception as e:
+        print(f"Error getting prioritized examples for {field_name}: {e}")
+        # Fall back to basic retrieval
+        return get_few_shot_examples(machine_type, template_type, field_name, limit)
+
+
+def enhance_prompt_with_prioritized_examples(
+    prompt_parts: List[str],
+    machine_data: Dict,
+    template_placeholder_contexts: Dict[str, Any],
+    common_items: List[Dict],
+    full_pdf_text: str,
+    customer_name: Optional[str] = None,
+    quote_ref: Optional[str] = None,
+    max_examples_per_field: int = 3
+) -> List[str]:
+    """
+    Enhanced version of enhance_prompt_with_semantic_examples that uses
+    smart prioritization based on customer and machine context.
+
+    Args:
+        prompt_parts: Existing prompt parts
+        machine_data: Machine data dictionary
+        template_placeholder_contexts: Template field contexts
+        common_items: List of common items
+        full_pdf_text: Full PDF text
+        customer_name: Optional customer name for prioritization
+        quote_ref: Optional quote reference
+        max_examples_per_field: Maximum examples per field
+
+    Returns:
+        List of enhanced prompt parts
+    """
+    try:
+        machine_name = machine_data.get("machine_name", "")
+        machine_type = determine_machine_type(machine_name)
+        template_type = "sortstar" if "sortstar" in machine_type else "default"
+
+        # Prepare input context for similarity matching
+        context_parts = [f"Machine: {machine_name}"]
+        if machine_data.get("main_item", {}).get("description"):
+            context_parts.append(f"Main Item: {machine_data['main_item']['description'][:500]}")
+
+        input_context = "\n".join(context_parts)
+
+        # Get key fields (limit to avoid overwhelming the prompt)
+        key_fields = list(template_placeholder_contexts.keys())[:15]
+
+        few_shot_section = ["\nPRIORITIZED FEW-SHOT EXAMPLES (customer and machine-specific):"]
+        examples_added = 0
+
+        for field_name in key_fields:
+            # Get prioritized examples
+            selected_examples = get_prioritized_few_shot_examples(
+                machine_type=machine_type,
+                template_type=template_type,
+                field_name=field_name,
+                input_context=input_context,
+                customer_name=customer_name,
+                quote_ref=quote_ref,
+                limit=max_examples_per_field
+            )
+
+            if selected_examples:
+                few_shot_section.append(f"\nExamples for '{field_name}':")
+                for i, example in enumerate(selected_examples, 1):
+                    # Truncate long contexts
+                    context_preview = example.get('input_context', '')[:300]
+                    if len(example.get('input_context', '')) > 300:
+                        context_preview += "..."
+
+                    priority = example.get('priority_score', 0)
+                    confidence = example.get('confidence_score', 0.5)
+
+                    few_shot_section.append(f"  Example {i} (priority: {priority:.2f}, confidence: {confidence:.2f}):")
+                    few_shot_section.append(f"    Input: {context_preview}")
+                    few_shot_section.append(f"    Output: {example.get('expected_output', '')}")
+
+                examples_added += 1
+
+                # Limit total number of fields with examples
+                if examples_added >= 8:
+                    break
+
+        if examples_added > 0:
+            prompt_parts.extend(few_shot_section)
+            prompt_parts.append("\nBased on the prioritized examples above (matching your customer/machine context), extract field values.")
+            print(f"Prioritized few-shot examples injected for {examples_added} field(s).")
+        else:
+            print("No prioritized examples found; using base prompt.")
+
+        return prompt_parts
+
+    except Exception as e:
+        print(f"Error enhancing prompt with prioritized examples: {e}")
+        # Fall back to semantic examples
+        return enhance_prompt_with_semantic_examples(
+            prompt_parts, machine_data, template_placeholder_contexts,
+            common_items, full_pdf_text, max_examples_per_field
+        )

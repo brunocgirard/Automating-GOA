@@ -7,7 +7,7 @@ from previous successful extractions, improving accuracy over time.
 
 import re
 from typing import Dict, List, Optional, Tuple, Any
-from src.utils.crm_utils import (
+from src.utils.db.few_shot import (
     save_few_shot_example, get_few_shot_examples, get_similar_examples,
     add_few_shot_feedback
 )

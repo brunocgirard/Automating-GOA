@@ -9,7 +9,18 @@ import traceback # For detailed error logging
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils.template_utils import extract_placeholder_context_hierarchical # If needed for profile confirmation display
 from src.utils.llm_handler import configure_gemini_client, answer_pdf_question # For client profile extraction, chat features
-from src.utils.crm_utils import save_client_info, save_priced_items, save_machines_data, save_document_content, load_document_content, get_client_by_id, load_priced_items_for_quote, load_machines_for_quote, load_all_clients, group_items_by_confirmed_machines
+from src.utils.db import (
+    save_client_info,
+    save_priced_items,
+    save_machines_data,
+    save_document_content,
+    load_document_content,
+    get_client_by_id,
+    load_priced_items_for_quote,
+    load_machines_for_quote,
+    load_all_clients,
+    group_items_by_confirmed_machines
+)
 from src.utils.few_shot_learning import save_successful_extraction_as_example, determine_machine_type, record_user_feedback_on_extraction
 
 # Moved from app.py

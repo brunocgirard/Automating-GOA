@@ -13,7 +13,7 @@ def find_table_headers(table: List[List[Optional[str]]]) -> Optional[Dict[str, i
     header_row = table[0]
     headers = {}
     desc_keys = ["description", "item", "option", "feature", "article", "désignation"]
-    qty_keys = ["qty", "quantity", "qté"]
+    qty_keys = ["qty", "quantity", "qté", "quant"]
     price_keys = ["selected item", "total", "amount", "price", "prix", "montant"] # Final price column
 
     # Find indices
@@ -121,14 +121,33 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
                         is_continuation = True
                         
                         # Check if essential columns (like qty or price) have content. If so, it's likely a new item.
-                        if (qty_col_idx != -1 and len(row) > qty_col_idx and row[qty_col_idx] and str(row[qty_col_idx]).strip()) or \
+                        has_essential_content = (qty_col_idx != -1 and len(row) > qty_col_idx and row[qty_col_idx] and str(row[qty_col_idx]).strip()) or \
                            (sel_text_col_idx is not None and len(row) > sel_text_col_idx and row[sel_text_col_idx] and str(row[sel_text_col_idx]).strip()) or \
-                           (unit_cost_col_idx != -1 and len(row) > unit_cost_col_idx and row[unit_cost_col_idx] and str(row[unit_cost_col_idx]).strip()):
+                           (unit_cost_col_idx != -1 and len(row) > unit_cost_col_idx and row[unit_cost_col_idx] and str(row[unit_cost_col_idx]).strip())
+                        
+                        if has_essential_content:
                             is_continuation = False
 
-                        # Also, if the description cell is empty, it's not the start of a new item
+                        # Description extraction
                         description_cell = str(row[desc_col_idx]).strip() if desc_col_idx is not None and len(row) > desc_col_idx and row[desc_col_idx] else ""
-                        if not description_cell:
+                        
+                        # Fallback: If this is a NEW item (has content) but description is missing, look in other columns
+                        # This handles cases where the description text is shifted to a different column
+                        if has_essential_content and not description_cell:
+                            forbidden_indices = {qty_col_idx, sel_text_col_idx, unit_cost_col_idx}
+                            candidates = []
+                            for i, cell in enumerate(row):
+                                if i in forbidden_indices or i == desc_col_idx: continue
+                                cell_text = str(cell).strip() if cell else ""
+                                if cell_text:
+                                    candidates.append(cell_text)
+                            
+                            if candidates:
+                                # Pick the longest candidate as likely description
+                                description_cell = max(candidates, key=len)
+
+                        # If the description cell is empty, it's usually a continuation, UNLESS it has essential content (new item without desc)
+                        if not description_cell and not has_essential_content:
                             is_continuation = True
 
                         # If it's a new item, save the previous one (if exists) and start a new one
@@ -153,30 +172,50 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
                         is_selected = False
                         selection_text = str(row[sel_text_col_idx]).strip() if sel_text_col_idx is not None and len(row) > sel_text_col_idx and row[sel_text_col_idx] else None
                         unit_cost_text = str(row[unit_cost_col_idx]).strip() if unit_cost_col_idx != -1 and len(row) > unit_cost_col_idx and row[unit_cost_col_idx] else None
+                        quantity_text = str(row[qty_col_idx]).strip() if qty_col_idx != -1 and len(row) > qty_col_idx and row[qty_col_idx] else None
+                        
+                        # Helper to check inclusion keywords
+                        def check_inclusion(text):
+                            if not text: return False
+                            t_lower = text.lower()
+                            return any(k in t_lower for k in ['included', 'standard', 'yes', 'incl'])
 
-                        # Check for price in "Selected Item" or "Total" column
-                        if selection_text and re.search(r'\d', selection_text):
-                            is_selected = True
-                        # Check for price in "Unit Cost" column
-                        elif unit_cost_text and re.search(r'\d', unit_cost_text):
-                            is_selected = True
-                        # Check for keywords like "Included"
-                        elif selection_text and selection_text.lower() in ['included', 'standard', 'yes']:
-                            is_selected = True
+                        # Primary check: Must have a valid quantity (contains a digit or is explicitly included)
+                        # This filters out items that might have a price/keyword but no quantity (garbage rows)
+                        has_digit_qty = quantity_text and re.search(r'\d', quantity_text)
+                        is_qty_inclusion = check_inclusion(quantity_text)
+                        
+                        has_valid_qty = has_digit_qty or is_qty_inclusion
+
+                        if has_valid_qty:
+                            # Check for price in "Selected Item" or "Total" column
+                            if selection_text and re.search(r'\d', selection_text):
+                                is_selected = True
+                            # Check for price in "Unit Cost" column
+                            elif unit_cost_text and re.search(r'\d', unit_cost_text):
+                                is_selected = True
+                            # Check for keywords like "Included" in selection text
+                            elif check_inclusion(selection_text):
+                                is_selected = True
+                            # If Quantity itself says "Included", it's considered selected
+                            elif is_qty_inclusion:
+                                is_selected = True
 
                         if is_selected:
                             description = str(row[desc_col_idx]).strip() if desc_col_idx is not None and len(row) > desc_col_idx and row[desc_col_idx] else None
-                            quantity_text = str(row[qty_col_idx]).strip() if qty_col_idx != -1 and len(row) > qty_col_idx and row[qty_col_idx] else None
                             
-                            if description:
-                                item_tuple = (description, quantity_text, selection_text)
-                                if item_tuple not in unique_items_set:
-                                    extracted_items.append({
-                                        "description": description,
-                                        "quantity_text": quantity_text,
-                                        "selection_text": selection_text or unit_cost_text # Prioritize selection_text, fallback to unit_cost
-                                    })
-                                    unique_items_set.add(item_tuple)
+                            # Fallback if description is empty but item is selected (has valid qty/price)
+                            if not description:
+                                description = "(No Description Found)"
+
+                            item_tuple = (description, quantity_text, selection_text)
+                            if item_tuple not in unique_items_set:
+                                extracted_items.append({
+                                    "description": description,
+                                    "quantity_text": quantity_text,
+                                    "selection_text": selection_text or unit_cost_text # Prioritize selection_text, fallback to unit_cost
+                                })
+                                unique_items_set.add(item_tuple)
     except Exception as e:
         print(f"Error in extract_line_item_details for '{pdf_path}': {e}"); traceback.print_exc()
     return extracted_items
@@ -482,4 +521,4 @@ if __name__ == '__main__':
         else:
             print(f"Trigger '{fat_sat_short_trigger}' not found in selected descriptions list.")
     else:
-        print(f"Test PDF not found: {test_pdf_path}") 
+        print(f"Test PDF not found: {test_pdf_path}")
