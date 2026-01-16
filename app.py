@@ -513,32 +513,70 @@ def generate_and_save_document():
             clean_name = re.sub(r'[\\/*?:"<>|]', "_", machine_name.replace(' ', '_'))
 
             # --- Always regenerate options_listing from the currently selected machine items ---
-            selected_details = []
+            # Format compactly with machine description at top
 
-            def summarize_item(label, item):
-                desc = (item or {}).get("description", "").strip()
+            def clean_description(desc):
+                """Clean description while preserving bullet point hierarchy."""
                 if not desc:
-                    return None
-                if "•" in desc:
-                    desc = desc.split("•", 1)[0].strip()
-                return f"- {label}: {desc}"
+                    return ""
 
-            main_line = summarize_item("Main Machine", machine_data.get("main_item"))
-            if main_line:
-                selected_details.append(main_line)
+                # Remove common prefixes that add clutter
+                prefixes_to_remove = ["Each ", "Each\n", "Each: "]
+                for prefix in prefixes_to_remove:
+                    if desc.startswith(prefix):
+                        desc = desc[len(prefix):].strip()
 
+                lines = desc.split('\n')
+                cleaned_lines = []
+
+                for i, line in enumerate(lines):
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    # Check if line is a bullet point
+                    is_bullet = line.startswith(('•', '-', '*', '►', '▸', '·'))
+
+                    if i == 0 or not is_bullet:
+                        # First line or non-bullet line - keep as is (single line)
+                        if i == 0:
+                            cleaned_lines.append(line)
+                        else:
+                            # Continuation of previous line
+                            if cleaned_lines:
+                                cleaned_lines[-1] += " " + line
+                            else:
+                                cleaned_lines.append(line)
+                    else:
+                        # It's a sub-bullet, preserve it as a new line with proper indentation
+                        if not line.startswith('  '):
+                            line = '  ' + line  # Add indentation for sub-bullets
+                        cleaned_lines.append(line)
+
+                return '\n'.join(cleaned_lines)
+
+            # Start with machine description prominently at top
+            options_lines = []
+            main_item = machine_data.get("main_item")
+            if main_item and main_item.get("description"):
+                machine_desc = clean_description(main_item.get("description", ""))
+                if machine_desc:
+                    options_lines.append(f"MACHINE: {machine_desc}\n")
+
+            # Add all add-ons compactly (no "Add-on:" label)
             for addon in (machine_data.get("add_ons") or []):
-                line = summarize_item("Add-on", addon)
-                if line:
-                    selected_details.append(line)
+                desc = clean_description(addon.get("description", ""))
+                if desc:
+                    options_lines.append(f"• {desc}")
 
+            # Add common items compactly (no "Common Item:" label)
             for common in (common_items or []):
-                line = summarize_item("Common Item", common)
-                if line:
-                    selected_details.append(line)
+                desc = clean_description(common.get("description", ""))
+                if desc:
+                    options_lines.append(f"• {desc}")
 
-            if selected_details:
-                machine_filled_data["options_listing"] = "Selected Options and Specifications:\n" + "\n".join(selected_details)
+            if options_lines:
+                machine_filled_data["options_listing"] = "\n".join(options_lines)
             else:
                 machine_filled_data["options_listing"] = "No options or specifications selected for this machine."
 

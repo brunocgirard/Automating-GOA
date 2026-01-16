@@ -205,14 +205,54 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                     if machine_record:
                         break
 
+            # Helper function to clean and compact descriptions
+            def clean_description(desc):
+                """Clean description while preserving bullet point hierarchy."""
+                if not desc:
+                    return ""
+
+                # Remove common prefixes that add clutter
+                prefixes_to_remove = ["Each ", "Each\n", "Each: "]
+                for prefix in prefixes_to_remove:
+                    if desc.startswith(prefix):
+                        desc = desc[len(prefix):].strip()
+
+                lines = desc.split('\n')
+                cleaned_lines = []
+
+                for i, line in enumerate(lines):
+                    line = line.strip()
+                    if not line:
+                        continue
+
+                    # Check if line is a bullet point
+                    is_bullet = line.startswith(('•', '-', '*', '►', '▸', '·'))
+
+                    if i == 0 or not is_bullet:
+                        # First line or non-bullet line - keep as is (single line)
+                        if i == 0:
+                            cleaned_lines.append(line)
+                        else:
+                            # Continuation of previous line
+                            if cleaned_lines:
+                                cleaned_lines[-1] += " " + line
+                            else:
+                                cleaned_lines.append(line)
+                    else:
+                        # It's a sub-bullet, preserve it as a new line with proper indentation
+                        if not line.startswith('  '):
+                            line = '  ' + line  # Add indentation for sub-bullets
+                        cleaned_lines.append(line)
+
+                return '\n'.join(cleaned_lines)
+
             # Add actual add-ons from the machine data (like regular template)
             if machine_add_ons:
-                for i, addon in enumerate(machine_add_ons, 1):
+                for addon in machine_add_ons:
                     if "description" in addon and addon["description"]:
-                        # Format description nicely
-                        desc_lines = addon["description"].split('\n')
-                        main_desc = desc_lines[0] if desc_lines else addon["description"]
-                        selected_details.append(f"- Add-on {i}: {main_desc}")
+                        desc = clean_description(addon["description"])
+                        if desc:
+                            selected_details.append(f"• {desc}")
 
             # If no add-ons were found, fall back to template fields
             if not selected_details:
@@ -250,14 +290,24 @@ def display_template_editor(template, machine_id: Optional[int] = None, machine_
                         # Add selected checkboxes and meaningful text fields
                         if is_checkbox and str(value).upper() == "YES":
                             selected_details.append(f"• {field_description}")
-                        elif not is_checkbox and field_key not in ["customer", "machine", "quote"]:
+                        elif not is_checkbox and field_key not in ["customer", "quote"]:
                             # Only add non-checkbox fields if they have meaningful content
                             if isinstance(value, str) and value.strip() and value.lower() not in ["no", "false", "0"]:
                                 selected_details.append(f"• {field_description}: {value}")
 
-            # Create the new options_listing content
-            if selected_details:
-                new_options_listing = "Selected Options and Specifications:\n" + "\n".join(selected_details)
+            # Create the new options_listing content with machine at top
+            options_lines = []
+
+            # Add machine description prominently at the top
+            machine_value = template_data.get("machine", "")
+            if machine_value and isinstance(machine_value, str) and machine_value.strip():
+                options_lines.append(f"MACHINE: {machine_value.strip()}\n")
+
+            # Add all selected details
+            options_lines.extend(selected_details)
+
+            if options_lines:
+                new_options_listing = "\n".join(options_lines)
             else:
                 new_options_listing = "No options or specifications selected for this machine."
 

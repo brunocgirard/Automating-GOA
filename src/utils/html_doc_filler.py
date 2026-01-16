@@ -99,65 +99,146 @@ def format_options_listing(soup: BeautifulSoup, text_val: str) -> BeautifulSoup:
             wrapper.append(p)
             return wrapper
     
-    # Multiple lines or single bullet line - check for header
-    header_text = None
+    # Multiple lines or single bullet line - check for machine description and header
+    machine_lines = []  # Will hold main machine desc + any sub-bullets
     body_lines = []
-    
-    # Common header patterns
-    header_patterns = [
-        'selected options',
-        'options and specifications',
-        'machine specifications',
-        'specifications:',
-        'options:',
-        'features:',
-        'included:',
-    ]
-    
-    # Check if first line is a header (not a bullet)
+
+    # Check if first line is MACHINE: description (special formatting)
     first_line = lines[0]
-    bullet_chars = ['-', '*', '•', '·', '–', '—', '►', '▸']
-    first_is_bullet = any(first_line.startswith(c) for c in bullet_chars)
-    first_is_header = (
-        not first_is_bullet and 
-        (first_line.endswith(':') or any(pat in first_line.lower() for pat in header_patterns))
-    )
-    
-    if first_is_header:
-        header_text = first_line
-        body_lines = lines[1:]
+    if first_line.upper().startswith('MACHINE:'):
+        # Extract machine description (may span multiple lines with sub-bullets)
+        machine_main_text = first_line[8:].strip()  # Remove "MACHINE:" prefix
+        machine_lines.append(machine_main_text)
+
+        # Check following lines for indented sub-bullets that belong to machine description
+        i = 1
+        while i < len(lines):
+            line = lines[i]
+            # Check if line is indented (sub-bullet of machine)
+            if line.startswith('  ') and line.strip():
+                machine_lines.append(line)
+                i += 1
+            elif not line.strip():
+                # Skip blank line and continue
+                i += 1
+            else:
+                # Non-indented line - this starts the body_lines
+                break
+
+        # Remaining lines are body_lines
+        body_lines = lines[i:]
     else:
-        # No header detected - use default
-        header_text = "Selected Options and Specifications:"
-        body_lines = lines
+        # Check for other header patterns
+        header_patterns = [
+            'selected options',
+            'options and specifications',
+            'machine specifications',
+            'specifications:',
+            'options:',
+            'features:',
+            'included:',
+        ]
+
+        bullet_chars = ['-', '*', '•', '·', '–', '—', '►', '▸']
+        first_is_bullet = any(first_line.startswith(c) for c in bullet_chars)
+        first_is_header = (
+            not first_is_bullet and
+            (first_line.endswith(':') or any(pat in first_line.lower() for pat in header_patterns))
+        )
+
+        if first_is_header:
+            # Regular header found
+            header = soup.new_tag('p')
+            header.string = first_line
+            header['style'] = "font-weight: 700; margin: 0 0 6px;"
+            wrapper.append(header)
+            body_lines = lines[1:]
+        else:
+            # No header, just bullets
+            body_lines = lines
+
+    # Create machine description section if present (more prominent than regular header)
+    if machine_lines:
+        machine_section = soup.new_tag('div')
+        machine_section['style'] = "font-weight: 700; font-size: 1.05em; margin: 0 0 10px; padding: 6px; background-color: #f0f4f8; border-left: 3px solid #4a90e2;"
+
+        # First line is the main machine description
+        if machine_lines:
+            main_p = soup.new_tag('p')
+            main_p['style'] = "margin: 0;"
+            main_p.string = machine_lines[0]
+            machine_section.append(main_p)
+
+        # If there are sub-bullets for the machine, render them as nested list
+        if len(machine_lines) > 1:
+            machine_ul = soup.new_tag('ul')
+            machine_ul['style'] = "list-style-type: circle; margin: 6px 0 0 20px; padding: 0; font-weight: 400; font-size: 0.92em; line-height: 1.3;"
+
+            bullet_chars = ['-', '*', '•', '·', '–', '—', '►', '▸']
+            for sub_line in machine_lines[1:]:
+                # Strip indentation and bullet characters
+                cleaned = sub_line.strip()
+                for char in bullet_chars:
+                    if cleaned.startswith(char):
+                        cleaned = cleaned[1:].strip()
+                        break
+
+                if cleaned:
+                    sub_li = soup.new_tag('li')
+                    sub_li.string = cleaned
+                    sub_li['style'] = "margin-bottom: 2px;"
+                    machine_ul.append(sub_li)
+
+            if machine_ul.contents:
+                machine_section.append(machine_ul)
+
+        wrapper.append(machine_section)
     
-    # Create header
-    header = soup.new_tag('p')
-    header.string = header_text
-    header['style'] = "font-weight: 700; margin: 0 0 6px;"
-    wrapper.append(header)
-    
-    # Create bullet list if there are body lines
+    # Create bullet list if there are body lines, supporting nested bullets
     if body_lines:
         ul = soup.new_tag('ul')
-        ul['style'] = "list-style-type: disc; margin-left: 18px; padding-left: 4px; margin-top: 4px;"
-        
+        ul['style'] = "list-style-type: disc; margin-left: 18px; padding-left: 4px; margin-top: 4px; line-height: 1.4;"
+
+        bullet_chars = ['-', '*', '•', '·', '–', '—', '►', '▸']
+        current_li = None
+        nested_ul = None
+
         for raw_line in body_lines:
-            # Strip bullet characters from start
+            # Check if line is indented (sub-bullet)
+            is_indented = raw_line.startswith('  ') and raw_line.strip()
+
+            # Strip leading whitespace and bullet characters
             line = raw_line.strip()
             for char in bullet_chars:
                 if line.startswith(char):
                     line = line[1:].strip()
                     break
-            
+
             if not line:
                 continue
-                
-            li = soup.new_tag('li')
-            li.string = line
-            li['style'] = "margin-bottom: 2px;"
-            ul.append(li)
-        
+
+            if is_indented:
+                # This is a sub-bullet - add to nested list
+                if current_li is not None:
+                    # Create nested ul if it doesn't exist
+                    if nested_ul is None:
+                        nested_ul = soup.new_tag('ul')
+                        nested_ul['style'] = "list-style-type: circle; margin-left: 20px; margin-top: 3px; margin-bottom: 3px; line-height: 1.3;"
+                        current_li.append(nested_ul)
+
+                    # Add sub-item to nested list
+                    sub_li = soup.new_tag('li')
+                    sub_li.string = line
+                    sub_li['style'] = "margin-bottom: 2px; font-size: 0.95em;"
+                    nested_ul.append(sub_li)
+            else:
+                # This is a main bullet - create new li
+                current_li = soup.new_tag('li')
+                current_li.append(line)  # Use append instead of .string to allow nested elements
+                current_li['style'] = "margin-bottom: 3px;"
+                ul.append(current_li)
+                nested_ul = None  # Reset nested list for next main bullet
+
         if ul.contents:
             wrapper.append(ul)
     
