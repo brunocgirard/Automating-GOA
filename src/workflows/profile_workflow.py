@@ -8,7 +8,7 @@ import traceback # For detailed error logging
 # Import utility functions from the project
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils.template_utils import extract_placeholder_context_hierarchical # If needed for profile confirmation display
-from src.utils.llm_handler import configure_gemini_client, answer_pdf_question # For client profile extraction, chat features
+from src.llm import configure_gemini_client, answer_pdf_question # For client profile extraction, chat features
 from src.utils.db import (
     save_client_info,
     save_priced_items,
@@ -93,7 +93,7 @@ def extract_client_profile(pdf_path):
         client_info = {}
         try:
             # Use the LLM to extract client info
-            from src.utils.llm_handler import GENERATIVE_MODEL, genai # Directly use the configured model
+            from src.llm import GENERATIVE_MODEL, genai # Directly use the configured model
             generation_config = genai.types.GenerationConfig(
                 temperature=0.2, # Lower temperature for more focused output
                 top_p=0.95,
