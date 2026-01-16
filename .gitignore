@@ -54,6 +54,8 @@ crm_data.db  # Specific database file
 
 # Generated reports
 output_*.html
+test_*.html
+validation_output/
 
 # Backup files
 *.backup

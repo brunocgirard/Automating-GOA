@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test -d:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python -c:*)",
+      "Bash(test:*)",
+      "Bash(ls:*)",
+      "Bash(dir \"C:\\\\Users\\\\Lenovo\\\\Desktop\\\\GOA_Main\\\\GOA_LLM\\\\src\\\\utils\")",
+      "Bash(findstr:*)",
+      "Bash(.venvScriptspython.exe verify_step2_langchain.py)",
+      "Bash(\".venv/Scripts/python.exe\" verify_step2_langchain.py)",
+      "Bash(\".venv/Scripts/python.exe\" \".venv/Scripts/verify_step2_langchain.py\")",
+      "Bash(set PYTHONPATH=C:UsersLenovoDesktopGOA_MainGOA_LLM)",
+      "Bash(\".venv/Scripts/python.exe\" -c \"import sys; sys.path.insert\\(0, ''.''\\); from src.utils.llm_handler import configure_gemini_client; print\\(''[OK] Import from src.utils.llm_handler works''\\); from src.llm import get_machine_specific_fields_via_llm; print\\(''[OK] Import from src.llm works''\\)\")",
+      "Bash(\".venv/Scripts/python.exe\":*)",
+      "Bash(\".venv/Scripts/python.exe\" -c \"import sys; sys.path.insert\\(0, ''.''\\); import app; print\\(''[OK] app.py imports successfully''\\)\")",
+      "Bash(wc:*)",
+      "Bash(python -m pytest:*)"
+    ]
+  }
+}

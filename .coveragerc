@@ -1,0 +1,115 @@
+# Coverage.py configuration for QuoteFlow Document Assistant
+
+[run]
+# Source code to measure coverage on
+source = src
+
+# Omit certain files from coverage
+omit =
+    # Virtual environments
+    */site-packages/*
+    */.venv/*
+    */venv/*
+
+    # Test files themselves
+    tests/*
+    */tests/*
+
+    # Setup and configuration
+    setup.py
+    */setup.py
+    conftest.py
+    */conftest.py
+
+    # Python internals
+    */python?.?/*
+    */lib-dynload/*
+
+# Parallel execution settings
+parallel = True
+concurrency = multiprocessing
+
+# Relative file paths
+relative_files = True
+
+[report]
+# Exclude certain patterns from coverage reports
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+
+    # Debug code
+    def __repr__
+    def __str__
+
+    # Defensive programming
+    raise AssertionError
+    raise NotImplementedError
+
+    # Non-runnable code
+    if 0:
+    if False:
+    if __name__ == .__main__.:
+
+    # Type checking blocks
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+
+    # Abstract methods
+    @abstractmethod
+    @abc.abstractmethod
+    pass  # (when after above decorators)
+
+    # Logging and debugging
+    logger\.
+    log\.
+
+    # Windows-specific skips
+    if sys.platform !=
+    if platform\.system
+
+# Ignore missing imports
+ignore_errors = True
+
+# Minimum coverage percentage required
+fail_under = 70
+
+# Report precision (decimal places)
+precision = 2
+
+# Skip covered files in report
+skip_covered = False
+
+# Skip empty files
+skip_empty = True
+
+# Sort report by coverage percentage
+sort = Cover
+
+[html]
+# HTML report directory
+directory = htmlcov
+
+# Title for HTML report
+title = QuoteFlow Document Assistant - Code Coverage Report
+
+[xml]
+# XML output file
+output = coverage.xml
+
+[json]
+# JSON output file
+output = coverage.json
+
+# Pretty print JSON
+pretty_print = True
+
+[paths]
+# Path aliases for combining coverage data from different environments
+source =
+    src/
+    */src/
+
+tests =
+    tests/
+    */tests/

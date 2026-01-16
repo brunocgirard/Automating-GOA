@@ -1,0 +1,140 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quoteflow-document-assistant"
+version = "1.0.0"
+description = "Automated GOA document generation from PDF quotes using AI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "QuoteFlow Team", email = "team@quoteflow.local"},
+]
+
+dependencies = [
+    "pdfplumber",
+    "python-docx",
+    "google-generativeai",
+    "python-dotenv",
+    "streamlit",
+    "pandas",
+    "PyPDF2",
+    "itsdangerous",
+    "langchain>=0.1.0",
+    "langchain-google-genai>=0.0.6",
+    "langchain-community>=0.0.13",
+    "langchain-core>=0.1.0",
+    "chromadb>=0.4.0",
+    "pydantic",
+    "openpyxl",
+    "beautifulsoup4",
+    "weasyprint",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "freezegun>=1.4.0",
+    "faker>=20.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pylint>=2.17.0",
+]
+
+test = [
+    "pytest>=7.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "freezegun>=1.4.0",
+    "faker>=20.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = [
+    "-v",
+    "-l",
+    "-ra",
+    "--strict-markers",
+    "--cov=src",
+    "--cov-report=html",
+    "--cov-report=term-missing:skip-covered",
+    "--cov-config=.coveragerc",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/site-packages/*",
+    "*/.venv/*",
+    "*/venv/*",
+    "tests/*",
+    "setup.py",
+    "conftest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if False:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+fail_under = 70
+precision = 2
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_glob = [".venv/*", "venv/*"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pylint.messages_control]
+disable = [
+    "C0111",  # missing-docstring
+    "R0913",  # too-many-arguments
+    "R0914",  # too-many-locals
+    "W0212",  # protected-access
+]
+
+[tool.pylint.format]
+max-line-length = 100
