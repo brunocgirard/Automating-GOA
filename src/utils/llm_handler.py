@@ -14,6 +14,7 @@ from src.utils.few_shot_learning import (
     record_user_feedback_on_extraction,
     enhance_prompt_with_few_shot_examples,
 )
+from src.utils.template_utils import select_sortstar_basic_system
 
 # Try to import enhanced few-shot learning, fall back to basic if not available
 try:
@@ -1707,7 +1708,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
                 else:
                     all_extracted_data[original_name] = str(value)
             
-            print(f"✓ Completed extraction for {group_name}")
+            print(f"[OK] Completed extraction for {group_name}")
 
         except Exception as e:
             print(f"Error during extraction for group {group_name}: {e}")
