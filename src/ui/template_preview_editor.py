@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from src.utils.template_utils import SORTSTAR_EXPLICIT_MAPPINGS
 from src.utils.form_generator import get_all_fields_from_excel, OUTPUT_HTML_PATH
 from src.utils.html_doc_filler import fill_html_template
-from src.llm import get_confidence_level, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_LOW
+from src.utils.llm_handler import get_confidence_level, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_LOW
 
 
 # Confidence indicator display helpers

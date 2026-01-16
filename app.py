@@ -24,7 +24,7 @@ from src.workflows.profile_workflow import (
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils import template_utils # Import the module itself
 from src.utils.template_utils import extract_placeholders, extract_placeholder_context_hierarchical, extract_placeholder_schema # Import specific functions
-from src.llm import (
+from src.utils.llm_handler import (
     configure_gemini_client, get_machine_specific_fields_via_llm, answer_pdf_question,
     get_machine_specific_fields_with_confidence, get_confidence_level,
     CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_LOW
