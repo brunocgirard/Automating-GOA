@@ -22,6 +22,7 @@ from .crm_management_page import show_crm_management_page
 from .machine_build_reports_page import show_template_report_page
 from .chat_page import show_chat_page, handle_chat_context_switch, render_chat_ui
 
+
 __all__ = [
     'show_welcome_page',
     'show_client_dashboard_page',

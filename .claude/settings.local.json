@@ -16,7 +16,13 @@
       "Bash(\".venv/Scripts/python.exe\":*)",
       "Bash(\".venv/Scripts/python.exe\" -c \"import sys; sys.path.insert\\(0, ''.''\\); import app; print\\(''[OK] app.py imports successfully''\\)\")",
       "Bash(wc:*)",
-      "Bash(python -m pytest:*)"
+      "Bash(python -m pytest:*)",
+      "Bash(python api/test_imports.py:*)",
+      "Bash(python:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)"
     ]
   }
 }

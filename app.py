@@ -697,7 +697,8 @@ def generate_and_save_document():
                         machine_data_copy = machine_data.copy()
                         machine_data_copy["client_quote_ref"] = quote_ref
 
-                        machine_group = {"machines": [machine_data_copy], "common_items": common_items}
+                        machine_group = {"machines": [machine_data_copy], "common_items": common_.
+items}
 
                         if save_machines_data(quote_ref, machine_group):
                             # Get the newly created machine ID
@@ -1005,7 +1006,7 @@ def main():
 
     st.sidebar.title("Navigation")
     page_options = ["Client Dashboard", "Quote Processing", "CRM Management", "Machine Build Reports", "Chat"]
-    
+
     # Set default page to Client Dashboard
     if st.session_state.current_page == "Welcome":
         st.session_state.current_page = "Client Dashboard"
@@ -1027,15 +1028,15 @@ def main():
                 st.session_state.profile_extraction_step = None; st.session_state.confirmed_profile = None; st.session_state.extracted_profile = None
         st.rerun()
 
-    if st.session_state.current_page == "Client Dashboard": 
+    if st.session_state.current_page == "Client Dashboard":
         show_client_dashboard_page()
-    elif st.session_state.current_page == "Quote Processing": 
+    elif st.session_state.current_page == "Quote Processing":
         show_quote_processing()
-    elif st.session_state.current_page == "CRM Management": 
+    elif st.session_state.current_page == "CRM Management":
         show_crm_management_page()
     elif st.session_state.current_page == "Machine Build Reports":
         show_template_report_page()
-    elif st.session_state.current_page == "Chat": 
+    elif st.session_state.current_page == "Chat":
         show_chat_page()
 
 if __name__ == "__main__":
