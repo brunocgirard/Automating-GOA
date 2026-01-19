@@ -194,12 +194,70 @@
     
     /* Print Styles */
     @media print {
-        .no-print { display: none; }
-        body { background: white; padding: 0; }
-        .page { max-width: 100%; }
-        .section { break-inside: avoid; border: 1px solid #ccc; }
-        .field { border: none; }
-        input { background: transparent; }
+        *, *:before, *:after {
+            background: transparent !important;
+            color: #000 !important; /* Black prints faster */
+            box-shadow: none !important;
+            text-shadow: none !important;
+        }
+        body {
+            -webkit-print-color-adjust: exact !important; /* Ensures backgrounds and colors are printed */
+            print-color-adjust: exact !important; /* Standard property */
+            background: white !important;
+            padding: 0 !important;
+        }
+        .no-print { display: none !important; }
+        .page { max-width: 100% !important; margin: 0 !important; }
+        .section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important; /* Older syntax for broader compatibility */
+            border: 1px solid #ccc !important;
+            margin-bottom: 10px !important;
+        }
+        .section-header {
+            background-color: #e5e5e5 !important; /* Ensure header background prints */
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            border-color: #cdd4e0 !important;
+        }
+        .field {
+            border: 1px solid #eee !important; /* Subtle border for fields in print */
+            padding: 8px !important;
+            background: #fdfdff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        input[type="text"], input[type="number"], textarea {
+            border: 1px solid #ccc !important; /* Explicit border for inputs */
+            background: #fff !important; /* Ensure input background is white */
+            padding: 4px 6px !important;
+            color: #000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        input[type="checkbox"] {
+            /* Ensure checkboxes are clearly visible and their state is clear */
+            -webkit-appearance: auto !important;
+            -moz-appearance: auto !important;
+            appearance: auto !important;
+            border: 1px solid #888 !important;
+            background: #fff !important;
+            width: 16px !important;
+            height: 16px !important;
+            vertical-align: middle;
+        }
+        input[type="checkbox"]:checked {
+            background-color: #c00000 !important; /* Example: make checked checkboxes red */
+            border-color: #c00000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .label {
+            color: #000 !important; /* Ensure labels are black */
+        }
+        .token {
+            display: none !important; /* Hide placeholders in print */
+        }
     }
 
     @media (max-width: 640px) {
