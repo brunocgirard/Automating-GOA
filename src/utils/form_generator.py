@@ -197,6 +197,7 @@ def build_html(rows):
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>General Order Acknowledgement</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     :root {{
       --bg: #f3f5f8;
@@ -384,15 +385,120 @@ def build_html(rows):
         box-shadow: none;
         border: 1px solid #eee;
     }}
-    
+
+    /* Edit Mode Styles */
+    .delete-btn {{
+        display: none;
+        padding: 4px 8px;
+        background: #dc2626;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: bold;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }}
+    body.edit-mode .delete-btn {{
+        display: inline-block;
+    }}
+    body.edit-mode .section:hover .delete-section-btn,
+    body.edit-mode .field:hover .delete-field-btn {{
+        opacity: 1;
+    }}
+    body.edit-mode .section-header h2[contenteditable="true"],
+    body.edit-mode .field .label[contenteditable="true"],
+    body.edit-mode .group-title[contenteditable="true"] {{
+        cursor: text;
+        padding: 4px 6px;
+        border-radius: 4px;
+        transition: background 0.2s, outline 0.2s;
+        display: inline-block;
+        min-width: 50px;
+    }}
+    body.edit-mode .section-header h2[contenteditable="true"]:hover,
+    body.edit-mode .field .label[contenteditable="true"]:hover,
+    body.edit-mode .group-title[contenteditable="true"]:hover {{
+        background: rgba(37, 99, 235, 0.15);
+        outline: 2px dashed #2563eb;
+    }}
+    body.edit-mode .section-header h2[contenteditable="true"]:focus,
+    body.edit-mode .field .label[contenteditable="true"]:focus,
+    body.edit-mode .group-title[contenteditable="true"]:focus {{
+        background: rgba(37, 99, 235, 0.25);
+        outline: 2px solid #2563eb;
+    }}
+    /* Add visual indicator for editable group titles */
+    body.edit-mode .group-title[contenteditable="true"]::before {{
+        content: '✎ ';
+        color: #2563eb;
+        font-weight: bold;
+        margin-right: 4px;
+        opacity: 0.6;
+    }}
+    .delete-section-btn {{
+        margin-left: auto;
+    }}
+    .delete-field-btn {{
+        position: absolute;
+        top: 4px;
+        right: 4px;
+    }}
+    body.edit-mode .field {{
+        position: relative;
+    }}
+    body.edit-mode .section {{
+        border: 2px dashed transparent;
+        transition: border-color 0.2s;
+    }}
+    body.edit-mode .section:hover {{
+        border-color: #cbd5e1;
+    }}
+
     /* Print Styles */
     @media print {{
         .no-print {{ display: none; }}
-        body {{ background: white; padding: 0; }}
-        .page {{ max-width: 100%; }}
-        .section {{ break-inside: avoid; border: 1px solid #ccc; }}
-        .field {{ border: none; }}
-        input {{ background: transparent; }}
+        body {{ background: white; padding: 0; margin: 0; }}
+        .page {{ max-width: 100%; margin: 0; }}
+        .section {{
+            border: 1px solid #ccc;
+            page-break-inside: auto;
+            margin-bottom: 10px;
+        }}
+        .section-header {{
+            page-break-after: avoid;
+            break-after: avoid;
+            page-break-inside: avoid;
+        }}
+        .group {{
+            page-break-inside: auto;
+            margin-bottom: 8px;
+        }}
+        .group-title {{
+            page-break-after: avoid;
+            break-after: avoid;
+            font-weight: bold;
+        }}
+        .field {{
+            border: none;
+            break-inside: avoid;
+            page-break-inside: avoid;
+            margin-bottom: 4px;
+        }}
+        .field-grid, .checkbox-grid {{
+            page-break-inside: auto;
+        }}
+        input, textarea {{
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #ddd;
+        }}
+        /* Prevent orphaned headers */
+        h1, h2, .section-header, .group-title {{
+            orphans: 3;
+            widows: 3;
+        }}
     }}
 
     @media (max-width: 640px) {{
@@ -421,7 +527,12 @@ def build_html(rows):
     <div class="page">
       <header>
         <h1>General Order Acknowledgement</h1>
-        <button class="no-print" onclick="window.print()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Print / Save as PDF</button>
+        <div class="no-print" style="display: flex; gap: 10px;">
+          <button id="editModeBtn" onclick="toggleEditMode()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Enable Edit Mode</button>
+          <button id="downloadBtn" onclick="downloadModifiedHTML()" style="padding: 8px 16px; background: #059669; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; display: none;">Download Modified Form</button>
+          <button onclick="saveFilledFormHTML()" style="padding: 8px 16px; background: #0891b2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Filled Form (HTML)</button>
+          <button onclick="generatePDF()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save as PDF</button>
+        </div>
       </header>
       <div class="divider"></div>
       {body}
@@ -464,7 +575,280 @@ def build_html(rows):
                   }}
               }}
           }});
+
+          // Add delete buttons and make elements editable for edit mode
+          initializeEditMode();
       }});
+
+      // Initialize edit mode features
+      function initializeEditMode() {{
+          const sections = document.querySelectorAll('.section');
+
+          sections.forEach(section => {{
+              const header = section.querySelector('.section-header');
+              const h2 = header.querySelector('h2');
+
+              // Add delete button for section
+              const deleteSecBtn = document.createElement('button');
+              deleteSecBtn.className = 'delete-btn delete-section-btn';
+              deleteSecBtn.textContent = '× Delete Section';
+              deleteSecBtn.onclick = (e) => {{
+                  e.stopPropagation();
+                  deleteSection(section);
+              }};
+              header.appendChild(deleteSecBtn);
+
+              // Add delete buttons for fields
+              const fields = section.querySelectorAll('.field');
+              fields.forEach(field => {{
+                  const deleteFieldBtn = document.createElement('button');
+                  deleteFieldBtn.className = 'delete-btn delete-field-btn';
+                  deleteFieldBtn.textContent = '×';
+                  deleteFieldBtn.onclick = (e) => {{
+                      e.stopPropagation();
+                      deleteField(field);
+                  }};
+                  field.appendChild(deleteFieldBtn);
+              }});
+          }});
+      }}
+
+      // Toggle edit mode
+      function toggleEditMode() {{
+          const body = document.body;
+          const editBtn = document.getElementById('editModeBtn');
+          const downloadBtn = document.getElementById('downloadBtn');
+
+          body.classList.toggle('edit-mode');
+          const isEditMode = body.classList.contains('edit-mode');
+
+          if (isEditMode) {{
+              editBtn.textContent = 'Disable Edit Mode';
+              editBtn.style.background = '#dc2626';
+              downloadBtn.style.display = 'inline-block';
+              enableEditing();
+          }} else {{
+              editBtn.textContent = 'Enable Edit Mode';
+              editBtn.style.background = '#2563eb';
+              downloadBtn.style.display = 'none';
+              disableEditing();
+          }}
+      }}
+
+      // Enable editing
+      function enableEditing() {{
+          // Make section headers editable
+          document.querySelectorAll('.section-header h2').forEach(h2 => {{
+              h2.setAttribute('contenteditable', 'true');
+              h2.setAttribute('title', 'Click to edit section name');
+          }});
+
+          // Make subsection/group titles editable
+          document.querySelectorAll('.group-title').forEach(groupTitle => {{
+              groupTitle.setAttribute('contenteditable', 'true');
+              groupTitle.setAttribute('title', 'Click to edit subsection name');
+          }});
+
+          // Make field labels editable
+          document.querySelectorAll('.field .label').forEach(label => {{
+              label.setAttribute('contenteditable', 'true');
+              label.setAttribute('title', 'Click to edit field label');
+          }});
+      }}
+
+      // Disable editing
+      function disableEditing() {{
+          document.querySelectorAll('[contenteditable="true"]').forEach(el => {{
+              el.removeAttribute('contenteditable');
+              el.removeAttribute('title');
+          }});
+      }}
+
+      // Delete a field
+      function deleteField(field) {{
+          if (confirm('Are you sure you want to delete this field?')) {{
+              field.remove();
+          }}
+      }}
+
+      // Delete a section
+      function deleteSection(section) {{
+          const sectionName = section.querySelector('h2').textContent;
+          if (confirm(`Are you sure you want to delete the entire "${{sectionName}}" section?`)) {{
+              section.remove();
+          }}
+      }}
+
+      // Download modified HTML
+      function downloadModifiedHTML() {{
+          // Clone the document
+          const clone = document.documentElement.cloneNode(true);
+
+          // Remove edit mode class from body
+          const cloneBody = clone.querySelector('body');
+          cloneBody.classList.remove('edit-mode');
+
+          // Remove contenteditable attributes
+          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {{
+              el.removeAttribute('contenteditable');
+              el.removeAttribute('title');
+          }});
+
+          // Remove delete buttons
+          clone.querySelectorAll('.delete-btn').forEach(btn => btn.remove());
+
+          // Generate HTML string
+          const htmlString = '<!DOCTYPE html>\\n' + clone.outerHTML;
+
+          // Create blob and download
+          const blob = new Blob([htmlString], {{ type: 'text/html' }});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'goa_form_modified.html';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          alert('Modified form downloaded! You can now use this customized form.');
+      }}
+
+      // Save filled form as HTML with all data preserved
+      function saveFilledFormHTML() {{
+          // Clone the document
+          const clone = document.documentElement.cloneNode(true);
+
+          // Remove edit mode class from body
+          const cloneBody = clone.querySelector('body');
+          cloneBody.classList.remove('edit-mode');
+
+          // Remove contenteditable attributes
+          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {{
+              el.removeAttribute('contenteditable');
+              el.removeAttribute('title');
+          }});
+
+          // Remove delete buttons
+          clone.querySelectorAll('.delete-btn').forEach(btn => btn.remove());
+
+          // Preserve all input values
+          document.querySelectorAll('input[type="text"], input[type="number"]').forEach((input, index) => {{
+              const cloneInputs = clone.querySelectorAll('input[type="text"], input[type="number"]');
+              if (cloneInputs[index] && input.value) {{
+                  cloneInputs[index].setAttribute('value', input.value);
+              }}
+          }});
+
+          // Preserve all checkbox states
+          document.querySelectorAll('input[type="checkbox"]').forEach((checkbox, index) => {{
+              const cloneCheckboxes = clone.querySelectorAll('input[type="checkbox"]');
+              if (cloneCheckboxes[index]) {{
+                  if (checkbox.checked) {{
+                      cloneCheckboxes[index].setAttribute('checked', 'checked');
+                  }} else {{
+                      cloneCheckboxes[index].removeAttribute('checked');
+                  }}
+              }}
+          }});
+
+          // Preserve all textarea values
+          document.querySelectorAll('textarea').forEach((textarea, index) => {{
+              const cloneTextareas = clone.querySelectorAll('textarea');
+              if (cloneTextareas[index] && textarea.value) {{
+                  cloneTextareas[index].textContent = textarea.value;
+              }}
+          }});
+
+          // Generate HTML string
+          const htmlString = '<!DOCTYPE html>\\n' + clone.outerHTML;
+
+          // Create blob and download
+          const blob = new Blob([htmlString], {{ type: 'text/html' }});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'goa_form_filled.html';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          alert('Filled form saved as HTML! You can reopen this file to make revisions and re-save as PDF.');
+      }}
+
+      // Generate PDF directly without print dialog
+      function generatePDF() {{
+          // Store current edit mode state
+          const wasInEditMode = document.body.classList.contains('edit-mode');
+
+          // Temporarily disable edit mode for PDF generation
+          if (wasInEditMode) {{
+              document.body.classList.remove('edit-mode');
+          }}
+
+          // Store collapsed sections state and expand all sections for PDF
+          const sections = document.querySelectorAll('.section');
+          const collapsedSections = [];
+
+          sections.forEach((section, index) => {{
+              if (section.classList.contains('collapsed')) {{
+                  collapsedSections.push(index);
+                  section.classList.remove('collapsed');
+                  const header = section.querySelector('.section-header');
+                  if (header) {{
+                      header.classList.add('active');
+                  }}
+              }}
+          }});
+
+          // Wait for DOM to fully render expanded sections before generating PDF
+          setTimeout(() => {{
+              // Get the element to convert
+              const element = document.querySelector('.page');
+
+              // PDF options
+              const opt = {{
+                  margin: [8, 8, 8, 8],  // Reduced margins: top, right, bottom, left
+                  filename: 'General_Order_Acknowledgement.pdf',
+                  image: {{ type: 'jpeg', quality: 0.98 }},
+                  html2canvas: {{
+                      scale: 2,
+                      useCORS: true,
+                      logging: false,
+                      letterRendering: true,
+                      windowWidth: 1200
+                  }},
+                  jsPDF: {{
+                      unit: 'mm',
+                      format: 'a4',
+                      orientation: 'portrait',
+                      compress: true
+                  }},
+                  pagebreak: {{
+                      mode: ['css', 'legacy'],
+                      avoid: ['.field', '.section-header', '.group-title']
+                  }}
+              }};
+
+              // Generate PDF
+              html2pdf().set(opt).from(element).save().then(() => {{
+                  // Restore collapsed sections
+                  collapsedSections.forEach(index => {{
+                      sections[index].classList.add('collapsed');
+                      const header = sections[index].querySelector('.section-header');
+                      if (header) {{
+                          header.classList.remove('active');
+                      }}
+                  }});
+
+                  // Restore edit mode if it was active
+                  if (wasInEditMode) {{
+                      document.body.classList.add('edit-mode');
+                  }}
+              }});
+          }}, 500); // 500ms delay to ensure sections are fully expanded and rendered
+      }}
     </script>
   </body>
 </html>
