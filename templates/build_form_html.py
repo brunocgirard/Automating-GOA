@@ -133,7 +133,6 @@ def build_html(rows):
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>General Order Acknowledgement</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     :root {{
       --bg: #f3f5f8;
@@ -169,15 +168,15 @@ def build_html(rows):
       border-radius: 6px;
       margin-bottom: 12px;
     }}
-    .section {
+    .section {{
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
       margin-bottom: 14px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.04);
       overflow: hidden;
-    }
-    .section-header {
+    }}
+    .section-header {{
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -189,33 +188,33 @@ def build_html(rows):
       border-top-right-radius: 10px;
       cursor: pointer;
       user-select: none;
-    }
-    .section-header.active + .section-content {
+    }}
+    .section-header.active + .section-content {{
         /* styles when open */
-    }
-    .section.collapsed > .section-header {
+    }}
+    .section.collapsed > .section-header {{
         border-bottom-color: transparent;
-    }
-    .toggle-icon {
+    }}
+    .toggle-icon {{
         transition: transform 0.3s ease;
         font-weight: bold;
         font-size: 20px;
         color: var(--muted);
-    }
-    .section-header.active .toggle-icon {
+    }}
+    .section-header.active .toggle-icon {{
         transform: rotate(45deg);
-    }
-    .section-content {
+    }}
+    .section-content {{
         padding: 16px 14px;
         overflow: hidden;
         max-height: 10000px; /* A large enough value to not clip content */
         transition: max-height 0.4s ease-in-out, padding 0.3s ease-in-out;
-    }
-    .section.collapsed > .section-content {
+    }}
+    .section.collapsed > .section-content {{
         max-height: 0;
         padding-top: 0;
         padding-bottom: 0;
-    }
+    }}
     .section h2 {{
       margin: 0;
       font-size: 18px;
@@ -392,20 +391,62 @@ def build_html(rows):
         border-color: #cbd5e1;
     }}
 
-    /* Print Styles */
+    /* Section Controls Styling */
+    .section-controls button {{
+        transition: all 0.2s ease;
+    }}
+    .section-controls button:hover {{
+        opacity: 0.9;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }}
+    .section-controls button:active {{
+        transform: translateY(0);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }}
+
+    /* Print Styles - Enhanced for PDF Export */
+    @page {{
+        size: letter portrait;
+        margin: 10mm;
+    }}
+
     @media print {{
-        .no-print {{ display: none; }}
-        body {{ background: white; padding: 0; margin: 0; }}
-        .page {{ max-width: 100%; margin: 0; }}
+        .no-print {{ display: none !important; }}
+        body {{
+            background: white;
+            padding: 0;
+            margin: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            color-adjust: exact;
+        }}
+        .page {{
+            max-width: 100%;
+            margin: 0;
+            width: 100%;
+        }}
         .section {{
             border: 1px solid #ccc;
             page-break-inside: auto;
             margin-bottom: 10px;
+            box-shadow: none;
         }}
         .section-header {{
             page-break-after: avoid;
             break-after: avoid;
             page-break-inside: avoid;
+            background: #e5e5e5 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }}
+        /* Ensure sections are visible (not collapsed) */
+        .section.collapsed > .section-content {{
+            max-height: none !important;
+            padding: 16px 14px !important;
+        }}
+        .section-header .toggle-icon {{
+            display: none;
         }}
         .group {{
             page-break-inside: auto;
@@ -429,11 +470,18 @@ def build_html(rows):
             background: transparent;
             border: none;
             border-bottom: 1px solid #ddd;
+            color: #000;
         }}
         /* Prevent orphaned headers */
         h1, h2, .section-header, .group-title {{
             orphans: 3;
             widows: 3;
+        }}
+        /* Ensure proper spacing */
+        .divider {{
+            background: #e5e5e5 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }}
     }}
 
@@ -467,60 +515,69 @@ def build_html(rows):
           <button id="editModeBtn" onclick="toggleEditMode()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Enable Edit Mode</button>
           <button id="downloadBtn" onclick="downloadModifiedHTML()" style="padding: 8px 16px; background: #059669; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; display: none;">Download Modified Form</button>
           <button onclick="saveFilledFormHTML()" style="padding: 8px 16px; background: #0891b2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Filled Form (HTML)</button>
-          <button onclick="generatePDF()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save as PDF</button>
+          <button onclick="generatePDF()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Print to PDF</button>
         </div>
       </header>
       <div class="divider"></div>
+
+      <!-- Section Controls -->
+      <div class="section-controls no-print" style="margin-bottom: 14px; display: flex; gap: 10px; justify-content: flex-end;">
+        <button onclick="expandAllSections()" style="padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 14px;">Expand All Sections</button>
+        <button onclick="collapseAllSections()" style="padding: 6px 14px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 14px;">Collapse All Sections</button>
+      </div>
+
       {body}
     </div>
     <script>
-      document.addEventListener('DOMContentLoaded', function () {
+      document.addEventListener('DOMContentLoaded', function () {{
           const sections = document.querySelectorAll('.section');
       
-          sections.forEach((section, index) => {
+          sections.forEach((section, index) => {{
               const header = section.querySelector('.section-header');
-              if (header) {
+              if (header) {{
                   // Create content wrapper
                   const content = document.createElement('div');
                   content.className = 'section-content';
-      
+
                   // Move all group elements into the content wrapper
                   const groups = Array.from(section.children).filter(child => child.classList.contains('group'));
-                  groups.forEach(group => {
+                  groups.forEach(group => {{
                       content.appendChild(group);
-                  });
+                  }});
                   section.appendChild(content);
-      
-                  // Add toggle icon
-                  const icon = document.createElement('span');
-                  icon.className = 'toggle-icon';
-                  icon.textContent = '+';
-                  header.appendChild(icon);
+
+                  // Add toggle icon only if it doesn't already exist
+                  if (!header.querySelector('.toggle-icon')) {{
+                      const icon = document.createElement('span');
+                      icon.className = 'toggle-icon';
+                      icon.textContent = '+';
+                      header.appendChild(icon);
+                  }}
 
                   // Add click listener
-                  header.addEventListener('click', () => {
+                  header.addEventListener('click', () => {{
                       section.classList.toggle('collapsed');
                       header.classList.toggle('active');
-                  });
-      
+                  }});
+
                   // Initially collapse all but the first section
-                  if (index > 0) {
+                  if (index > 0) {{
                       section.classList.add('collapsed');
-                  } else {
+                  }} else {{
                       header.classList.add('active');
-                  }
-              }
-          });
+                  }}
+              }}
+          }});
 
           // Add delete buttons and make elements editable for edit mode
           initializeEditMode();
-      });
+      }});
 
       // Initialize edit mode features
-      function initializeEditMode() {
+      function initializeEditMode() {{
           const sections = document.querySelectorAll('.section');
 
-          sections.forEach(section => {
+          sections.forEach(section => {{
               const header = section.querySelector('.section-header');
               const h2 = header.querySelector('h2');
 
@@ -528,29 +585,29 @@ def build_html(rows):
               const deleteSecBtn = document.createElement('button');
               deleteSecBtn.className = 'delete-btn delete-section-btn';
               deleteSecBtn.textContent = '× Delete Section';
-              deleteSecBtn.onclick = (e) => {
+              deleteSecBtn.onclick = (e) => {{
                   e.stopPropagation();
                   deleteSection(section);
-              };
+              }};
               header.appendChild(deleteSecBtn);
 
               // Add delete buttons for fields
               const fields = section.querySelectorAll('.field');
-              fields.forEach(field => {
+              fields.forEach(field => {{
                   const deleteFieldBtn = document.createElement('button');
                   deleteFieldBtn.className = 'delete-btn delete-field-btn';
                   deleteFieldBtn.textContent = '×';
-                  deleteFieldBtn.onclick = (e) => {
+                  deleteFieldBtn.onclick = (e) => {{
                       e.stopPropagation();
                       deleteField(field);
-                  };
+                  }};
                   field.appendChild(deleteFieldBtn);
-              });
-          });
-      }
+              }});
+          }});
+      }}
 
       // Toggle edit mode
-      function toggleEditMode() {
+      function toggleEditMode() {{
           const body = document.body;
           const editBtn = document.getElementById('editModeBtn');
           const downloadBtn = document.getElementById('downloadBtn');
@@ -558,65 +615,65 @@ def build_html(rows):
           body.classList.toggle('edit-mode');
           const isEditMode = body.classList.contains('edit-mode');
 
-          if (isEditMode) {
+          if (isEditMode) {{
               editBtn.textContent = 'Disable Edit Mode';
               editBtn.style.background = '#dc2626';
               downloadBtn.style.display = 'inline-block';
               enableEditing();
-          } else {
+          }} else {{
               editBtn.textContent = 'Enable Edit Mode';
               editBtn.style.background = '#2563eb';
               downloadBtn.style.display = 'none';
               disableEditing();
-          }
-      }
+          }}
+      }}
 
       // Enable editing
-      function enableEditing() {
+      function enableEditing() {{
           // Make section headers editable
-          document.querySelectorAll('.section-header h2').forEach(h2 => {
+          document.querySelectorAll('.section-header h2').forEach(h2 => {{
               h2.setAttribute('contenteditable', 'true');
               h2.setAttribute('title', 'Click to edit section name');
-          });
+          }});
 
           // Make subsection/group titles editable
-          document.querySelectorAll('.group-title').forEach(groupTitle => {
+          document.querySelectorAll('.group-title').forEach(groupTitle => {{
               groupTitle.setAttribute('contenteditable', 'true');
               groupTitle.setAttribute('title', 'Click to edit subsection name');
-          });
+          }});
 
           // Make field labels editable
-          document.querySelectorAll('.field .label').forEach(label => {
+          document.querySelectorAll('.field .label').forEach(label => {{
               label.setAttribute('contenteditable', 'true');
               label.setAttribute('title', 'Click to edit field label');
-          });
-      }
+          }});
+      }}
 
       // Disable editing
-      function disableEditing() {
-          document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+      function disableEditing() {{
+          document.querySelectorAll('[contenteditable="true"]').forEach(el => {{
               el.removeAttribute('contenteditable');
               el.removeAttribute('title');
-          });
-      }
+          }});
+      }}
 
       // Delete a field
-      function deleteField(field) {
-          if (confirm('Are you sure you want to delete this field?')) {
+      function deleteField(field) {{
+          if (confirm('Are you sure you want to delete this field?')) {{
               field.remove();
-          }
-      }
+          }}
+      }}
 
       // Delete a section
-      function deleteSection(section) {
+      function deleteSection(section) {{
           const sectionName = section.querySelector('h2').textContent;
-          if (confirm(`Are you sure you want to delete the entire "${{sectionName}}" section?`)) {
+          if (confirm(`Are you sure you want to delete the entire "${{sectionName}}" section?`)) {{
               section.remove();
-          }
-      }
+          }}
+      }}
 
       // Download modified HTML
-      function downloadModifiedHTML() {
+      function downloadModifiedHTML() {{
           // Clone the document
           const clone = document.documentElement.cloneNode(true);
 
@@ -625,10 +682,10 @@ def build_html(rows):
           cloneBody.classList.remove('edit-mode');
 
           // Remove contenteditable attributes
-          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {
+          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {{
               el.removeAttribute('contenteditable');
               el.removeAttribute('title');
-          });
+          }});
 
           // Remove delete buttons
           clone.querySelectorAll('.delete-btn').forEach(btn => btn.remove());
@@ -637,7 +694,7 @@ def build_html(rows):
           const htmlString = '<!DOCTYPE html>\\n' + clone.outerHTML;
 
           // Create blob and download
-          const blob = new Blob([htmlString], { type: 'text/html' });
+          const blob = new Blob([htmlString], {{ type: 'text/html' }});
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -648,10 +705,10 @@ def build_html(rows):
           URL.revokeObjectURL(url);
 
           alert('Modified form downloaded! You can now use this customized form.');
-      }
+      }}
 
       // Save filled form as HTML with all data preserved
-      function saveFilledFormHTML() {
+      function saveFilledFormHTML() {{
           // Clone the document
           const clone = document.documentElement.cloneNode(true);
 
@@ -660,47 +717,47 @@ def build_html(rows):
           cloneBody.classList.remove('edit-mode');
 
           // Remove contenteditable attributes
-          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {
+          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {{
               el.removeAttribute('contenteditable');
               el.removeAttribute('title');
-          });
+          }});
 
           // Remove delete buttons
           clone.querySelectorAll('.delete-btn').forEach(btn => btn.remove());
 
           // Preserve all input values
-          document.querySelectorAll('input[type="text"], input[type="number"]').forEach((input, index) => {
+          document.querySelectorAll('input[type="text"], input[type="number"]').forEach((input, index) => {{
               const cloneInputs = clone.querySelectorAll('input[type="text"], input[type="number"]');
-              if (cloneInputs[index] && input.value) {
+              if (cloneInputs[index] && input.value) {{
                   cloneInputs[index].setAttribute('value', input.value);
-              }
-          });
+              }}
+          }});
 
           // Preserve all checkbox states
-          document.querySelectorAll('input[type="checkbox"]').forEach((checkbox, index) => {
+          document.querySelectorAll('input[type="checkbox"]').forEach((checkbox, index) => {{
               const cloneCheckboxes = clone.querySelectorAll('input[type="checkbox"]');
-              if (cloneCheckboxes[index]) {
-                  if (checkbox.checked) {
+              if (cloneCheckboxes[index]) {{
+                  if (checkbox.checked) {{
                       cloneCheckboxes[index].setAttribute('checked', 'checked');
-                  } else {
+                  }} else {{
                       cloneCheckboxes[index].removeAttribute('checked');
-                  }
-              }
-          });
+                  }}
+              }}
+          }});
 
           // Preserve all textarea values
-          document.querySelectorAll('textarea').forEach((textarea, index) => {
+          document.querySelectorAll('textarea').forEach((textarea, index) => {{
               const cloneTextareas = clone.querySelectorAll('textarea');
-              if (cloneTextareas[index] && textarea.value) {
+              if (cloneTextareas[index] && textarea.value) {{
                   cloneTextareas[index].textContent = textarea.value;
-              }
-          });
+              }}
+          }});
 
           // Generate HTML string
           const htmlString = '<!DOCTYPE html>\\n' + clone.outerHTML;
 
           // Create blob and download
-          const blob = new Blob([htmlString], { type: 'text/html' });
+          const blob = new Blob([htmlString], {{ type: 'text/html' }});
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -711,80 +768,78 @@ def build_html(rows):
           URL.revokeObjectURL(url);
 
           alert('Filled form saved as HTML! You can reopen this file to make revisions and re-save as PDF.');
-      }
+      }}
 
-      // Generate PDF directly without print dialog
-      function generatePDF() {
+      // Generate PDF using browser's native print-to-PDF functionality
+      function generatePDF() {{
           // Store current edit mode state
           const wasInEditMode = document.body.classList.contains('edit-mode');
 
           // Temporarily disable edit mode for PDF generation
-          if (wasInEditMode) {
+          if (wasInEditMode) {{
               document.body.classList.remove('edit-mode');
-          }
+          }}
 
           // Store collapsed sections state and expand all sections for PDF
           const sections = document.querySelectorAll('.section');
           const collapsedSections = [];
 
-          sections.forEach((section, index) => {
-              if (section.classList.contains('collapsed')) {
+          sections.forEach((section, index) => {{
+              if (section.classList.contains('collapsed')) {{
                   collapsedSections.push(index);
                   section.classList.remove('collapsed');
                   const header = section.querySelector('.section-header');
-                  if (header) {
+                  if (header) {{
                       header.classList.add('active');
-                  }
-              }
-          });
+                  }}
+              }}
+          }});
 
-          // Wait for DOM to fully render expanded sections before generating PDF
-          setTimeout(() => {
-              // Get the element to convert
-              const element = document.querySelector('.page');
+          // Wait for DOM to fully render expanded sections before printing
+          setTimeout(() => {{
+              // Trigger browser's print dialog (user can save as PDF)
+              window.print();
 
-              // PDF options
-              const opt = {
-                  margin: [8, 8, 8, 8],  // Reduced margins: top, right, bottom, left
-                  filename: 'General_Order_Acknowledgement.pdf',
-                  image: { type: 'jpeg', quality: 0.98 },
-                  html2canvas: {
-                      scale: 2,
-                      useCORS: true,
-                      logging: false,
-                      letterRendering: true,
-                      windowWidth: 1200
-                  },
-                  jsPDF: {
-                      unit: 'mm',
-                      format: 'a4',
-                      orientation: 'portrait',
-                      compress: true
-                  },
-                  pagebreak: {
-                      mode: ['css', 'legacy'],
-                      avoid: ['.field', '.section-header', '.group-title']
-                  }
-              };
-
-              // Generate PDF
-              html2pdf().set(opt).from(element).save().then(() => {
-                  // Restore collapsed sections
-                  collapsedSections.forEach(index => {
+              // Restore collapsed sections after print dialog is handled
+              // Note: This happens immediately, but browser waits for print dialog to close
+              setTimeout(() => {{
+                  collapsedSections.forEach(index => {{
                       sections[index].classList.add('collapsed');
                       const header = sections[index].querySelector('.section-header');
-                      if (header) {
+                      if (header) {{
                           header.classList.remove('active');
-                      }
-                  });
+                      }}
+                  }});
 
                   // Restore edit mode if it was active
-                  if (wasInEditMode) {
+                  if (wasInEditMode) {{
                       document.body.classList.add('edit-mode');
-                  }
-              });
-          }, 500); // 500ms delay to ensure sections are fully expanded and rendered
-      }
+                  }}
+              }}, 100);
+          }}, 300); // Brief delay to ensure sections are fully expanded and rendered
+      }}
+
+      // Expand all sections
+      function expandAllSections() {{
+          document.querySelectorAll('.section').forEach(section => {{
+              section.classList.remove('collapsed');
+              const header = section.querySelector('.section-header');
+              if (header) {{
+                  header.classList.add('active');
+              }}
+          }});
+      }}
+
+      // Collapse all sections
+      function collapseAllSections() {{
+          document.querySelectorAll('.section').forEach(section => {{
+              section.classList.add('collapsed');
+              const header = section.querySelector('.section-header');
+              if (header) {{
+                  header.classList.remove('active');
+              }}
+          }});
+      }}
     </script>
   </body>
 </html>

@@ -197,7 +197,6 @@ def build_html(rows):
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>General Order Acknowledgement</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     :root {{
       --bg: #f3f5f8;
@@ -456,20 +455,62 @@ def build_html(rows):
         border-color: #cbd5e1;
     }}
 
-    /* Print Styles */
+    /* Section Controls Styling */
+    .section-controls button {{
+        transition: all 0.2s ease;
+    }}
+    .section-controls button:hover {{
+        opacity: 0.9;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }}
+    .section-controls button:active {{
+        transform: translateY(0);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }}
+
+    /* Print Styles - Enhanced for PDF Export */
+    @page {{
+        size: letter portrait;
+        margin: 10mm;
+    }}
+
     @media print {{
-        .no-print {{ display: none; }}
-        body {{ background: white; padding: 0; margin: 0; }}
-        .page {{ max-width: 100%; margin: 0; }}
+        .no-print {{ display: none !important; }}
+        body {{
+            background: white;
+            padding: 0;
+            margin: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            color-adjust: exact;
+        }}
+        .page {{
+            max-width: 100%;
+            margin: 0;
+            width: 100%;
+        }}
         .section {{
             border: 1px solid #ccc;
             page-break-inside: auto;
             margin-bottom: 10px;
+            box-shadow: none;
         }}
         .section-header {{
             page-break-after: avoid;
             break-after: avoid;
             page-break-inside: avoid;
+            background: #e5e5e5 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }}
+        /* Ensure sections are visible (not collapsed) */
+        .section.collapsed > .section-content {{
+            max-height: none !important;
+            padding: 16px 14px !important;
+        }}
+        .section-header .toggle-icon {{
+            display: none;
         }}
         .group {{
             page-break-inside: auto;
@@ -493,11 +534,18 @@ def build_html(rows):
             background: transparent;
             border: none;
             border-bottom: 1px solid #ddd;
+            color: #000;
         }}
         /* Prevent orphaned headers */
         h1, h2, .section-header, .group-title {{
             orphans: 3;
             widows: 3;
+        }}
+        /* Ensure proper spacing */
+        .divider {{
+            background: #e5e5e5 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }}
     }}
 
@@ -531,10 +579,17 @@ def build_html(rows):
           <button id="editModeBtn" onclick="toggleEditMode()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Enable Edit Mode</button>
           <button id="downloadBtn" onclick="downloadModifiedHTML()" style="padding: 8px 16px; background: #059669; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; display: none;">Download Modified Form</button>
           <button onclick="saveFilledFormHTML()" style="padding: 8px 16px; background: #0891b2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Filled Form (HTML)</button>
-          <button onclick="generatePDF()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save as PDF</button>
+          <button onclick="generatePDF()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Print to PDF</button>
         </div>
       </header>
       <div class="divider"></div>
+
+      <!-- Section Controls -->
+      <div class="section-controls no-print" style="margin-bottom: 14px; display: flex; gap: 10px; justify-content: flex-end;">
+        <button onclick="expandAllSections()" style="padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 14px;">Expand All Sections</button>
+        <button onclick="collapseAllSections()" style="padding: 6px 14px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 14px;">Collapse All Sections</button>
+      </div>
+
       {body}
     </div>
     <script>
@@ -554,12 +609,14 @@ def build_html(rows):
                       content.appendChild(group);
                   }});
                   section.appendChild(content);
-      
-                  // Add toggle icon
-                  const icon = document.createElement('span');
-                  icon.className = 'toggle-icon';
-                  icon.textContent = '+';
-                  header.appendChild(icon);
+
+                  // Add toggle icon only if it doesn't already exist
+                  if (!header.querySelector('.toggle-icon')) {{
+                      const icon = document.createElement('span');
+                      icon.className = 'toggle-icon';
+                      icon.textContent = '+';
+                      header.appendChild(icon);
+                  }}
 
                   // Add click listener
                   header.addEventListener('click', () => {{
@@ -777,7 +834,7 @@ def build_html(rows):
           alert('Filled form saved as HTML! You can reopen this file to make revisions and re-save as PDF.');
       }}
 
-      // Generate PDF directly without print dialog
+      // Generate PDF using browser's native print-to-PDF functionality
       function generatePDF() {{
           // Store current edit mode state
           const wasInEditMode = document.body.classList.contains('edit-mode');
@@ -802,38 +859,14 @@ def build_html(rows):
               }}
           }});
 
-          // Wait for DOM to fully render expanded sections before generating PDF
+          // Wait for DOM to fully render expanded sections before printing
           setTimeout(() => {{
-              // Get the element to convert
-              const element = document.querySelector('.page');
+              // Trigger browser's print dialog (user can save as PDF)
+              window.print();
 
-              // PDF options
-              const opt = {{
-                  margin: [8, 8, 8, 8],  // Reduced margins: top, right, bottom, left
-                  filename: 'General_Order_Acknowledgement.pdf',
-                  image: {{ type: 'jpeg', quality: 0.98 }},
-                  html2canvas: {{
-                      scale: 2,
-                      useCORS: true,
-                      logging: false,
-                      letterRendering: true,
-                      windowWidth: 1200
-                  }},
-                  jsPDF: {{
-                      unit: 'mm',
-                      format: 'a4',
-                      orientation: 'portrait',
-                      compress: true
-                  }},
-                  pagebreak: {{
-                      mode: ['css', 'legacy'],
-                      avoid: ['.field', '.section-header', '.group-title']
-                  }}
-              }};
-
-              // Generate PDF
-              html2pdf().set(opt).from(element).save().then(() => {{
-                  // Restore collapsed sections
+              // Restore collapsed sections after print dialog is handled
+              // Note: This happens immediately, but browser waits for print dialog to close
+              setTimeout(() => {{
                   collapsedSections.forEach(index => {{
                       sections[index].classList.add('collapsed');
                       const header = sections[index].querySelector('.section-header');
@@ -846,8 +879,30 @@ def build_html(rows):
                   if (wasInEditMode) {{
                       document.body.classList.add('edit-mode');
                   }}
-              }});
-          }}, 500); // 500ms delay to ensure sections are fully expanded and rendered
+              }}, 100);
+          }}, 300); // Brief delay to ensure sections are fully expanded and rendered
+      }}
+
+      // Expand all sections
+      function expandAllSections() {{
+          document.querySelectorAll('.section').forEach(section => {{
+              section.classList.remove('collapsed');
+              const header = section.querySelector('.section-header');
+              if (header) {{
+                  header.classList.add('active');
+              }}
+          }});
+      }}
+
+      // Collapse all sections
+      function collapseAllSections() {{
+          document.querySelectorAll('.section').forEach(section => {{
+              section.classList.add('collapsed');
+              const header = section.querySelector('.section-header');
+              if (header) {{
+                  header.classList.remove('active');
+              }}
+          }});
       }}
     </script>
   </body>
