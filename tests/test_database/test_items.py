@@ -129,8 +129,8 @@ class TestSavePricedItems:
         items = load_priced_items_for_quote("PRICE-FORMAT-001", str(temp_db_path))
         assert len(items) == 5
 
-    def test_save_items_extracts_title_from_multiline(self, temp_db_path, items_with_multiline_descriptions):
-        """Test that multiline descriptions are split into title and details."""
+    def test_save_items_preserves_multiline_descriptions(self, temp_db_path, items_with_multiline_descriptions):
+        """Test that multiline descriptions are preserved in storage."""
         client_data = {"quote_ref": "MULTILINE-001"}
         save_client_info(client_data, str(temp_db_path))
 
@@ -138,9 +138,10 @@ class TestSavePricedItems:
         assert result is True
 
         items = load_priced_items_for_quote("MULTILINE-001", str(temp_db_path))
-        # Should extract only the first line as description
-        assert items[0]["item_description"] == "AutoFill 3000 Filling Machine"
-        assert items[1]["item_description"] == "Labeling System"
+        assert "Including:" in items[0]["item_description"]
+        assert "- Main unit" in items[0]["item_description"]
+        assert "Includes:" in items[1]["item_description"]
+        assert "- Label dispenser" in items[1]["item_description"]
 
     def test_save_items_overwrites_previous(self, temp_db_path):
         """Test that saving new items overwrites previous data."""
@@ -600,8 +601,8 @@ class TestItemsEdgeCases:
         loaded = load_priced_items_for_quote("QTY-TEXT", str(temp_db_path))
         assert loaded[0]["item_quantity"] == "2.5"
 
-    def test_extracting_main_title_stops_at_including(self, temp_db_path):
-        """Test that title extraction stops at 'Including:' marker."""
+    def test_description_keeps_including_section(self, temp_db_path):
+        """Test that multiline descriptions keep the full Including section."""
         client_data = {"quote_ref": "INCLUDING-MARKER"}
         save_client_info(client_data, str(temp_db_path))
 
@@ -615,4 +616,6 @@ class TestItemsEdgeCases:
         save_priced_items("INCLUDING-MARKER", items, str(temp_db_path))
 
         loaded = load_priced_items_for_quote("INCLUDING-MARKER", str(temp_db_path))
-        assert loaded[0]["item_description"] == "Machine Name"
+        assert "Machine Name" in loaded[0]["item_description"]
+        assert "Including:" in loaded[0]["item_description"]
+        assert "- Part 2" in loaded[0]["item_description"]

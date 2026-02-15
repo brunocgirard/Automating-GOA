@@ -7,15 +7,26 @@ import sqlite3
 import os
 from typing import Optional
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Define database connection path
-DB_PATH = os.path.join("data", "crm_data.db")
+DB_PATH = os.getenv("DATABASE_PATH") or os.path.join("data", "crm_data.db")
 
 # Define base template paths
 HTML_TEMPLATE_PATH = os.path.join("templates", "goa_form.html")
 DOCX_TEMPLATE_PATH = os.path.join("templates", "template.docx")
 # Legacy constant kept for compatibility
 TEMPLATE_FILE_PATH = os.path.join("templates", "template.docx")
+
+# Keep track of database files that have already been initialized in-process.
+_INITIALIZED_DB_PATHS: set[str] = set()
+
+
+def _normalize_db_path(db_path: str) -> str:
+    """Return a normalized absolute path for tracking initialized databases."""
+    return os.path.abspath(db_path)
 
 
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
@@ -28,7 +39,13 @@ def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
     Returns:
         sqlite3.Connection: Database connection object
     """
-    conn = sqlite3.connect(db_path)
+    normalized_path = _normalize_db_path(db_path)
+    if normalized_path not in _INITIALIZED_DB_PATHS:
+        # Ensure schema exists even when startup hooks are skipped.
+        init_db(normalized_path)
+        _INITIALIZED_DB_PATHS.add(normalized_path)
+
+    conn = sqlite3.connect(normalized_path)
     return conn
 
 
@@ -48,11 +65,13 @@ def init_db(db_path: str = DB_PATH):
     """
     conn = None
     try:
-        db_dir = os.path.dirname(db_path)
+        normalized_path = _normalize_db_path(db_path)
+
+        db_dir = os.path.dirname(normalized_path)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(normalized_path)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -127,11 +146,19 @@ def init_db(db_path: str = DB_PATH):
             machine_id INTEGER NOT NULL,
             template_type TEXT NOT NULL,
             template_data_json TEXT NOT NULL,
+            output_preferences_json TEXT,
             generated_file_path TEXT,
             processing_date TEXT NOT NULL,
             FOREIGN KEY (machine_id) REFERENCES machines (id) ON DELETE CASCADE
         )
         """)
+
+        # Schema migration for existing machine_templates tables
+        cursor.execute("PRAGMA table_info(machine_templates)")
+        machine_template_columns = [row[1] for row in cursor.fetchall()]
+        if "output_preferences_json" not in machine_template_columns:
+            cursor.execute("ALTER TABLE machine_templates ADD COLUMN output_preferences_json TEXT")
+            print("Added column 'output_preferences_json' to 'machine_templates' table.")
 
         # Create few_shot_examples table to store high-quality examples for LLM learning
         cursor.execute("""
@@ -193,7 +220,20 @@ def init_db(db_path: str = DB_PATH):
         )
         """)
 
-        print(f"Database '{db_path}' initialized with all required tables.")
+        # Store shipping workflow drafts as a full JSON blob keyed by quote.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS shipping_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_quote_ref TEXT NOT NULL,
+            shipping_data_json TEXT NOT NULL,
+            created_date TEXT NOT NULL,
+            modified_date TEXT NOT NULL,
+            FOREIGN KEY (client_quote_ref) REFERENCES clients (quote_ref) ON DELETE CASCADE
+        )
+        """)
+
+        _INITIALIZED_DB_PATHS.add(normalized_path)
+        print(f"Database '{normalized_path}' initialized with all required tables.")
         conn.commit()
     except sqlite3.Error as e:
         print(f"Error initializing database: {e}")

@@ -1,6 +1,14 @@
 # AI-Powered Document Assistant
 
-This project automates the generation of General Offer Arrangement (GOA) documents from PDF quotes using AI. It streamlines sales and manufacturing workflows by intelligently extracting data, populating templates, and tracking modifications.
+This project automates the generation of General Offer Arrangement (GOA) documents from PDF quotes using AI. It streamlines sales and manufacturing workflows by extracting data, populating templates, and tracking modifications.
+
+## Architecture
+
+- Frontend: `frontend/` (Next.js/React)
+- Backend API: `api/` (FastAPI)
+- Shared business logic: `src/`
+
+Deployment instructions: `docs/NEXTJS_DEPLOYMENT.md`
 
 ## Features
 - **Automated Data Extraction:** Parses text and tables from PDF quotes and uses a Large Language Model (LLM) to identify key information.
@@ -97,17 +105,22 @@ flowchart TB
 
 ## Getting Started
 
-1.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-2.  **Set Environment Variables:**
-    Create a `.env` file and add your `GOOGLE_API_KEY`.
-3.  **Initialize Database:**
-    ```bash
-    python initialize_db.py
-    ```
-4.  **Run the App:**
-    ```bash
-    streamlit run app.py
-    ```
+1. Install backend dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Set environment variables:
+   - Copy `.env.example` to `.env`
+   - Copy `frontend/.env.example` to `frontend/.env.local`
+3. Start the backend API:
+   ```bash
+   uvicorn api.main:app --reload
+   ```
+4. Start the frontend:
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+Legacy Streamlit files are archived in `legacy/`.

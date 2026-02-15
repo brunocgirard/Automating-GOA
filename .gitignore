@@ -59,3 +59,48 @@ validation_output/
 
 # Backup files
 *.backup
+
+# AI tool configs
+.adal/
+.agent/
+.agents/
+.augment/
+.cline/
+.codebuddy/
+.commandcode/
+.continue/
+.crush/
+.cursor/
+.factory/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
+
+# Cache & data
+src/cache/
+data/
+
+# Legacy backup
+legacy/
+
+# Temp files
+nul
+*.tmp
+tmp_*
+output_*.pdf

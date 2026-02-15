@@ -2,7 +2,7 @@ import sqlite3
 import os
 import json
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 # Import for document regeneration
 from src.utils.html_doc_filler import fill_and_generate_html
@@ -19,7 +19,8 @@ DOCX_TEMPLATE_PATH = os.path.join("templates", "template.docx")
 
 def save_machine_template_data(machine_id: int, template_type: str, template_data: Dict,
                               generated_file_path: Optional[str] = None,
-                              db_path: str = DB_PATH) -> bool:
+                              db_path: str = DB_PATH,
+                              output_preferences: Optional[Dict[str, Any]] = None) -> bool:
     """
     Saves template data (GOA, Packing Slip, etc.) for a specific machine.
 
@@ -56,30 +57,51 @@ def save_machine_template_data(machine_id: int, template_type: str, template_dat
         existing_template = cursor.fetchone()
         processing_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        serialized_output_preferences = (
+            json.dumps(output_preferences) if output_preferences is not None else None
+        )
+
         if existing_template:
             # Update existing template
-            cursor.execute("""
-            UPDATE machine_templates
-            SET template_data_json = ?,
-                generated_file_path = ?,
-                processing_date = ?
-            WHERE id = ?
-            """, (
-                json.dumps(template_data),
-                generated_file_path or "",
-                processing_ts,
-                existing_template[0]
-            ))
+            if serialized_output_preferences is None:
+                cursor.execute("""
+                UPDATE machine_templates
+                SET template_data_json = ?,
+                    generated_file_path = ?,
+                    processing_date = ?
+                WHERE id = ?
+                """, (
+                    json.dumps(template_data),
+                    generated_file_path or "",
+                    processing_ts,
+                    existing_template[0]
+                ))
+            else:
+                cursor.execute("""
+                UPDATE machine_templates
+                SET template_data_json = ?,
+                    output_preferences_json = ?,
+                    generated_file_path = ?,
+                    processing_date = ?
+                WHERE id = ?
+                """, (
+                    json.dumps(template_data),
+                    serialized_output_preferences,
+                    generated_file_path or "",
+                    processing_ts,
+                    existing_template[0]
+                ))
         else:
             # Insert new template
             cursor.execute("""
             INSERT INTO machine_templates
-            (machine_id, template_type, template_data_json, generated_file_path, processing_date)
-            VALUES (?, ?, ?, ?, ?)
+            (machine_id, template_type, template_data_json, output_preferences_json, generated_file_path, processing_date)
+            VALUES (?, ?, ?, ?, ?, ?)
             """, (
                 machine_id,
                 template_type,
                 json.dumps(template_data),
+                serialized_output_preferences,
                 generated_file_path or "",
                 processing_ts
             ))
@@ -118,7 +140,7 @@ def load_machine_template_data(machine_id: int, template_type: str, db_path: str
         cursor = conn.cursor()
 
         cursor.execute("""
-        SELECT id, template_data_json, generated_file_path, processing_date
+        SELECT id, template_data_json, output_preferences_json, generated_file_path, processing_date
         FROM machine_templates
         WHERE machine_id = ? AND template_type = ?
         """, (machine_id, template_type))
@@ -128,10 +150,22 @@ def load_machine_template_data(machine_id: int, template_type: str, db_path: str
             template_dict = dict(row)
             try:
                 template_dict["template_data"] = json.loads(template_dict["template_data_json"])
-                return template_dict
             except json.JSONDecodeError:
                 print(f"Error parsing JSON for template ID {row['id']}")
                 return None
+
+            raw_preferences = template_dict.get("output_preferences_json")
+            if raw_preferences:
+                try:
+                    parsed_preferences = json.loads(raw_preferences)
+                    template_dict["output_preferences"] = (
+                        parsed_preferences if isinstance(parsed_preferences, dict) else {}
+                    )
+                except json.JSONDecodeError:
+                    template_dict["output_preferences"] = {}
+            else:
+                template_dict["output_preferences"] = {}
+            return template_dict
         return None
     except sqlite3.Error as e:
         print(f"Database error loading template for machine {machine_id}: {e}")
@@ -159,7 +193,7 @@ def load_machine_templates_with_modifications(machine_id: int, db_path: str = DB
 
         # Get all templates for this machine
         cursor.execute("""
-        SELECT id, template_type, template_data_json, generated_file_path, processing_date
+        SELECT id, template_type, template_data_json, output_preferences_json, generated_file_path, processing_date
         FROM machine_templates
         WHERE machine_id = ?
         ORDER BY processing_date DESC
@@ -193,6 +227,18 @@ def load_machine_templates_with_modifications(machine_id: int, db_path: str = DB
             except json.JSONDecodeError:
                 template_dict["template_data"] = {} # Initialize as empty dict on error
                 print(f"Error parsing JSON for template ID {template_id}, initializing as empty.")
+
+            output_preferences_json = template_dict.get("output_preferences_json")
+            if output_preferences_json:
+                try:
+                    parsed_preferences = json.loads(output_preferences_json)
+                    template_dict["output_preferences"] = (
+                        parsed_preferences if isinstance(parsed_preferences, dict) else {}
+                    )
+                except json.JSONDecodeError:
+                    template_dict["output_preferences"] = {}
+            else:
+                template_dict["output_preferences"] = {}
 
             template_dict["modifications"] = modifications
             if modifications:

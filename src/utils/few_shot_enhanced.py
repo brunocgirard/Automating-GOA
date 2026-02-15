@@ -8,14 +8,37 @@ and semantic similarity for better example selection.
 import os
 import time
 import gc
+import warnings
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 import numpy as np
+from dotenv import load_dotenv
+
+# Silence known LangChain warning on Python 3.14+ (runtime remains functional here).
+warnings.filterwarnings(
+    "ignore",
+    message=r"Core Pydantic V1 functionality isn't compatible with Python 3\.14 or greater\.",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module=r"langchain_core\._api\.deprecation",
+)
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.prompts import FewShotPromptTemplate, PromptTemplate
 from langchain_core.example_selectors.semantic_similarity import SemanticSimilarityExampleSelector
 
-from langchain_community.vectorstores import Chroma
+try:
+    # Preferred import (langchain >= 0.2.9 deprecates community Chroma wrapper)
+    from langchain_chroma import Chroma
+except Exception:  # pragma: no cover - compatibility fallback
+    warnings.filterwarnings(
+        "ignore",
+        message=r"The class `Chroma` was deprecated in LangChain 0.2.9.*",
+    )
+    from langchain_community.vectorstores import Chroma
 
 from langchain_core.example_selectors.base import BaseExampleSelector
 
@@ -26,6 +49,13 @@ from src.utils.few_shot_learning import determine_machine_type
 
 # Singleton instance cache so we reuse embeddings/vector stores across requests
 _MANAGER_INSTANCE: Optional["FewShotManager"] = None
+
+load_dotenv()
+
+EMBEDDING_MODEL_CANDIDATES = (
+    "models/text-embedding-004",
+    "models/embedding-001",
+)
 
 
 class FewShotManager:
@@ -38,22 +68,103 @@ class FewShotManager:
         Args:
             api_key: Google API key for embeddings (uses env var if not provided)
         """
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        self.api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        self.enabled = True
+        self.disable_reason: Optional[str] = None
+        self.embedding_model: Optional[str] = None
+        self._disable_logged = False
+        self._vectorstore_enabled = True
+        self._vectorstore_disable_logged = False
+
         if not self.api_key:
-            raise ValueError("GOOGLE_API_KEY not found in environment")
-        
-        # Initialize embeddings
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=self.api_key
-        )
-        
+            self._disable("GOOGLE_API_KEY not found in environment")
+            # Cache for vector stores by field
+            self._vectorstore_cache: Dict[str, Any] = {}
+            self.persist_directory = os.path.join("src", "cache", "few_shot_embeddings")
+            os.makedirs(self.persist_directory, exist_ok=True)
+            self.embeddings = None
+            return
+
+        # Initialize embeddings with model fallback.
+        self.embeddings = self._create_embeddings_with_fallback()
+        if self.embeddings is None:
+            self._disable(self.disable_reason or "No embedding model could be initialized")
+
         # Cache for vector stores by field
-        self._vectorstore_cache: Dict[str, Chroma] = {}
+        self._vectorstore_cache: Dict[str, Any] = {}
         
         # Directory for persistent storage
         self.persist_directory = os.path.join("src", "cache", "few_shot_embeddings")
         os.makedirs(self.persist_directory, exist_ok=True)
+
+    def _disable(self, reason: str) -> None:
+        self.enabled = False
+        self.disable_reason = reason
+        if not self._disable_logged:
+            print(f"[WARN] Semantic few-shot disabled: {reason}")
+            self._disable_logged = True
+
+    def _create_embeddings_with_fallback(self) -> Optional[GoogleGenerativeAIEmbeddings]:
+        model_candidates: List[str] = []
+        env_model = os.getenv("FEW_SHOT_EMBEDDING_MODEL")
+        if env_model:
+            model_candidates.append(env_model.strip())
+        model_candidates.extend(self._discover_embedding_models())
+        model_candidates.extend(EMBEDDING_MODEL_CANDIDATES)
+
+        tried: set[str] = set()
+        errors: list[str] = []
+        for model_name in model_candidates:
+            candidate = self._normalize_model_name(model_name.strip())
+            if not candidate or candidate in tried:
+                continue
+            tried.add(candidate)
+            try:
+                embeddings = GoogleGenerativeAIEmbeddings(
+                    model=candidate,
+                    google_api_key=self.api_key,
+                )
+                # Force a lightweight probe so we fail fast on unsupported models.
+                embeddings.embed_query("few-shot model probe")
+                self.embedding_model = candidate
+                return embeddings
+            except Exception as exc:
+                errors.append(f"{candidate}: {exc}")
+
+        if errors:
+            self.disable_reason = (
+                f"No supported embedding model found. Tried {len(tried)} model(s). "
+                "Set FEW_SHOT_EMBEDDING_MODEL to a model returned by ListModels with embedContent support."
+            )
+            print(f"[WARN] Embedding initialization details: {'; '.join(errors[:2])}")
+        else:
+            self.disable_reason = "No candidate embedding models were provided"
+        return None
+
+    def _discover_embedding_models(self) -> List[str]:
+        try:
+            import google.generativeai as genai
+
+            genai.configure(api_key=self.api_key)
+            discovered: List[str] = []
+            for model in genai.list_models():
+                methods = getattr(model, "supported_generation_methods", None) or []
+                if "embedContent" not in methods:
+                    continue
+                model_name = self._normalize_model_name(getattr(model, "name", ""))
+                if model_name:
+                    discovered.append(model_name)
+            return discovered
+        except Exception:
+            return []
+
+    @staticmethod
+    def _normalize_model_name(model_name: str) -> str:
+        if not model_name:
+            return ""
+        if model_name.startswith("models/"):
+            return model_name
+        return f"models/{model_name}"
     
     def get_example_selector(
         self, 
@@ -74,32 +185,12 @@ class FewShotManager:
         Returns:
             SemanticSimilarityExampleSelector or None if no examples exist
         """
-        # Get examples from database
-        examples = get_few_shot_examples(machine_type, template_type, field_name, limit=50)
-        
-        if not examples:
+        if not self.enabled or self.embeddings is None:
             return None
-        
-        # Format examples for LangChain
-        formatted_examples = []
-        for ex in examples:
-            raw_context = ex.get("input_context", "")
-            raw_expected = ex.get("expected_output", "")
-            
-            # Ensure both context and output are strings before handing to LangChain
-            input_context = "" if raw_context is None else str(raw_context)
-            expected_output = "" if raw_expected is None else str(raw_expected)
-            
-            if not input_context.strip() and not expected_output.strip():
-                continue  # Skip empty examples that would add noise
-            
-            formatted_examples.append({
-                "input_context": input_context,
-                "expected_output": expected_output,
-                "confidence_score": float(ex.get("confidence_score", 1.0) or 1.0),
-                "example_id": ex.get("id")
-            })
-        
+        if not self._vectorstore_enabled:
+            return None
+
+        formatted_examples = self._get_formatted_examples(machine_type, template_type, field_name)
         if not formatted_examples:
             return None
         
@@ -143,8 +234,41 @@ class FewShotManager:
             return example_selector
             
         except Exception as e:
-            print(f"Error creating example selector for {field_name}: {e}")
+            self._vectorstore_enabled = False
+            if not self._vectorstore_disable_logged:
+                print(f"[WARN] Vector store unavailable; using direct semantic fallback. {e}")
+                self._vectorstore_disable_logged = True
             return None
+
+    def _get_formatted_examples(
+        self,
+        machine_type: str,
+        template_type: str,
+        field_name: str,
+    ) -> List[Dict[str, Any]]:
+        examples = get_few_shot_examples(machine_type, template_type, field_name, limit=50)
+        if not examples:
+            return []
+
+        formatted_examples: List[Dict[str, Any]] = []
+        for ex in examples:
+            raw_context = ex.get("input_context", "")
+            raw_expected = ex.get("expected_output", "")
+
+            input_context = "" if raw_context is None else str(raw_context)
+            expected_output = "" if raw_expected is None else str(raw_expected)
+            if not input_context.strip() and not expected_output.strip():
+                continue
+
+            formatted_examples.append(
+                {
+                    "input_context": input_context,
+                    "expected_output": expected_output,
+                    "confidence_score": float(ex.get("confidence_score", 1.0) or 1.0),
+                    "example_id": ex.get("id"),
+                }
+            )
+        return formatted_examples
     
     def get_few_shot_prompt_template(
         self,
@@ -226,12 +350,58 @@ class FewShotManager:
         )
         
         if example_selector is None:
+            return self._select_best_examples_direct(
+                input_text=input_text,
+                machine_type=machine_type,
+                template_type=template_type,
+                field_name=field_name,
+                k=k,
+            )
+        
+        try:
+            return example_selector.select_examples({"input_context": input_text})
+        except Exception as e:
+            print(f"[WARN] Vector selector query failed for '{field_name}'; using direct semantic fallback. {e}")
+            return self._select_best_examples_direct(
+                input_text=input_text,
+                machine_type=machine_type,
+                template_type=template_type,
+                field_name=field_name,
+                k=k,
+            )
+
+    def _select_best_examples_direct(
+        self,
+        input_text: str,
+        machine_type: str,
+        template_type: str,
+        field_name: str,
+        k: int,
+    ) -> List[Dict[str, Any]]:
+        if not self.enabled or self.embeddings is None:
             return []
-        
-        # Select examples based on semantic similarity
-        selected = example_selector.select_examples({"input_context": input_text})
-        
-        return selected
+
+        formatted_examples = self._get_formatted_examples(machine_type, template_type, field_name)
+        if not formatted_examples:
+            return []
+
+        try:
+            input_embedding = np.array(self.embeddings.embed_query(input_text), dtype=float)
+            example_texts = [example["input_context"] for example in formatted_examples]
+            example_embeddings = np.array(self.embeddings.embed_documents(example_texts), dtype=float)
+
+            input_norm = np.linalg.norm(input_embedding)
+            if input_norm == 0:
+                return formatted_examples[:k]
+
+            example_norms = np.linalg.norm(example_embeddings, axis=1)
+            safe_denominator = np.where(example_norms == 0, 1.0, example_norms * input_norm)
+            scores = np.dot(example_embeddings, input_embedding) / safe_denominator
+            ranked_indices = np.argsort(scores)[::-1][: max(k, 1)]
+            return [formatted_examples[int(idx)] for idx in ranked_indices]
+        except Exception as e:
+            self._disable(f"Embedding similarity lookup failed: {e}")
+            return []
     
     def add_example(
         self,
@@ -448,6 +618,8 @@ def enhance_prompt_with_semantic_examples(
         template_type = "sortstar" if "sortstar" in machine_type else "default"
         
         manager = get_few_shot_manager()
+        if not manager.enabled:
+            return prompt_parts
         
         # Prepare input context for similarity matching
         context_parts = [f"Machine: {machine_name}"]
@@ -531,6 +703,8 @@ def get_enhanced_few_shot_examples(
     """
     try:
         manager = get_few_shot_manager()
+        if not manager.enabled:
+            return []
         return manager.select_best_examples(
             input_context,
             machine_type,
@@ -574,6 +748,8 @@ def get_prioritized_few_shot_examples(
     """
     try:
         manager = get_few_shot_manager()
+        if not manager.enabled:
+            return []
 
         # Get more examples than needed for prioritization
         fetch_limit = limit * 3  # Fetch 3x to allow for prioritization

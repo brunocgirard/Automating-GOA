@@ -15,8 +15,25 @@ from .base import DB_PATH
 # Define base template paths
 HTML_TEMPLATE_PATH = OUTPUT_HTML_PATH
 DOCX_TEMPLATE_PATH = os.path.join("templates", "template.docx")
+SORTSTAR_DOCX_TEMPLATE_CANDIDATES = (
+    os.path.join("templates", "GOA_Sortstar_Temp.docx"),
+    os.path.join("templates", "goa_sortstar_temp.docx"),
+)
 # Legacy constant kept for compatibility if needed, but should rely on extension check
 TEMPLATE_FILE_PATH = os.path.join("templates", "template.docx")
+
+
+def _resolve_docx_template_source(generated_file_path: str) -> str:
+    lower_path = (generated_file_path or "").lower()
+    if "sortstar" in lower_path or "unscrambler" in lower_path:
+        for candidate in SORTSTAR_DOCX_TEMPLATE_CANDIDATES:
+            if os.path.exists(candidate):
+                return candidate
+        return SORTSTAR_DOCX_TEMPLATE_CANDIDATES[0]
+
+    if os.path.exists(DOCX_TEMPLATE_PATH):
+        return DOCX_TEMPLATE_PATH
+    return TEMPLATE_FILE_PATH
 
 
 def save_goa_modification(
@@ -131,11 +148,7 @@ def save_goa_modification(
                         fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
                         print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
                     elif generated_file_path.endswith('.docx'):
-                        # Fallback for legacy DOCX or SortStar (assuming standard template for now, ideal would be to store template path)
-                        # Note: This might pick the wrong template for SortStar if not handled, but sticking to previous logic for docx
-                        template_source = DOCX_TEMPLATE_PATH
-                        if "sortstar" in generated_file_path.lower():
-                             template_source = os.path.join("templates", "goa_sortstar_temp.docx")
+                        template_source = _resolve_docx_template_source(generated_file_path)
 
                         if os.path.exists(template_source):
                             print(f"Regenerating DOCX document at: {generated_file_path} using {template_source}")
@@ -207,6 +220,7 @@ def save_bulk_goa_modifications(
     changes: Dict[str, Dict[str, str]],
     modification_reason: str = "Batch Manual Edit",
     modified_by: str = "User",
+    regenerate_document: bool = True,
     db_path: str = DB_PATH
 ) -> bool:
     """
@@ -267,15 +281,19 @@ def save_bulk_goa_modifications(
 
         conn.commit()
 
-        if generated_file_path:
+        if regenerate_document and generated_file_path:
             if generated_file_path.endswith('.html'):
                 print(f"Regenerating HTML document at: {generated_file_path}")
                 fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
                 print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
-            elif generated_file_path.endswith('.docx') and os.path.exists(TEMPLATE_FILE_PATH):
-                print(f"Regenerating DOCX document at: {generated_file_path}")
-                fill_word_document_from_llm_data(TEMPLATE_FILE_PATH, template_data, generated_file_path)
-                print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+            elif generated_file_path.endswith('.docx'):
+                template_source = _resolve_docx_template_source(generated_file_path)
+                if os.path.exists(template_source):
+                    print(f"Regenerating DOCX document at: {generated_file_path} using {template_source}")
+                    fill_word_document_from_llm_data(template_source, template_data, generated_file_path)
+                    print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+                else:
+                    print(f"Warning: Template source {template_source} not found.")
 
         print(f"Saved {len(changes)} GOA modifications for machine template ID: {machine_template_id}")
         return True

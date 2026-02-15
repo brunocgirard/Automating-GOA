@@ -13,7 +13,7 @@ from .utils import parse_price_string
 def save_priced_items(client_quote_ref: str, line_items_data: List[Dict[str, Optional[str]]], db_path: str = DB_PATH) -> bool:
     """
     Saves parsed line item details (description, quantity, price) to the priced_items table.
-    Extracts a main title from the full description before saving.
+    Preserves the full extracted description before saving.
 
     Args:
         client_quote_ref: The quote reference to link items to.
@@ -43,30 +43,16 @@ def save_priced_items(client_quote_ref: str, line_items_data: List[Dict[str, Opt
 
             parsed_price_info = parse_price_string(selection_cell_content)
 
-            main_item_title = full_description  # Default to full description
-            if full_description:
-                lines = full_description.splitlines()
-                title_buffer = []
-                for line_num, line_content in enumerate(lines):
-                    stripped_line = line_content.strip()
-                    # Stop if we hit common delimiters for sub-items or if the line is clearly a sub-item
-                    if (stripped_line.lower().startswith("including:") or
-                        stripped_line.lower().startswith("includes:") or
-                        stripped_line.startswith("*") or
-                        stripped_line.startswith("-") or
-                        (line_num > 0 and (stripped_line.lower().startswith("one ") or
-                                           stripped_line.lower().startswith("each ")))):
-                        break
-                    title_buffer.append(stripped_line)
-                if title_buffer:
-                    main_item_title = " ".join(title_buffer).strip()
-                else:  # Fallback if all lines looked like sub-items
-                    main_item_title = lines[0].strip() if lines else full_description
+            description_to_store = ""
+            if isinstance(full_description, str):
+                description_to_store = full_description.strip()
+            elif full_description is not None:
+                description_to_store = str(full_description).strip()
 
-            if main_item_title:  # Only save if we have a title/description
+            if description_to_store:  # Only save if we have a description
                 items_to_insert.append((
                     client_quote_ref,
-                    main_item_title,  # Use the extracted main title
+                    description_to_store,
                     quantity_text,
                     parsed_price_info["price_str"],
                     parsed_price_info["price_numeric"]

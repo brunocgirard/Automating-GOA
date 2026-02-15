@@ -238,23 +238,47 @@ def build_html(rows):
       margin: 6px 0 4px;
     }}
     .field-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 10px 12px;
     }}
     .checkbox-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px 10px;
+    }}
+    .field-grid > .field {{
+      flex: 1 1 calc((100% - 36px) / 4);
+      max-width: calc((100% - 36px) / 4);
+      min-width: 260px;
+    }}
+    .checkbox-grid > .field {{
+      flex: 1 1 calc((100% - 30px) / 4);
+      max-width: calc((100% - 30px) / 4);
+      min-width: 220px;
+    }}
+    @supports (display: grid) {{
+      .field-grid {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      }}
+      .checkbox-grid {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }}
+      .field-grid > .field,
+      .checkbox-grid > .field {{
+        max-width: none;
+        min-width: 0;
+      }}
     }}
     .field {{
       border-left: 3px solid #f3f3f3;
-    }}
-    .field {{
       display: grid;
       grid-template-rows: auto auto auto;
       gap: 4px;
       padding: 10px;
+      border: 1px solid #cdd4e0;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: #fff;
@@ -428,9 +452,15 @@ def build_html(rows):
         }}
         .section {{
             border: 1px solid #ccc;
+            break-before: page;
+            page-break-before: always;
             page-break-inside: auto;
             margin-bottom: 10px;
             box-shadow: none;
+        }}
+        .section:first-of-type {{
+            break-before: auto;
+            page-break-before: auto;
         }}
         .section-header {{
             page-break-after: avoid;
@@ -457,20 +487,79 @@ def build_html(rows):
             break-after: avoid;
             font-weight: bold;
         }}
+        .field-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 10px 12px;
+            page-break-inside: auto;
+            break-inside: auto;
+        }}
+        .checkbox-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 8px 10px;
+            page-break-inside: auto;
+            break-inside: auto;
+        }}
+        .field-grid::after,
+        .checkbox-grid::after {{
+            content: none;
+            display: none;
+            clear: none;
+        }}
+        .field-grid > .field,
+        .checkbox-grid > .field {{
+            float: none;
+            width: auto;
+            margin: 0;
+            max-width: none;
+            min-width: 0;
+        }}
         .field {{
-            border: none;
+            border: 1px solid #cdd4e0;
+            border: 1px solid var(--border);
+            border-left: 3px solid #f3f3f3;
+            border-radius: 6px;
+            background: #fff;
+            padding: 8px;
+            min-width: 0;
             break-inside: avoid;
             page-break-inside: avoid;
             margin-bottom: 4px;
         }}
-        .field-grid, .checkbox-grid {{
-            page-break-inside: auto;
+        .field .label {{
+            font-size: 11px;
         }}
         input, textarea {{
             background: transparent;
             border: none;
             border-bottom: 1px solid #ddd;
             color: #000;
+            font-size: 11px;
+            min-width: 0;
+        }}
+        .field.checkbox input[type="checkbox"] {{
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: 0;
+            opacity: 0;
+            pointer-events: none;
+        }}
+        .field.checkbox .label {{
+            position: relative;
+            padding-left: 1.3em;
+        }}
+        .field.checkbox .label::before {{
+            content: "\\2610";
+            position: absolute;
+            left: 0;
+            top: 0;
+            font-weight: 700;
+            color: #111;
+        }}
+        .field.checkbox input[type="checkbox"]:checked + .label::before {{
+            content: "\\2611";
         }}
         /* Prevent orphaned headers */
         h1, h2, .section-header, .group-title {{
@@ -485,7 +574,7 @@ def build_html(rows):
         }}
     }}
 
-    @media (max-width: 640px) {{
+    @media (max-width: 480px) {{
       body {{ padding: 12px; }}
       .section {{ padding: 12px; }}
       .field-grid,

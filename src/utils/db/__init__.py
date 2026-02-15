@@ -92,6 +92,12 @@ from .documents import (
     delete_document_content
 )
 
+# Shipping document workflow operations
+from .shipping import (
+    load_shipping_document,
+    save_shipping_document,
+)
+
 # Few-shot learning operations
 from .few_shot import (
     save_few_shot_example,
@@ -151,6 +157,10 @@ __all__ = [
     'save_document_content',
     'load_document_content',
     'delete_document_content',
+
+    # Shipping workflow operations
+    'load_shipping_document',
+    'save_shipping_document',
 
     # Few-shot learning operations
     'save_few_shot_example',

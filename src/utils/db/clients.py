@@ -28,7 +28,7 @@ def save_client_info(client_data: Dict[str, any], db_path: str = DB_PATH) -> boo
             return False
     conn = None
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_connection(db_path)
         cursor = conn.cursor()
         processing_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -111,7 +111,7 @@ def get_client_by_id(client_id: int, db_path: str = DB_PATH) -> Optional[Dict]:
     """
     conn = None
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM clients WHERE id = ?", (client_id,))
@@ -149,7 +149,7 @@ def update_client_record(client_id: int, data_to_update: Dict[str, str], db_path
 
     conn = None
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_connection(db_path)
         cursor = conn.cursor()
 
         fields = []
@@ -203,7 +203,7 @@ def load_all_clients(db_path: str = DB_PATH) -> List[Dict]:
     conn = None
     clients = []
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         # Select all relevant fields for client list display
@@ -212,7 +212,8 @@ def load_all_clients(db_path: str = DB_PATH) -> List[Dict]:
                sold_to_address, ship_to_address, telephone, customer_contact_person,
                customer_po, processing_date, incoterm, company, serial_number,
                ax, ox, via, tax_id, hs_code, customer_number, order_date
-        FROM clients ORDER BY processing_date DESC
+        FROM clients
+        ORDER BY processing_date DESC, id DESC
         """)
         rows = cursor.fetchall()
         for row in rows:
@@ -248,7 +249,7 @@ def delete_client_record(client_id: int, db_path: str = DB_PATH) -> bool:
 
     conn = None
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_connection(db_path)
         cursor = conn.cursor()
 
         # Get quote_ref for the client_id to delete associated priced_items

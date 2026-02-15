@@ -1,3 +1,19 @@
+"""
+LLM Handler Module - ACTIVE (Refactoring Reverted)
+
+This is the primary LLM integration module for the GOA Document Assistant.
+
+NOTE: A refactoring to src.llm was attempted but rolled back due to:
+- Performance issues (slower API responses)
+- Quality degradation (blank forms, missing fields)
+- Behavior differences despite code equivalence attempts
+
+This monolithic file remains the production implementation.
+See REFACTORING_ROLLBACK.md for details.
+
+For future maintainers: This file works. Don't refactor without extensive testing.
+"""
+
 import re
 import os
 import google.generativeai as genai
@@ -5,7 +21,7 @@ from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional, Tuple
 import json
 import traceback # For more detailed error logging
- 
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.output_parsers import PydanticOutputParser
 from src.utils.few_shot_learning import (

@@ -188,17 +188,17 @@ def build_html(rows):
         if row["section"] not in seen:
             section_order.append(row["section"])
             seen.add(row["section"])
-            
+
     body = "\n".join(render_section(name, sections[name]) for name in section_order)
-    
-    return f"""<!doctype html>
+
+    template = r"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>General Order Acknowledgement</title>
   <style>
-    :root {{
+    :root {
       --bg: #f3f5f8;
       --card: #ffffff;
       --ink: #1f2430;
@@ -206,41 +206,41 @@ def build_html(rows):
       --accent: #c00000;      /* template docx red accent */
       --header-fill: #e5e5e5; /* template docx gray strip */
       --border: #cdd4e0;
-    }}
-    * {{ box-sizing: border-box; font-family: "Calibri", "Segoe UI", Arial, sans-serif; }}
-    body {{
+    }
+    * { box-sizing: border-box; font-family: "Calibri", "Segoe UI", Arial, sans-serif; }
+    body {
       margin: 0;
       padding: 24px;
       background: var(--bg);
       color: var(--ink);
-    }}
-    .page {{ max-width: 1200px; margin: 0 auto; }}
-    header {{ margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }}
-    h1 {{
+    }
+    .page { max-width: 1200px; margin: 0 auto; }
+    header { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+    h1 {
       margin: 0 0 6px;
       font-size: 26px;
       color: var(--accent);
       font-weight: 700;
       letter-spacing: -0.015em;
-    }}
-    .subtitle {{ color: var(--muted); margin: 0 0 8px; font-size: 14px; }}
-    .note {{ font-size: 13px; color: var(--muted); margin: 3px 0; }}
-    .divider {{
+    }
+    .subtitle { color: var(--muted); margin: 0 0 8px; font-size: 14px; }
+    .note { font-size: 13px; color: var(--muted); margin: 3px 0; }
+    .divider {
       height: 6px;
       background: var(--header-fill);
       border: 1px solid var(--border);
       border-radius: 6px;
       margin-bottom: 12px;
-    }}
-    .section {{
+    }
+    .section {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
       margin-bottom: 14px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.04);
       overflow: hidden;
-    }}
-    .section-header {{
+    }
+    .section-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -252,40 +252,40 @@ def build_html(rows):
       border-top-right-radius: 10px;
       cursor: pointer;
       user-select: none;
-    }}
-    .section-header.active + .section-content {{
+    }
+    .section-header.active + .section-content {
         /* styles when open */
-    }}
-    .section.collapsed > .section-header {{
+    }
+    .section.collapsed > .section-header {
         border-bottom-color: transparent;
-    }}
-    .toggle-icon {{
+    }
+    .toggle-icon {
         transition: transform 0.3s ease;
         font-weight: bold;
         font-size: 20px;
         color: var(--muted);
-    }}
-    .section-header.active .toggle-icon {{
+    }
+    .section-header.active .toggle-icon {
         transform: rotate(45deg);
-    }}
-    .section-content {{
+    }
+    .section-content {
         padding: 16px 14px;
         overflow: hidden;
         max-height: 10000px; /* A large enough value to not clip content */
         transition: max-height 0.4s ease-in-out, padding 0.3s ease-in-out;
-    }}
-    .section.collapsed > .section-content {{
+    }
+    .section.collapsed > .section-content {
         max-height: 0;
         padding-top: 0;
         padding-bottom: 0;
-    }}
-    .section h2 {{
+    }
+    .section h2 {
       margin: 0;
       font-size: 18px;
       color: var(--accent);
       font-weight: 700;
-    }}
-    .pill {{
+    }
+    .pill {
       background: var(--header-fill);
       color: var(--accent);
       padding: 4px 10px;
@@ -293,47 +293,71 @@ def build_html(rows):
       font-size: 11px;
       font-weight: 700;
       border: 1px solid var(--border);
-    }}
-    .group {{ margin: 10px 14px 0 14px; }}
-    .group-title {{
+    }
+    .group { margin: 10px 14px 0 14px; }
+    .group-title {
       font-size: 13px;
       font-weight: 700;
       color: var(--muted);
       margin: 6px 0 4px;
-    }}
-    .field-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+    .field-grid {
+      display: flex;
+      flex-wrap: wrap;
       gap: 10px 12px;
-    }}
-    .checkbox-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .checkbox-grid {
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px 10px;
-    }}
-    .field {{
+    }
+    .field-grid > .field {
+      flex: 1 1 calc((100% - 36px) / 4);
+      max-width: calc((100% - 36px) / 4);
+      min-width: 260px;
+    }
+    .checkbox-grid > .field {
+      flex: 1 1 calc((100% - 30px) / 4);
+      max-width: calc((100% - 30px) / 4);
+      min-width: 220px;
+    }
+    @supports (display: grid) {
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      }
+      .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      .field-grid > .field,
+      .checkbox-grid > .field {
+        max-width: none;
+        min-width: 0;
+      }
+    }
+    .field {
       border-left: 3px solid #f3f3f3;
-    }}
-    .field {{
       display: grid;
       grid-template-rows: auto auto auto;
       gap: 4px;
       padding: 10px;
+      border: 1px solid #cdd4e0;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: #fff;
-    }}
-    .field.checkbox {{
+    }
+    .field.checkbox {
       grid-template-columns: auto 1fr auto;
       grid-template-rows: auto;
       align-items: center;
       gap: 8px;
       background: #f8f9fc;
       border-color: #d5dbe7;
-    }}
-    .field.checkbox .label {{ font-weight: 600; color: var(--ink); }}
-    .label {{ font-size: 13px; color: var(--ink); font-weight: 600; }}
-    input[type="text"], input[type="number"], textarea {{
+    }
+    .field.checkbox .label { font-weight: 600; color: var(--ink); }
+    .label { font-size: 13px; color: var(--ink); font-weight: 600; }
+    input[type="text"], input[type="number"], textarea {
       width: 100%;
       padding: 7px 9px;
       border-radius: 4px;
@@ -342,16 +366,16 @@ def build_html(rows):
       font-size: 14px;
       color: var(--ink);
       font-family: inherit;
-    }}
-    textarea {{ resize: vertical; }}
-    input:focus {{ outline: 2px solid #b5c7e3; }}
-    .token {{
+    }
+    textarea { resize: vertical; }
+    input:focus { outline: 2px solid #b5c7e3; }
+    .token {
       font-size: 12px;
       color: var(--muted);
       font-family: "Consolas", "SFMono-Regular", monospace;
       display: none; /* hide placeholders */
-    }}
-    .header-fill {{
+    }
+    .header-fill {
       background: var(--header-fill);
       border: 1px solid var(--border);
       border-radius: 6px;
@@ -360,33 +384,33 @@ def build_html(rows):
       color: var(--accent);
       display: inline-block;
       margin-top: 6px;
-    }}
-    input[type="checkbox"] {{
+    }
+    input[type="checkbox"] {
       width: 18px;
       height: 18px;
-    }}
+    }
     
     /* Styles for Read-Only / Filled View */
-    body.readonly input {{
+    body.readonly input {
         border: none;
         background: transparent;
         pointer-events: none;
-    }}
-    body.readonly input[type="checkbox"] {{
+    }
+    body.readonly input[type="checkbox"] {
         /* Custom styling for checked box in print mode? Or just keep browser default */
-    }}
-    body.readonly .field {{
+    }
+    body.readonly .field {
         border: 1px solid transparent; /* Hide border or make lighter */
         box-shadow: none;
         background: transparent;
-    }}
-    body.readonly .section {{
+    }
+    body.readonly .section {
         box-shadow: none;
         border: 1px solid #eee;
-    }}
+    }
 
     /* Edit Mode Styles */
-    .delete-btn {{
+    .delete-btn {
         display: none;
         padding: 4px 8px;
         background: #dc2626;
@@ -398,516 +422,1239 @@ def build_html(rows):
         font-weight: bold;
         opacity: 0;
         transition: opacity 0.2s;
-    }}
-    body.edit-mode .delete-btn {{
+    }
+    body.edit-mode .delete-btn {
         display: inline-block;
-    }}
+    }
     body.edit-mode .section:hover .delete-section-btn,
-    body.edit-mode .field:hover .delete-field-btn {{
+    body.edit-mode .field:hover .delete-field-btn {
         opacity: 1;
-    }}
+    }
     body.edit-mode .section-header h2[contenteditable="true"],
     body.edit-mode .field .label[contenteditable="true"],
-    body.edit-mode .group-title[contenteditable="true"] {{
+    body.edit-mode .group-title[contenteditable="true"] {
         cursor: text;
         padding: 4px 6px;
         border-radius: 4px;
         transition: background 0.2s, outline 0.2s;
         display: inline-block;
         min-width: 50px;
-    }}
+    }
     body.edit-mode .section-header h2[contenteditable="true"]:hover,
     body.edit-mode .field .label[contenteditable="true"]:hover,
-    body.edit-mode .group-title[contenteditable="true"]:hover {{
+    body.edit-mode .group-title[contenteditable="true"]:hover {
         background: rgba(37, 99, 235, 0.15);
         outline: 2px dashed #2563eb;
-    }}
+    }
     body.edit-mode .section-header h2[contenteditable="true"]:focus,
     body.edit-mode .field .label[contenteditable="true"]:focus,
-    body.edit-mode .group-title[contenteditable="true"]:focus {{
+    body.edit-mode .group-title[contenteditable="true"]:focus {
         background: rgba(37, 99, 235, 0.25);
         outline: 2px solid #2563eb;
-    }}
+    }
     /* Add visual indicator for editable group titles */
-    body.edit-mode .group-title[contenteditable="true"]::before {{
+    body.edit-mode .group-title[contenteditable="true"]::before {
         content: '✎ ';
         color: #2563eb;
         font-weight: bold;
         margin-right: 4px;
         opacity: 0.6;
-    }}
-    .delete-section-btn {{
+    }
+    .delete-section-btn {
         margin-left: auto;
-    }}
-    .delete-field-btn {{
+    }
+    .delete-field-btn {
         position: absolute;
         top: 4px;
         right: 4px;
-    }}
-    body.edit-mode .field {{
+    }
+    body.edit-mode .field {
         position: relative;
-    }}
-    body.edit-mode .section {{
+    }
+    body.edit-mode .section {
         border: 2px dashed transparent;
         transition: border-color 0.2s;
-    }}
-    body.edit-mode .section:hover {{
+    }
+    body.edit-mode .section:hover {
         border-color: #cbd5e1;
-    }}
+    }
 
     /* Section Controls Styling */
-    .section-controls button {{
+    .section-controls button {
         transition: all 0.2s ease;
-    }}
-    .section-controls button:hover {{
+    }
+    .section-controls button:hover {
         opacity: 0.9;
         transform: translateY(-1px);
         box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    }}
-    .section-controls button:active {{
+    }
+    .section-controls button:active {
         transform: translateY(0);
         box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-    }}
+    }
 
-    /* Print Styles - Enhanced for PDF Export */
-    @page {{
+    /* User-friendliness upgrades */
+    .page {
+      max-width: 1520px;
+    }
+    .sticky-toolbar {
+      position: sticky;
+      top: 8px;
+      z-index: 120;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 8px 20px rgba(31, 36, 48, 0.08);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .toolbar-title-wrap {
+      min-width: 220px;
+      flex: 1 1 320px;
+    }
+    .toolbar-title-wrap .subtitle {
+      margin: 2px 0 0;
+      font-size: 12px;
+    }
+    .toolbar-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      flex: 2 1 540px;
+    }
+    .toolbar-btn {
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 8px 14px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.01em;
+      transition: all 0.18s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    }
+    .toolbar-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
+    }
+    .toolbar-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    }
+    .toolbar-btn.compact-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .btn-edit {
+      background: #2563eb;
+    }
+    .btn-edit.is-active {
+      background: #dc2626;
+    }
+    .btn-download {
+      background: #059669;
+    }
+    .btn-save {
+      background: #0891b2;
+    }
+    .btn-print {
+      background: #c00000;
+    }
+    .btn-expand {
+      background: #10b981;
+    }
+    .btn-collapse {
+      background: #6b7280;
+    }
+    .btn-neutral {
+      background: #475569;
+    }
+    .layout-shell {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .toc-sidebar {
+      position: sticky;
+      top: 112px;
+      align-self: start;
+      max-height: calc(100vh - 130px);
+      overflow: auto;
+    }
+    .toc-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+    }
+    .toc-title {
+      margin: 0 0 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .toc-overall-progress {
+      margin: 0 0 10px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      background: #f8fafc;
+      color: #1f2937;
+      font-weight: 700;
+    }
+    .toc-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .toc-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      text-decoration: none;
+      color: #1f2937;
+      background: #fff;
+      padding: 6px 8px;
+      font-size: 12px;
+      transition: all 0.16s ease;
+    }
+    .toc-link:hover {
+      border-color: #94a3b8;
+      background: #f8fafc;
+    }
+    .toc-link.active {
+      border-color: #ef4444;
+      background: #fef2f2;
+      color: #991b1b;
+      font-weight: 700;
+    }
+    .toc-link.hidden {
+      display: none;
+    }
+    .toc-link-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .toc-link-count {
+      color: #475569;
+      font-weight: 700;
+      font-size: 11px;
+      flex: 0 0 auto;
+    }
+    .form-main {
+      min-width: 0;
+    }
+    .section-controls {
+      position: sticky;
+      top: 108px;
+      z-index: 110;
+      margin-bottom: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      backdrop-filter: blur(2px);
+    }
+    .search-controls,
+    .quick-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #fieldSearchInput {
+      width: min(420px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      padding: 8px 10px;
+      background: #fff;
+    }
+    .status-pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 10px;
+      white-space: nowrap;
+    }
+    .legend-chip {
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .legend-filled {
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+    }
+    .legend-optional {
+      background: #fef9c3;
+      border-color: #fde047;
+      color: #854d0e;
+    }
+    .legend-required {
+      background: #fee2e2;
+      border-color: #fca5a5;
+      color: #991b1b;
+    }
+    .autosave-status {
+      color: #0f172a;
+    }
+    .required-badge {
+      color: #b91c1c;
+      margin-left: 4px;
+      font-weight: 700;
+    }
+    .section-progress {
+      margin-left: auto;
+      margin-right: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      color: #334155;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .section-progress.progress-alert {
+      border-color: #fca5a5;
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+    .section-progress.progress-complete {
+      border-color: #86efac;
+      background: #dcfce7;
+      color: #166534;
+    }
+    .field {
+      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .field.state-filled {
+      border-color: #86efac;
+      border-left-color: #22c55e;
+      background: #f0fdf4;
+    }
+    .field.state-empty-optional {
+      border-color: #fde047;
+      border-left-color: #eab308;
+      background: #fffbeb;
+    }
+    .field.state-empty-required {
+      border-color: #fca5a5;
+      border-left-color: #ef4444;
+      background: #fef2f2;
+    }
+    .field.field-match {
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.26);
+    }
+    .field.field-hidden-by-search,
+    .group.group-hidden-by-search,
+    .section.section-hidden-by-search {
+      display: none !important;
+    }
+    @media (max-width: 768px) {
+      .layout-shell {
+        grid-template-columns: 1fr;
+      }
+      .toc-sidebar {
+        display: none;
+      }
+      .section-controls {
+        top: 98px;
+      }
+    }
+
+    /* Print Styles */
+    @page {
         size: letter portrait;
         margin: 10mm;
-    }}
+    }
 
-    @media print {{
-        .no-print {{ display: none !important; }}
-        body {{
-            background: white;
-            padding: 0;
-            margin: 0;
+    @media print {
+        .no-print { display: none !important; }
+        body {
+            background: #fff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
-            color-adjust: exact;
-        }}
-        .page {{
-            max-width: 100%;
-            margin: 0;
-            width: 100%;
-        }}
-        .section {{
-            border: 1px solid #ccc;
-            page-break-inside: auto;
-            margin-bottom: 10px;
-            box-shadow: none;
-        }}
-        .section-header {{
-            page-break-after: avoid;
-            break-after: avoid;
-            page-break-inside: avoid;
-            background: #e5e5e5 !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }}
-        /* Ensure sections are visible (not collapsed) */
-        .section.collapsed > .section-content {{
+        }
+        .section.collapsed > .section-content {
             max-height: none !important;
             padding: 16px 14px !important;
-        }}
-        .section-header .toggle-icon {{
-            display: none;
-        }}
-        .group {{
-            page-break-inside: auto;
-            margin-bottom: 8px;
-        }}
-        .group-title {{
-            page-break-after: avoid;
-            break-after: avoid;
-            font-weight: bold;
-        }}
-        .field {{
-            border: none;
-            break-inside: avoid;
-            page-break-inside: avoid;
-            margin-bottom: 4px;
-        }}
-        .field-grid, .checkbox-grid {{
-            page-break-inside: auto;
-        }}
-        input, textarea {{
-            background: transparent;
-            border: none;
-            border-bottom: 1px solid #ddd;
-            color: #000;
-        }}
-        /* Prevent orphaned headers */
-        h1, h2, .section-header, .group-title {{
-            orphans: 3;
-            widows: 3;
-        }}
-        /* Ensure proper spacing */
-        .divider {{
-            background: #e5e5e5 !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }}
-    }}
+        }
+        .section-header .toggle-icon {
+            display: none !important;
+        }
+    }
 
-    @media (max-width: 640px) {{
-      body {{ padding: 12px; }}
-      .section {{ padding: 12px; }}
+    @media (max-width: 480px) {
+      body { padding: 12px; }
+      .section { padding: 12px; }
       .field-grid,
-      .checkbox-grid {{
+      .checkbox-grid {
         grid-template-columns: 1fr;
-      }}
-      input[type="text"], input[type="number"] {{
+      }
+      input[type="text"], input[type="number"] {
         padding: 10px 12px;
         font-size: 15px;
-      }}
-      .field {{
+      }
+      .field {
         gap: 6px;
-      }}
-      .field.checkbox {{
+      }
+      .field.checkbox {
         grid-template-columns: auto 1fr;
         grid-template-rows: auto auto;
         row-gap: 4px;
-      }}
-    }}
+      }
+    }
   </style>
 </head>
   <body>
     <div class="page">
-      <header>
-        <h1>General Order Acknowledgement</h1>
-        <div class="no-print" style="display: flex; gap: 10px;">
-          <button id="editModeBtn" onclick="toggleEditMode()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Enable Edit Mode</button>
-          <button id="downloadBtn" onclick="downloadModifiedHTML()" style="padding: 8px 16px; background: #059669; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; display: none;">Download Modified Form</button>
-          <button onclick="saveFilledFormHTML()" style="padding: 8px 16px; background: #0891b2; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Save Filled Form (HTML)</button>
-          <button onclick="generatePDF()" style="padding: 8px 16px; background: #c00000; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Print to PDF</button>
+      <header class="sticky-toolbar no-print">
+        <div class="toolbar-title-wrap">
+          <h1>General Order Acknowledgement</h1>
+          <p class="subtitle">Validation highlights, progress tracking, and autosave are enabled.</p>
+        </div>
+        <div class="toolbar-actions">
+          <button id="editModeBtn" onclick="toggleEditMode()" class="toolbar-btn btn-edit">Enable Edit Mode</button>
+          <button id="downloadBtn" onclick="downloadModifiedHTML()" class="toolbar-btn btn-download" style="display: none;">Download Modified Form</button>
+          <button onclick="saveFilledFormHTML()" class="toolbar-btn btn-save">Save Filled Form (HTML)</button>
+          <button onclick="generatePDF()" class="toolbar-btn btn-print">Print to PDF</button>
         </div>
       </header>
       <div class="divider"></div>
 
-      <!-- Section Controls -->
-      <div class="section-controls no-print" style="margin-bottom: 14px; display: flex; gap: 10px; justify-content: flex-end;">
-        <button onclick="expandAllSections()" style="padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 14px;">Expand All Sections</button>
-        <button onclick="collapseAllSections()" style="padding: 6px 14px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 14px;">Collapse All Sections</button>
-      </div>
+      <div class="layout-shell">
+        <aside class="toc-sidebar no-print">
+          <div class="toc-card">
+            <p class="toc-title">Table of Contents</p>
+            <p id="tocOverallProgress" class="toc-overall-progress">0 of 0 fields filled</p>
+            <nav id="tocNav" class="toc-nav"></nav>
+          </div>
+        </aside>
 
-      {body}
+        <div class="form-main">
+          <div class="section-controls no-print">
+            <div class="search-controls">
+              <input id="fieldSearchInput" type="text" placeholder="Search fields, values, or field keys..." />
+              <button type="button" onclick="clearFieldSearch()" class="toolbar-btn btn-neutral compact-btn">Clear</button>
+              <span id="searchSummary" class="status-pill">Showing all fields</span>
+            </div>
+            <div class="quick-controls">
+              <span id="overallProgress" class="status-pill status-progress">0 of 0 fields filled</span>
+              <span class="legend-chip legend-filled">Filled</span>
+              <span class="legend-chip legend-optional">Optional Empty</span>
+              <span class="legend-chip legend-required">Required Empty</span>
+              <span id="autosaveStatus" class="status-pill autosave-status">Autosave ready</span>
+              <button onclick="expandAllSections()" class="toolbar-btn btn-expand compact-btn">Expand All Sections</button>
+              <button onclick="collapseAllSections()" class="toolbar-btn btn-collapse compact-btn">Collapse All Sections</button>
+              <button onclick="clearAutoSavedDraft()" class="toolbar-btn btn-neutral compact-btn">Clear Local Draft</button>
+            </div>
+          </div>
+
+      
+    
+
+    
+__FORM_BODY__
+
+    
+
+    
+    </div>
+    </div>
     </div>
     <script>
-      document.addEventListener('DOMContentLoaded', function () {{
-          const sections = document.querySelectorAll('.section');
-      
-          sections.forEach((section, index) => {{
-              const header = section.querySelector('.section-header');
-              if (header) {{
-                  // Create content wrapper
-                  const content = document.createElement('div');
-                  content.className = 'section-content';
-      
-                  // Move all group elements into the content wrapper
-                  const groups = Array.from(section.children).filter(child => child.classList.contains('group'));
-                  groups.forEach(group => {{
-                      content.appendChild(group);
-                  }});
-                  section.appendChild(content);
+      const REQUIRED_FIELD_KEYS = new Set([
+        "f0001",
+        "f0002",
+        "f0003",
+        "f0004",
+        "f0005",
+        "f0006",
+        "f0007",
+        "f0008",
+        "f0014",
+      ]);
+      const CHECKBOX_TRUE_VALUES = new Set(["YES", "TRUE", "ON", "1", "Y", "CHECKED"]);
+      const AUTO_SAVE_KEY = "goa_form_autosave_v1";
+      const AUTO_SAVE_DEBOUNCE_MS = 1200;
+      let autoSaveTimerId = null;
+      let searchDebounceId = null;
+      let scrollTicking = false;
 
-                  // Add toggle icon only if it doesn't already exist
-                  if (!header.querySelector('.toggle-icon')) {{
-                      const icon = document.createElement('span');
-                      icon.className = 'toggle-icon';
-                      icon.textContent = '+';
-                      header.appendChild(icon);
-                  }}
-
-                  // Add click listener
-                  header.addEventListener('click', () => {{
-                      section.classList.toggle('collapsed');
-                      header.classList.toggle('active');
-                  }});
-      
-                  // Initially collapse all but the first section
-                  if (index > 0) {{
-                      section.classList.add('collapsed');
-                  }} else {{
-                      header.classList.add('active');
-                  }}
-              }}
-          }});
-
-          // Add delete buttons and make elements editable for edit mode
+      document.addEventListener("DOMContentLoaded", function () {
+          setupSections();
+          tagRequiredFields();
           initializeEditMode();
-      }});
+          initializeSearch();
+          initializeFieldListeners();
+          assignSectionIds();
+          buildToc();
+          refreshFormState();
+          restoreAutoSavedDraft();
+          updateActiveSectionFromScroll();
 
-      // Initialize edit mode features
-      function initializeEditMode() {{
-          const sections = document.querySelectorAll('.section');
+          window.addEventListener("scroll", handleScroll, { passive: true });
+          document.addEventListener("visibilitychange", () => {
+              if (document.visibilityState === "hidden") {
+                  saveDraftToLocalStorage();
+              }
+          });
+      });
 
-          sections.forEach(section => {{
-              const header = section.querySelector('.section-header');
-              const h2 = header.querySelector('h2');
+      function setupSections() {
+          const sections = document.querySelectorAll(".section");
+          sections.forEach((section, index) => {
+              const header = section.querySelector(".section-header");
+              if (!header) return;
 
-              // Add delete button for section
-              const deleteSecBtn = document.createElement('button');
-              deleteSecBtn.className = 'delete-btn delete-section-btn';
-              deleteSecBtn.textContent = '× Delete Section';
-              deleteSecBtn.onclick = (e) => {{
-                  e.stopPropagation();
-                  deleteSection(section);
-              }};
-              header.appendChild(deleteSecBtn);
+              if (!section.querySelector(":scope > .section-content")) {
+                  const content = document.createElement("div");
+                  content.className = "section-content";
+                  const groups = Array.from(section.children).filter((child) =>
+                      child.classList.contains("group")
+                  );
+                  groups.forEach((group) => {
+                      content.appendChild(group);
+                  });
+                  section.appendChild(content);
+              }
 
-              // Add delete buttons for fields
-              const fields = section.querySelectorAll('.field');
-              fields.forEach(field => {{
-                  const deleteFieldBtn = document.createElement('button');
-                  deleteFieldBtn.className = 'delete-btn delete-field-btn';
-                  deleteFieldBtn.textContent = '×';
-                  deleteFieldBtn.onclick = (e) => {{
-                      e.stopPropagation();
+              if (!header.querySelector(".section-progress")) {
+                  const progress = document.createElement("span");
+                  progress.className = "section-progress";
+                  progress.textContent = "0 of 0 fields filled";
+                  header.appendChild(progress);
+              }
+
+              if (!header.querySelector(".toggle-icon")) {
+                  const icon = document.createElement("span");
+                  icon.className = "toggle-icon";
+                  icon.textContent = "+";
+                  header.appendChild(icon);
+              }
+
+              if (!header.dataset.toggleBound) {
+                  header.addEventListener("click", (event) => {
+                      if (event.target.closest(".delete-btn")) return;
+                      section.classList.toggle("collapsed");
+                      header.classList.toggle("active");
+                  });
+                  header.dataset.toggleBound = "1";
+              }
+
+              if (index > 0) {
+                  section.classList.add("collapsed");
+              } else {
+                  header.classList.add("active");
+              }
+          });
+      }
+
+      function slugify(text) {
+          return (text || "")
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "") || "section";
+      }
+
+      function assignSectionIds() {
+          const used = new Map();
+          document.querySelectorAll(".section").forEach((section, index) => {
+              const title = section.querySelector(".section-header h2")?.textContent?.trim() || `Section ${index + 1}`;
+              const base = slugify(title);
+              const count = (used.get(base) || 0) + 1;
+              used.set(base, count);
+              section.id = count === 1 ? base : `${base}-${count}`;
+          });
+      }
+
+      function buildToc() {
+          const nav = document.getElementById("tocNav");
+          if (!nav) return;
+          nav.innerHTML = "";
+
+          document.querySelectorAll(".section").forEach((section) => {
+              const title = section.querySelector(".section-header h2")?.textContent?.trim() || section.id;
+              const link = document.createElement("a");
+              link.className = "toc-link";
+              link.href = `#${section.id}`;
+              link.dataset.sectionId = section.id;
+
+              const titleEl = document.createElement("span");
+              titleEl.className = "toc-link-title";
+              titleEl.textContent = title;
+
+              const countEl = document.createElement("span");
+              countEl.className = "toc-link-count";
+              countEl.textContent = "0/0";
+
+              link.appendChild(titleEl);
+              link.appendChild(countEl);
+              link.addEventListener("click", (event) => {
+                  event.preventDefault();
+                  expandSection(section);
+                  section.scrollIntoView({ behavior: "smooth", block: "start" });
+                  setActiveTocLink(section.id);
+              });
+
+              nav.appendChild(link);
+          });
+      }
+
+      function setActiveTocLink(sectionId) {
+          document.querySelectorAll(".toc-link").forEach((link) => {
+              link.classList.toggle("active", link.dataset.sectionId === sectionId);
+          });
+      }
+
+      function handleScroll() {
+          if (scrollTicking) return;
+          scrollTicking = true;
+          window.requestAnimationFrame(() => {
+              updateActiveSectionFromScroll();
+              scrollTicking = false;
+          });
+      }
+
+      function updateActiveSectionFromScroll() {
+          const visibleSections = Array.from(document.querySelectorAll(".section"))
+              .filter((section) => !section.classList.contains("section-hidden-by-search"));
+          if (visibleSections.length === 0) return;
+
+          let active = visibleSections[0];
+          const threshold = 170;
+          visibleSections.forEach((section) => {
+              const top = section.getBoundingClientRect().top;
+              if (top - threshold <= 0) {
+                  active = section;
+              }
+          });
+          setActiveTocLink(active.id);
+      }
+
+      function expandSection(section) {
+          section.classList.remove("collapsed");
+          const header = section.querySelector(".section-header");
+          if (header) header.classList.add("active");
+      }
+
+      function getFieldInput(field) {
+          return field.querySelector("input[name], textarea[name], select[name]");
+      }
+
+      function getFieldKey(field) {
+          const input = getFieldInput(field);
+          if (input?.name) return input.name;
+          const placeholder = field.getAttribute("data-placeholder") || "";
+          return placeholder.replace("{{", "").replace("}}", "").trim();
+      }
+
+      function tagRequiredFields() {
+          document.querySelectorAll("label.field").forEach((field) => {
+              const key = getFieldKey(field);
+              const required = REQUIRED_FIELD_KEYS.has(key);
+              field.dataset.required = required ? "true" : "false";
+
+              const label = field.querySelector(".label");
+              if (!label) return;
+              const existing = label.querySelector(".required-badge");
+              if (required && !existing) {
+                  const badge = document.createElement("span");
+                  badge.className = "required-badge";
+                  badge.textContent = "*";
+                  badge.title = "Required field";
+                  label.appendChild(badge);
+              }
+              if (!required && existing) {
+                  existing.remove();
+              }
+          });
+      }
+
+      function isFieldRequired(field) {
+          return field.dataset.required === "true";
+      }
+
+      function isFieldFilled(field) {
+          const checkbox = field.querySelector('input[type="checkbox"]');
+          if (checkbox) return checkbox.checked;
+
+          const formatted = field.querySelector(".formatted-list");
+          if (formatted) {
+              const value = formatted.dataset.fieldValue || formatted.textContent || "";
+              return value.trim().length > 0;
+          }
+
+          const input = getFieldInput(field);
+          if (!input) return false;
+          return (input.value || "").trim().length > 0;
+      }
+
+      function getFieldValueText(field) {
+          const checkbox = field.querySelector('input[type="checkbox"]');
+          if (checkbox) return checkbox.checked ? "YES" : "NO";
+
+          const formatted = field.querySelector(".formatted-list");
+          if (formatted) return (formatted.dataset.fieldValue || formatted.textContent || "").trim();
+
+          const input = getFieldInput(field);
+          return (input?.value || "").trim();
+      }
+
+      function updateFieldValidation(field) {
+          const filled = isFieldFilled(field);
+          const required = isFieldRequired(field);
+          field.classList.remove("state-filled", "state-empty-optional", "state-empty-required");
+          if (filled) {
+              field.classList.add("state-filled");
+          } else if (required) {
+              field.classList.add("state-empty-required");
+          } else {
+              field.classList.add("state-empty-optional");
+          }
+      }
+
+      function updateProgressIndicators() {
+          let overallTotal = 0;
+          let overallFilled = 0;
+
+          document.querySelectorAll(".section").forEach((section) => {
+              const fields = Array.from(section.querySelectorAll("label.field"));
+              const filled = fields.filter((field) => isFieldFilled(field)).length;
+              const missingRequired = fields.filter((field) => isFieldRequired(field) && !isFieldFilled(field)).length;
+              const total = fields.length;
+
+              overallTotal += total;
+              overallFilled += filled;
+
+              const progress = section.querySelector(".section-progress");
+              if (progress) {
+                  progress.textContent = `${filled} of ${total} fields filled`;
+                  progress.classList.toggle("progress-alert", missingRequired > 0);
+                  progress.classList.toggle("progress-complete", total > 0 && filled === total);
+              }
+
+              const tocCount = document.querySelector(`.toc-link[data-section-id="${section.id}"] .toc-link-count`);
+              if (tocCount) {
+                  tocCount.textContent = `${filled}/${total}`;
+              }
+          });
+
+          const overallText = `${overallFilled} of ${overallTotal} fields filled`;
+          const overallEl = document.getElementById("overallProgress");
+          if (overallEl) overallEl.textContent = overallText;
+          const tocOverallEl = document.getElementById("tocOverallProgress");
+          if (tocOverallEl) tocOverallEl.textContent = overallText;
+      }
+
+      function fieldMatchesSearch(field, query) {
+          if (!query) return true;
+          const key = getFieldKey(field).toLowerCase();
+          const label = (field.querySelector(".label")?.textContent || "").toLowerCase();
+          const value = getFieldValueText(field).toLowerCase();
+          return key.includes(query) || label.includes(query) || value.includes(query);
+      }
+
+      function applySearchFilter(rawQuery) {
+          const query = (rawQuery || "").trim().toLowerCase();
+          let matches = 0;
+          let visibleSections = 0;
+
+          document.querySelectorAll(".section").forEach((section) => {
+              let sectionHasVisibleFields = false;
+
+              section.querySelectorAll(".group").forEach((group) => {
+                  let groupHasVisibleFields = false;
+
+                  group.querySelectorAll("label.field").forEach((field) => {
+                      const match = fieldMatchesSearch(field, query);
+                      field.classList.toggle("field-hidden-by-search", !match);
+                      field.classList.toggle("field-match", !!query && match);
+                      if (match) {
+                          groupHasVisibleFields = true;
+                          if (query) matches += 1;
+                      }
+                  });
+
+                  group.classList.toggle("group-hidden-by-search", !groupHasVisibleFields);
+                  if (groupHasVisibleFields) sectionHasVisibleFields = true;
+              });
+
+              section.classList.toggle("section-hidden-by-search", !sectionHasVisibleFields);
+              const tocLink = document.querySelector(`.toc-link[data-section-id="${section.id}"]`);
+              if (tocLink) {
+                  tocLink.classList.toggle("hidden", !sectionHasVisibleFields);
+              }
+              if (query && sectionHasVisibleFields) {
+                  expandSection(section);
+              }
+              if (sectionHasVisibleFields) visibleSections += 1;
+          });
+
+          const summary = document.getElementById("searchSummary");
+          if (summary) {
+              summary.textContent = query
+                  ? `${matches} matches in ${visibleSections} sections`
+                  : "Showing all fields";
+          }
+
+          updateActiveSectionFromScroll();
+      }
+
+      function initializeSearch() {
+          const searchInput = document.getElementById("fieldSearchInput");
+          if (!searchInput) return;
+
+          searchInput.addEventListener("input", () => {
+              window.clearTimeout(searchDebounceId);
+              searchDebounceId = window.setTimeout(() => {
+                  applySearchFilter(searchInput.value);
+              }, 80);
+          });
+          searchInput.addEventListener("keydown", (event) => {
+              if (event.key === "Escape") {
+                  event.preventDefault();
+                  clearFieldSearch();
+              }
+          });
+      }
+
+      function clearFieldSearch() {
+          const searchInput = document.getElementById("fieldSearchInput");
+          if (!searchInput) return;
+          searchInput.value = "";
+          applySearchFilter("");
+      }
+
+      function refreshFormState() {
+          document.querySelectorAll("label.field").forEach((field) => {
+              updateFieldValidation(field);
+          });
+          updateProgressIndicators();
+          const query = document.getElementById("fieldSearchInput")?.value || "";
+          applySearchFilter(query);
+      }
+
+      function initializeFieldListeners() {
+          document
+              .querySelectorAll("input[name], textarea[name], select[name]")
+              .forEach((field) => {
+                  field.addEventListener("input", () => {
+                      refreshFormState();
+                      queueAutoSave();
+                  });
+                  field.addEventListener("change", () => {
+                      refreshFormState();
+                      queueAutoSave();
+                  });
+              });
+      }
+
+      function queueAutoSave() {
+          updateAutosaveStatus("Autosave pending...");
+          window.clearTimeout(autoSaveTimerId);
+          autoSaveTimerId = window.setTimeout(saveDraftToLocalStorage, AUTO_SAVE_DEBOUNCE_MS);
+      }
+
+      function collectCurrentData() {
+          const data = {};
+          document
+              .querySelectorAll("input[name], textarea[name], select[name]")
+              .forEach((field) => {
+                  const key = field.name;
+                  if (!key) return;
+
+                  if (field.matches('input[type="checkbox"]')) {
+                      data[key] = field.checked ? "YES" : "NO";
+                      return;
+                  }
+
+                  data[key] = field.value || "";
+              });
+
+          document.querySelectorAll(".formatted-list[data-field-key]").forEach((field) => {
+              const key = field.dataset.fieldKey?.trim();
+              if (!key || data[key] !== undefined) return;
+              data[key] = field.dataset.fieldValue || field.textContent?.trim() || "";
+          });
+          return data;
+      }
+
+      function isMeaningfulValue(value) {
+          const normalized = String(value ?? "").trim();
+          if (!normalized) return false;
+          return normalized.toUpperCase() !== "NO";
+      }
+
+      function saveDraftToLocalStorage() {
+          try {
+              const payload = {
+                  savedAt: new Date().toISOString(),
+                  data: collectCurrentData(),
+              };
+              localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(payload));
+              const stamp = new Date(payload.savedAt).toLocaleTimeString();
+              updateAutosaveStatus(`Autosaved at ${stamp}`);
+          } catch {
+              updateAutosaveStatus("Autosave unavailable");
+          }
+      }
+
+      function applyDataToForm(data) {
+          document.querySelectorAll("input[name], textarea[name], select[name]").forEach((field) => {
+              const key = field.name;
+              if (!key || !(key in data)) return;
+              const next = String(data[key] ?? "");
+              if (field.matches('input[type="checkbox"]')) {
+                  field.checked = CHECKBOX_TRUE_VALUES.has(next.trim().toUpperCase());
+              } else {
+                  field.value = next;
+              }
+          });
+      }
+
+      function restoreAutoSavedDraft() {
+          try {
+              const raw = localStorage.getItem(AUTO_SAVE_KEY);
+              if (!raw) {
+                  updateAutosaveStatus("Autosave ready");
+                  return;
+              }
+
+              const parsed = JSON.parse(raw);
+              if (!parsed || typeof parsed !== "object" || !parsed.data || typeof parsed.data !== "object") {
+                  updateAutosaveStatus("Autosave ready");
+                  return;
+              }
+
+              const hasMeaningfulData = Object.values(parsed.data).some((value) => isMeaningfulValue(value));
+              if (!hasMeaningfulData) {
+                  updateAutosaveStatus("Autosave ready");
+                  return;
+              }
+
+              const savedAt = parsed.savedAt ? new Date(parsed.savedAt) : null;
+              const promptText = savedAt
+                  ? `Restore autosaved draft from ${savedAt.toLocaleString()}?`
+                  : "Restore autosaved draft?";
+              if (!window.confirm(promptText)) {
+                  updateAutosaveStatus(savedAt ? `Draft available (${savedAt.toLocaleTimeString()})` : "Draft available");
+                  return;
+              }
+
+              applyDataToForm(parsed.data);
+              refreshFormState();
+              updateAutosaveStatus(savedAt ? `Restored draft (${savedAt.toLocaleTimeString()})` : "Restored draft");
+          } catch {
+              updateAutosaveStatus("Autosave ready");
+          }
+      }
+
+      function clearAutoSavedDraft() {
+          try {
+              localStorage.removeItem(AUTO_SAVE_KEY);
+              updateAutosaveStatus("Local draft cleared");
+          } catch {
+              updateAutosaveStatus("Unable to clear local draft");
+          }
+      }
+
+      function updateAutosaveStatus(text) {
+          const statusEl = document.getElementById("autosaveStatus");
+          if (!statusEl) return;
+          statusEl.textContent = text;
+      }
+
+      function bindEditableChangeHandlers() {
+          const refreshFromEdit = () => {
+              assignSectionIds();
+              buildToc();
+              refreshFormState();
+              queueAutoSave();
+          };
+
+          document.querySelectorAll(".section-header h2, .group-title, .field .label").forEach((el) => {
+              if (el.dataset.editBound) return;
+              el.addEventListener("input", refreshFromEdit);
+              el.dataset.editBound = "1";
+          });
+      }
+
+      function initializeEditMode() {
+          document.querySelectorAll(".section").forEach((section) => {
+              const header = section.querySelector(".section-header");
+              if (!header) return;
+
+              if (!header.querySelector(".delete-section-btn")) {
+                  const deleteSectionButton = document.createElement("button");
+                  deleteSectionButton.className = "delete-btn delete-section-btn";
+                  deleteSectionButton.type = "button";
+                  deleteSectionButton.textContent = "x Delete Section";
+                  deleteSectionButton.onclick = (event) => {
+                      event.stopPropagation();
+                      deleteSection(section);
+                  };
+                  header.appendChild(deleteSectionButton);
+              }
+
+              section.querySelectorAll(".field").forEach((field) => {
+                  if (field.querySelector(".delete-field-btn")) return;
+                  const deleteFieldButton = document.createElement("button");
+                  deleteFieldButton.className = "delete-btn delete-field-btn";
+                  deleteFieldButton.type = "button";
+                  deleteFieldButton.textContent = "x";
+                  deleteFieldButton.onclick = (event) => {
+                      event.stopPropagation();
                       deleteField(field);
-                  }};
-                  field.appendChild(deleteFieldBtn);
-              }});
-          }});
-      }}
+                  };
+                  field.appendChild(deleteFieldButton);
+              });
+          });
 
-      // Toggle edit mode
-      function toggleEditMode() {{
+          bindEditableChangeHandlers();
+      }
+
+      function toggleEditMode() {
           const body = document.body;
-          const editBtn = document.getElementById('editModeBtn');
-          const downloadBtn = document.getElementById('downloadBtn');
+          const editBtn = document.getElementById("editModeBtn");
+          const downloadBtn = document.getElementById("downloadBtn");
 
-          body.classList.toggle('edit-mode');
-          const isEditMode = body.classList.contains('edit-mode');
+          body.classList.toggle("edit-mode");
+          const isEditMode = body.classList.contains("edit-mode");
 
-          if (isEditMode) {{
-              editBtn.textContent = 'Disable Edit Mode';
-              editBtn.style.background = '#dc2626';
-              downloadBtn.style.display = 'inline-block';
+          if (isEditMode) {
+              editBtn.textContent = "Disable Edit Mode";
+              editBtn.classList.add("is-active");
+              downloadBtn.style.display = "inline-block";
               enableEditing();
-          }} else {{
-              editBtn.textContent = 'Enable Edit Mode';
-              editBtn.style.background = '#2563eb';
-              downloadBtn.style.display = 'none';
+          } else {
+              editBtn.textContent = "Enable Edit Mode";
+              editBtn.classList.remove("is-active");
+              downloadBtn.style.display = "none";
               disableEditing();
-          }}
-      }}
+          }
+      }
 
-      // Enable editing
-      function enableEditing() {{
-          // Make section headers editable
-          document.querySelectorAll('.section-header h2').forEach(h2 => {{
-              h2.setAttribute('contenteditable', 'true');
-              h2.setAttribute('title', 'Click to edit section name');
-          }});
+      function enableEditing() {
+          document.querySelectorAll(".section-header h2").forEach((h2) => {
+              h2.setAttribute("contenteditable", "true");
+              h2.setAttribute("title", "Click to edit section name");
+          });
+          document.querySelectorAll(".group-title").forEach((groupTitle) => {
+              groupTitle.setAttribute("contenteditable", "true");
+              groupTitle.setAttribute("title", "Click to edit subsection name");
+          });
+          document.querySelectorAll(".field .label").forEach((label) => {
+              label.setAttribute("contenteditable", "true");
+              label.setAttribute("title", "Click to edit field label");
+          });
+      }
 
-          // Make subsection/group titles editable
-          document.querySelectorAll('.group-title').forEach(groupTitle => {{
-              groupTitle.setAttribute('contenteditable', 'true');
-              groupTitle.setAttribute('title', 'Click to edit subsection name');
-          }});
+      function disableEditing() {
+          document.querySelectorAll('[contenteditable="true"]').forEach((el) => {
+              el.removeAttribute("contenteditable");
+              el.removeAttribute("title");
+          });
+          assignSectionIds();
+          buildToc();
+          refreshFormState();
+      }
 
-          // Make field labels editable
-          document.querySelectorAll('.field .label').forEach(label => {{
-              label.setAttribute('contenteditable', 'true');
-              label.setAttribute('title', 'Click to edit field label');
-          }});
-      }}
+      function deleteField(field) {
+          if (!window.confirm("Are you sure you want to delete this field?")) return;
+          field.remove();
+          refreshFormState();
+          queueAutoSave();
+      }
 
-      // Disable editing
-      function disableEditing() {{
-          document.querySelectorAll('[contenteditable="true"]').forEach(el => {{
-              el.removeAttribute('contenteditable');
-              el.removeAttribute('title');
-          }});
-      }}
+      function deleteSection(section) {
+          const sectionName = section.querySelector("h2")?.textContent || "this";
+          if (!window.confirm(`Are you sure you want to delete the entire "${sectionName}" section?`)) return;
+          section.remove();
+          assignSectionIds();
+          buildToc();
+          refreshFormState();
+          queueAutoSave();
+      }
 
-      // Delete a field
-      function deleteField(field) {{
-          if (confirm('Are you sure you want to delete this field?')) {{
-              field.remove();
-          }}
-      }}
+      function stripTransientClasses(root) {
+          root.querySelectorAll(".field-hidden-by-search, .group-hidden-by-search, .section-hidden-by-search, .field-match")
+              .forEach((el) => {
+                  el.classList.remove("field-hidden-by-search", "group-hidden-by-search", "section-hidden-by-search", "field-match");
+              });
+          root.querySelectorAll(".toc-link.active").forEach((el) => el.classList.remove("active"));
+      }
 
-      // Delete a section
-      function deleteSection(section) {{
-          const sectionName = section.querySelector('h2').textContent;
-          if (confirm(`Are you sure you want to delete the entire "${{sectionName}}" section?`)) {{
-              section.remove();
-          }}
-      }}
-
-      // Download modified HTML
-      function downloadModifiedHTML() {{
-          // Clone the document
+      function downloadModifiedHTML() {
           const clone = document.documentElement.cloneNode(true);
+          const cloneBody = clone.querySelector("body");
+          cloneBody.classList.remove("edit-mode");
+          clone.querySelectorAll('[contenteditable="true"]').forEach((el) => {
+              el.removeAttribute("contenteditable");
+              el.removeAttribute("title");
+          });
+          clone.querySelectorAll(".delete-btn").forEach((button) => button.remove());
+          stripTransientClasses(clone);
 
-          // Remove edit mode class from body
-          const cloneBody = clone.querySelector('body');
-          cloneBody.classList.remove('edit-mode');
-
-          // Remove contenteditable attributes
-          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {{
-              el.removeAttribute('contenteditable');
-              el.removeAttribute('title');
-          }});
-
-          // Remove delete buttons
-          clone.querySelectorAll('.delete-btn').forEach(btn => btn.remove());
-
-          // Generate HTML string
-          const htmlString = '<!DOCTYPE html>\\n' + clone.outerHTML;
-
-          // Create blob and download
-          const blob = new Blob([htmlString], {{ type: 'text/html' }});
+          const htmlString = "<!DOCTYPE html>\n" + clone.outerHTML;
+          const blob = new Blob([htmlString], { type: "text/html" });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'goa_form_modified.html';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = "goa_form_modified.html";
+          document.body.appendChild(anchor);
+          anchor.click();
+          document.body.removeChild(anchor);
           URL.revokeObjectURL(url);
+          alert("Modified form downloaded.");
+      }
 
-          alert('Modified form downloaded! You can now use this customized form.');
-      }}
-
-      // Save filled form as HTML with all data preserved
-      function saveFilledFormHTML() {{
-          // Clone the document
+      function saveFilledFormHTML() {
+          saveDraftToLocalStorage();
           const clone = document.documentElement.cloneNode(true);
+          const cloneBody = clone.querySelector("body");
+          cloneBody.classList.remove("edit-mode");
+          clone.querySelectorAll('[contenteditable="true"]').forEach((el) => {
+              el.removeAttribute("contenteditable");
+              el.removeAttribute("title");
+          });
+          clone.querySelectorAll(".delete-btn").forEach((button) => button.remove());
+          stripTransientClasses(clone);
 
-          // Remove edit mode class from body
-          const cloneBody = clone.querySelector('body');
-          cloneBody.classList.remove('edit-mode');
-
-          // Remove contenteditable attributes
-          clone.querySelectorAll('[contenteditable="true"]').forEach(el => {{
-              el.removeAttribute('contenteditable');
-              el.removeAttribute('title');
-          }});
-
-          // Remove delete buttons
-          clone.querySelectorAll('.delete-btn').forEach(btn => btn.remove());
-
-          // Preserve all input values
-          document.querySelectorAll('input[type="text"], input[type="number"]').forEach((input, index) => {{
+          document.querySelectorAll('input[type="text"], input[type="number"]').forEach((input, index) => {
               const cloneInputs = clone.querySelectorAll('input[type="text"], input[type="number"]');
-              if (cloneInputs[index] && input.value) {{
-                  cloneInputs[index].setAttribute('value', input.value);
-              }}
-          }});
+              if (cloneInputs[index]) {
+                  cloneInputs[index].setAttribute("value", input.value || "");
+              }
+          });
 
-          // Preserve all checkbox states
-          document.querySelectorAll('input[type="checkbox"]').forEach((checkbox, index) => {{
+          document.querySelectorAll('input[type="checkbox"]').forEach((checkbox, index) => {
               const cloneCheckboxes = clone.querySelectorAll('input[type="checkbox"]');
-              if (cloneCheckboxes[index]) {{
-                  if (checkbox.checked) {{
-                      cloneCheckboxes[index].setAttribute('checked', 'checked');
-                  }} else {{
-                      cloneCheckboxes[index].removeAttribute('checked');
-                  }}
-              }}
-          }});
+              if (!cloneCheckboxes[index]) return;
+              if (checkbox.checked) {
+                  cloneCheckboxes[index].setAttribute("checked", "checked");
+              } else {
+                  cloneCheckboxes[index].removeAttribute("checked");
+              }
+          });
 
-          // Preserve all textarea values
-          document.querySelectorAll('textarea').forEach((textarea, index) => {{
-              const cloneTextareas = clone.querySelectorAll('textarea');
-              if (cloneTextareas[index] && textarea.value) {{
-                  cloneTextareas[index].textContent = textarea.value;
-              }}
-          }});
+          document.querySelectorAll("textarea").forEach((textarea, index) => {
+              const cloneTextareas = clone.querySelectorAll("textarea");
+              if (cloneTextareas[index]) {
+                  cloneTextareas[index].textContent = textarea.value || "";
+              }
+          });
 
-          // Generate HTML string
-          const htmlString = '<!DOCTYPE html>\\n' + clone.outerHTML;
-
-          // Create blob and download
-          const blob = new Blob([htmlString], {{ type: 'text/html' }});
+          const htmlString = "<!DOCTYPE html>\n" + clone.outerHTML;
+          const blob = new Blob([htmlString], { type: "text/html" });
           const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'goa_form_filled.html';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = "goa_form_filled.html";
+          document.body.appendChild(anchor);
+          anchor.click();
+          document.body.removeChild(anchor);
           URL.revokeObjectURL(url);
+          alert("Filled form saved as HTML.");
+      }
 
-          alert('Filled form saved as HTML! You can reopen this file to make revisions and re-save as PDF.');
-      }}
+      function generatePDF() {
+          const wasInEditMode = document.body.classList.contains("edit-mode");
+          if (wasInEditMode) {
+              document.body.classList.remove("edit-mode");
+          }
 
-      // Generate PDF using browser's native print-to-PDF functionality
-      function generatePDF() {{
-          // Store current edit mode state
-          const wasInEditMode = document.body.classList.contains('edit-mode');
+          const searchInput = document.getElementById("fieldSearchInput");
+          const previousQuery = searchInput ? searchInput.value : "";
+          if (searchInput && previousQuery.trim()) {
+              searchInput.value = "";
+              applySearchFilter("");
+          }
 
-          // Temporarily disable edit mode for PDF generation
-          if (wasInEditMode) {{
-              document.body.classList.remove('edit-mode');
-          }}
-
-          // Store collapsed sections state and expand all sections for PDF
-          const sections = document.querySelectorAll('.section');
+          const sections = document.querySelectorAll(".section");
           const collapsedSections = [];
-
-          sections.forEach((section, index) => {{
-              if (section.classList.contains('collapsed')) {{
+          sections.forEach((section, index) => {
+              if (section.classList.contains("collapsed")) {
                   collapsedSections.push(index);
-                  section.classList.remove('collapsed');
-                  const header = section.querySelector('.section-header');
-                  if (header) {{
-                      header.classList.add('active');
-                  }}
-              }}
-          }});
+                  section.classList.remove("collapsed");
+                  const header = section.querySelector(".section-header");
+                  if (header) header.classList.add("active");
+              }
+          });
 
-          // Wait for DOM to fully render expanded sections before printing
-          setTimeout(() => {{
-              // Trigger browser's print dialog (user can save as PDF)
+          setTimeout(() => {
               window.print();
+              setTimeout(() => {
+                  collapsedSections.forEach((index) => {
+                      sections[index].classList.add("collapsed");
+                      const header = sections[index].querySelector(".section-header");
+                      if (header) header.classList.remove("active");
+                  });
 
-              // Restore collapsed sections after print dialog is handled
-              // Note: This happens immediately, but browser waits for print dialog to close
-              setTimeout(() => {{
-                  collapsedSections.forEach(index => {{
-                      sections[index].classList.add('collapsed');
-                      const header = sections[index].querySelector('.section-header');
-                      if (header) {{
-                          header.classList.remove('active');
-                      }}
-                  }});
+                  if (searchInput && previousQuery.trim()) {
+                      searchInput.value = previousQuery;
+                      applySearchFilter(previousQuery);
+                  }
 
-                  // Restore edit mode if it was active
-                  if (wasInEditMode) {{
-                      document.body.classList.add('edit-mode');
-                  }}
-              }}, 100);
-          }}, 300); // Brief delay to ensure sections are fully expanded and rendered
-      }}
+                  if (wasInEditMode) {
+                      document.body.classList.add("edit-mode");
+                  }
+                 updateActiveSectionFromScroll();
+              }, 100);
+          }, 300);
+      }
 
-      // Expand all sections
-      function expandAllSections() {{
-          document.querySelectorAll('.section').forEach(section => {{
-              section.classList.remove('collapsed');
-              const header = section.querySelector('.section-header');
-              if (header) {{
-                  header.classList.add('active');
-              }}
-          }});
-      }}
+      function expandAllSections() {
+          document.querySelectorAll(".section:not(.section-hidden-by-search)").forEach((section) => {
+              section.classList.remove("collapsed");
+              const header = section.querySelector(".section-header");
+              if (header) header.classList.add("active");
+          });
+      }
 
-      // Collapse all sections
-      function collapseAllSections() {{
-          document.querySelectorAll('.section').forEach(section => {{
-              section.classList.add('collapsed');
-              const header = section.querySelector('.section-header');
-              if (header) {{
-                  header.classList.remove('active');
-              }}
-          }});
-      }}
-    </script>
+      function collapseAllSections() {
+          document.querySelectorAll(".section:not(.section-hidden-by-search)").forEach((section) => {
+              section.classList.add("collapsed");
+              const header = section.querySelector(".section-header");
+              if (header) header.classList.remove("active");
+          });
+      }
+</script>
   </body>
 </html>
+
 """
+    return template.replace("__FORM_BODY__", body)
 
 def generate_goa_form(excel_path: Path = EXCEL_PATH, output_path: Path = OUTPUT_HTML_PATH) -> bool:
     """

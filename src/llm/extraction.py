@@ -64,6 +64,9 @@ try:
     # ENHANCED_FEW_SHOT_AVAILABLE = True
     ENHANCED_FEW_SHOT_AVAILABLE = False
     print("[WARN] Enhanced few-shot learning temporarily disabled to prevent data poisoning loop")
+
+    # Performance optimization: Set to True to completely disable few-shot learning for faster extraction
+    DISABLE_ALL_FEW_SHOT = True  # Disabled for maximum speed
 except ImportError as e:
     print(f"[WARN] Enhanced few-shot learning not available: {e}")
     print("  Falling back to basic few-shot learning")
@@ -648,159 +651,181 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     add_on_descs = "; ".join([item.get("description", "") for item in machine_data.get("add_ons", [])])
     common_item_descs = "; ".join([item.get("description", "") for item in common_items])
 
-    # 2. Iterate through each group and run extraction
-    BATCH_SIZE = 40  # Process max 40 fields at a time to prevent hangs
-    
+    # 2. Iterate through each group and run extraction (one API call per group, no batching)
+    import time
     for group_name, group_contexts in active_groups.items():
         print(f"\n--- Processing Group: {group_name} ({len(group_contexts)} fields) ---")
-        
-        # Split contexts into batches
-        context_items = list(group_contexts.items())
-        batches = [context_items[i:i + BATCH_SIZE] for i in range(0, len(context_items), BATCH_SIZE)]
-        
-        for batch_idx, batch_items in enumerate(batches):
-            batch_contexts = dict(batch_items)
-            print(f"  Batch {batch_idx + 1}/{len(batches)} ({len(batch_contexts)} fields)...")
+        group_start_time = time.time()
 
-            # --- Dynamic Pydantic Model Creation for this Batch ---
-            using_schema_format = isinstance(next(iter(batch_contexts.values()), {}), dict)
+        # --- Dynamic Pydantic Model Creation for this Group ---
+        using_schema_format = isinstance(next(iter(group_contexts.values()), {}), dict)
 
-            fields = {}
-            name_mapping = {}
-            for name, context in batch_contexts.items():
-                description = ""
-                if using_schema_format and isinstance(context, dict):
-                    description = context.get("description", f"Field for {name}")
-                elif isinstance(context, str):
-                    description = context
+        fields = {}
+        name_mapping = {}
+        for name, context in group_contexts.items():
+            description = ""
+            if using_schema_format and isinstance(context, dict):
+                description = context.get("description", f"Field for {name}")
+            elif isinstance(context, str):
+                description = context
 
-                # Sanitize field name for Pydantic
-                sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
-                if sanitized_name != name:
-                    name_mapping[sanitized_name] = name
+            # Sanitize field name for Pydantic
+            sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+            if sanitized_name != name:
+                name_mapping[sanitized_name] = name
 
-                fields[sanitized_name] = (Optional[str], Field(default=None, description=description))
+            fields[sanitized_name] = (Optional[str], Field(default=None, description=description))
 
-            # Create unique model name to avoid conflicts
-            model_name = f"DynamicGOA_{group_name.replace(' ', '').replace('&', '')}_{batch_idx}"
-            DynamicGroupModel = create_model(model_name, **fields)
+        # Create unique model name to avoid conflicts
+        model_name = f"DynamicGOADocument_{group_name.replace(' ', '_').replace('&', 'and').replace(',', '')}"
+        DynamicGroupModel = create_model(model_name, **fields)
 
-            # Initialize LLM with timeout to prevent infinite hangs
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash-lite", 
-                temperature=0.1,
-                request_timeout=60, # 60 seconds timeout per batch
-                max_retries=2
-            )
-            parser = PydanticOutputParser(pydantic_object=DynamicGroupModel)
+        # Initialize LLM optimized for speed
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash-lite",
+            temperature=0.0,  # Reduced to 0 for faster, more deterministic responses
+            timeout=120,  # 2 minute timeout per request
+            max_retries=1  # Retry once if timeout/error
+        )
+        parser = PydanticOutputParser(pydantic_object=DynamicGroupModel)
 
-            base_prompt_template = f"""
-            You are an AI assistant specializing in extracting information from packaging machinery quotes.
-            Your task is to populate a structured data model for the '{group_name}' section (Batch {batch_idx + 1}) based on the provided context.
+        base_prompt_template = f"""
+        You are an AI assistant specializing in extracting information from packaging machinery quotes.
+        Your task is to populate a structured data model for the '{group_name}' section based on the provided context.
 
-            INSTRUCTIONS:
-            - For checkbox fields (ending in '_check'):
-              - You MUST find direct evidence in the context. The 'positive indicators' provided in the field descriptions are REQUIRED keywords. If none of these indicators are present, you MUST output "NO".
-              - Conversely, if any 'negative indicators' (keywords that explicitly negate the feature) are present in the context, you MUST output "NO", even if some positive indicators are also present. Negative indicators override positive ones.
-            - For text fields, extract the information as requested. If not found, leave it null.
-            - Be precise and do not guess. Your accuracy is critical.
+        CRITICAL INSTRUCTIONS - BE CONSERVATIVE:
+        - ONLY fill fields that are directly relevant to the selected machine items (Main Machine Item, Machine Add-ons, Common/Shared Items listed above).
+        - If a field is not clearly related to what was actually selected/quoted, leave it null/empty.
+        - Better to leave a field empty than to guess or infer information not clearly present.
 
-            CONTEXT:
-            - Machine Name: {{{{machine_name}}}}
-            - Main Machine Item: {{{{main_item_desc}}}}
-            - Machine Add-ons: {{{{add_on_descs}}}}
-            - Common/Shared Items: {{{{common_item_descs}}}}
-            - Full PDF Text (for context and details): {{{{full_pdf_text}}}}
+        For checkbox fields (ending in '_check'):
+          - Output "YES" ONLY if you find direct evidence in the selected items or their descriptions.
+          - The 'positive indicators' in field descriptions are REQUIRED keywords. If none are present in the selected items, output "NO".
+          - If 'negative indicators' are present, you MUST output "NO" (negative indicators override positive ones).
+          - Default to "NO" when uncertain - do not assume features are included.
 
-            Based on the context above, extract the information for the following fields.
-            Pay close attention to the descriptions and positive indicators for each field to guide your extraction.
+        For text fields:
+          - Extract information ONLY if clearly stated in the context.
+          - If not found or not clearly related to selected items, leave it null (do not use placeholder text like "N/A", "Not specified", "TBD", etc.).
+          - For specifications (voltage, speed, dimensions, etc.), only extract if explicitly mentioned for THIS specific machine.
 
-            {{{{format_instructions}}}}
-            """
+        DO NOT:
+          - Use generic placeholder text like "N/A", "Not applicable", "Not specified", "TBD", "See quote"
+          - Guess or infer values not clearly present in the context
+          - Fill fields just because they exist in the template - only fill what's actually relevant
 
-            # Enhance prompt with few-shot examples specific to this group/fields if possible
-            if ENHANCED_FEW_SHOT_AVAILABLE:
-                try:
-                    enhanced_prompt_parts = enhance_prompt_with_semantic_examples(
-                        prompt_parts=[base_prompt_template],
-                        machine_data=machine_data,
-                        template_placeholder_contexts=batch_contexts, # Pass only batch contexts
-                        common_items=common_items,
-                        full_pdf_text=full_pdf_text,
-                        max_examples_per_field=1 
-                    )
-                except Exception as semantic_error:
-                    print(f"Semantic few-shot enhancement failed for {group_name} batch {batch_idx}: {semantic_error}")
-                    enhanced_prompt_parts = [base_prompt_template]
-            else:
-                # Fallback to basic few-shot examples
-                try:
-                    enhanced_prompt_parts = enhance_prompt_with_few_shot_examples(
-                        prompt_parts=[base_prompt_template],
-                        machine_data=machine_data,
-                        template_placeholder_contexts=batch_contexts,
-                        common_items=common_items,
-                        full_pdf_text=full_pdf_text,
-                        max_examples_per_field=1
-                    )
-                except Exception as basic_error:
-                    print(f"Basic few-shot enhancement failed for {group_name} batch {batch_idx}: {basic_error}")
-                    enhanced_prompt_parts = [base_prompt_template]
+        CONTEXT:
+        - Machine Name: {{{{machine_name}}}}
+        - Main Machine Item: {{{{main_item_desc}}}}
+        - Machine Add-ons: {{{{add_on_descs}}}}
+        - Common/Shared Items: {{{{common_item_descs}}}}
+        - Full PDF Text (for context and details): {{{{full_pdf_text}}}}
 
-            prompt_template = "\n".join(enhanced_prompt_parts)
+        Based on the context above, extract ONLY the information that is clearly present and relevant.
+        Pay close attention to the descriptions and positive indicators for each field.
 
-            prompt = PromptTemplate(
-                template=prompt_template,
-                input_variables=["machine_name", "full_pdf_text", "main_item_desc", "add_on_descs", "common_item_descs"],
-                partial_variables={"format_instructions": parser.get_format_instructions()},
-            )
+        {{{{format_instructions}}}}
+        """
 
-            chain = prompt | llm | parser
+        # Enhance prompt with few-shot examples specific to this group/fields if possible
+        prompt_build_start = time.time()
 
-            # Reduced context size to prevent server disconnection with Flash Lite model
-            # 20000 chars is approx 5k tokens - this matches the pre-refactoring limit that worked reliably
-            input_data = {
-                "machine_name": machine_name,
-                "full_pdf_text": full_pdf_text[:20000],
-                "main_item_desc": main_item_desc,
-                "add_on_descs": add_on_descs,
-                "common_item_descs": common_item_descs,
-            }
-
+        if DISABLE_ALL_FEW_SHOT:
+            # Skip few-shot enhancement entirely for maximum speed
+            print(f"  Building prompt (few-shot disabled for speed)...")
+            enhanced_prompt_parts = [base_prompt_template]
+        elif ENHANCED_FEW_SHOT_AVAILABLE:
             try:
-                print(f"    Invoking LLM chain...")
-                result = chain.invoke(input_data)
-                result_dict = result.dict()
-                print(f"    Received response")
+                enhanced_prompt_parts = enhance_prompt_with_semantic_examples(
+                    prompt_parts=[base_prompt_template],
+                    machine_data=machine_data,
+                    template_placeholder_contexts=group_contexts, # Pass only group contexts
+                    common_items=common_items,
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=1  # Reduced from 3 to 1 for faster API responses
+                )
+            except Exception as semantic_error:
+                print(f"Semantic few-shot enhancement failed for {group_name}: {semantic_error}")
+                enhanced_prompt_parts = [base_prompt_template]
+        else:
+            # Fallback to basic few-shot examples
+            try:
+                enhanced_prompt_parts = enhance_prompt_with_few_shot_examples(
+                    prompt_parts=[base_prompt_template],
+                    machine_data=machine_data,
+                    template_placeholder_contexts=group_contexts,
+                    common_items=common_items,
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=1  # Reduced from 3 to 1 for faster API responses
+                )
+            except Exception as basic_error:
+                print(f"Basic few-shot enhancement failed for {group_name}: {basic_error}")
+                enhanced_prompt_parts = [base_prompt_template]
 
-                # Process results for this batch
-                for sanitized_name, value in result_dict.items():
-                    original_name = name_mapping.get(sanitized_name, sanitized_name)
+        prompt_template = "\n".join(enhanced_prompt_parts)
+        prompt_build_time = time.time() - prompt_build_start
+        if not DISABLE_ALL_FEW_SHOT:
+            print(f"  Prompt built in {prompt_build_time:.1f}s")
 
-                    is_checkbox = original_name.endswith("_check") or (
-                        using_schema_format and
-                        isinstance(template_placeholder_contexts.get(original_name), dict) and
-                        template_placeholder_contexts[original_name].get('type') == 'boolean'
-                    )
+        prompt = PromptTemplate(
+            template=prompt_template,
+            input_variables=["machine_name", "full_pdf_text", "main_item_desc", "add_on_descs", "common_item_descs"],
+            partial_variables={"format_instructions": parser.get_format_instructions()},
+        )
 
-                    if value is None:
-                        all_extracted_data[original_name] = "NO" if is_checkbox else ""
-                    elif is_checkbox:
-                        if isinstance(value, str) and value.upper() in ["YES", "TRUE", "1"]:
-                            all_extracted_data[original_name] = "YES"
-                        elif isinstance(value, bool) and value:
-                            all_extracted_data[original_name] = "YES"
-                        else:
-                            all_extracted_data[original_name] = "NO"
+        chain = prompt | llm | parser
+
+        # Use balanced context window (speed vs accuracy)
+        input_data = {
+            "machine_name": machine_name,
+            "full_pdf_text": full_pdf_text[:50000],  # 50k chars - good balance of speed and context
+            "main_item_desc": main_item_desc,
+            "add_on_descs": add_on_descs,
+            "common_item_descs": common_item_descs,
+        }
+
+        try:
+            print(f"  Sending request to Gemini API (this may take 30-180s)...")
+            api_start_time = time.time()
+            result = chain.invoke(input_data)
+            api_elapsed = time.time() - api_start_time
+            if api_elapsed > 60:
+                print(f"  ⚠️  Response received in {api_elapsed:.1f}s (slower than usual)")
+            else:
+                print(f"  ✓ Response received in {api_elapsed:.1f}s")
+            result_dict = result.dict()
+
+            # Process results for this group
+            for sanitized_name, value in result_dict.items():
+                original_name = name_mapping.get(sanitized_name, sanitized_name)
+
+                is_checkbox = original_name.endswith("_check") or (
+                    using_schema_format and
+                    isinstance(template_placeholder_contexts.get(original_name), dict) and
+                    template_placeholder_contexts[original_name].get('type') == 'boolean'
+                )
+
+                if value is None:
+                    all_extracted_data[original_name] = "NO" if is_checkbox else ""
+                elif is_checkbox:
+                    if isinstance(value, str) and value.upper() in ["YES", "TRUE", "1"]:
+                        all_extracted_data[original_name] = "YES"
+                    elif isinstance(value, bool) and value:
+                        all_extracted_data[original_name] = "YES"
                     else:
-                        all_extracted_data[original_name] = str(value)
+                        all_extracted_data[original_name] = "NO"
+                else:
+                    all_extracted_data[original_name] = str(value)
 
-            except Exception as e:
-                print(f"Error during extraction for group {group_name} batch {batch_idx}: {e}")
-                # Fill missing fields with defaults for this batch only
-                for key in batch_contexts:
-                    if key not in all_extracted_data:
-                         all_extracted_data[key] = "NO" if key.endswith("_check") else ""
+            group_total_time = time.time() - group_start_time
+            print(f"  ✓ Group completed in {group_total_time:.1f}s total")
+
+        except Exception as e:
+            print(f"Error during extraction for group {group_name}: {e}")
+            # Fill missing fields with defaults for this group
+            for key in group_contexts:
+                if key not in all_extracted_data:
+                    all_extracted_data[key] = "NO" if key.endswith("_check") else ""
 
     # 3. Apply post-processing rules to the combined data
     print("\nApplying post-processing rules to combined data...")

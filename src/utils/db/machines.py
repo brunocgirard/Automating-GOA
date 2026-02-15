@@ -2,10 +2,10 @@
 Machine database operations - CRUD operations for identified machines within quotes.
 """
 
-import sqlite3
 import json
-from typing import Dict, List, Optional, Any
+import sqlite3
 from datetime import datetime
+from typing import Any, Dict, List
 
 from .base import DB_PATH
 
@@ -73,13 +73,40 @@ def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str 
         machines_to_insert = []
         processing_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        def resolve_main_item(machine_payload: Dict[str, Any]) -> Dict[str, Any]:
+            main_item = machine_payload.get("main_item")
+            if isinstance(main_item, dict):
+                return dict(main_item)
+            return {}
+
+        def resolve_description(machine_payload: Dict[str, Any], main_item: Dict[str, Any]) -> str:
+            existing_description = machine_payload.get("description")
+            if isinstance(existing_description, str) and existing_description.strip():
+                return existing_description.strip()
+            description = main_item.get("description")
+            if isinstance(description, str):
+                return description.strip()
+            return ""
+
+        def resolve_machine_type(machine_payload: Dict[str, Any], main_item: Dict[str, Any]) -> str:
+            existing_type = machine_payload.get("machine_type")
+            if isinstance(existing_type, str) and existing_type.strip():
+                return existing_type.strip().lower()
+            if main_item:
+                return "main"
+            return "option"
+
         # Process and validate each machine
         for machine in machines_data.get("machines", []):
+            main_item = resolve_main_item(machine)
+            machine_type = resolve_machine_type(machine, main_item)
+            description = resolve_description(machine, main_item)
+
             # Ensure machine_name exists and is not empty
             if not machine.get("machine_name"):
                 # Try to generate a name if missing
-                if machine.get("main_item") and machine["main_item"].get("description"):
-                    desc = machine["main_item"]["description"]
+                if main_item and main_item.get("description"):
+                    desc = main_item["description"]
                     # Use first line of description as machine name
                     machine["machine_name"] = desc.split('\n')[0] if '\n' in desc else desc
                 else:
@@ -90,11 +117,13 @@ def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str 
             # Make sure machine has client_quote_ref
             machine_copy = machine.copy()
             machine_copy["client_quote_ref"] = client_quote_ref
+            machine_copy["machine_type"] = machine_type
+            machine_copy["description"] = description
+            machine_copy["main_item"] = main_item
 
             # Add common items to each machine for storage
             machine_with_common = machine_copy.copy()
             machine_with_common["common_items"] = machines_data.get("common_items", [])
-            machine_with_common["main_item"] = machine.get("main_item", {})
 
             # Convert machine to JSON and validate
             try:
@@ -301,33 +330,46 @@ def group_items_by_confirmed_machines(all_items, main_machine_indices, common_op
     machines = []
     common_items = []
     remaining_items = list(range(len(all_items)))
+    sorted_machine_indices = sorted(set(main_machine_indices))
+    sorted_common_indices = sorted(set(common_option_indices))
 
-    for idx in common_option_indices:
+    for idx in sorted_common_indices:
         if idx in remaining_items:
             remaining_items.remove(idx)
-            common_items.append(all_items[idx])
+            common_item = dict(all_items[idx])
+            common_item["machine_type"] = "common"
+            common_items.append(common_item)
 
-    for machine_idx in main_machine_indices:
+    for machine_idx in sorted_machine_indices:
         if machine_idx in remaining_items:
             remaining_items.remove(machine_idx)
             next_machine_idx = float('inf')
-            for next_idx in main_machine_indices:
+            for next_idx in sorted_machine_indices:
                 if next_idx > machine_idx and next_idx < next_machine_idx:
                     next_machine_idx = next_idx
             add_ons = []
             for idx in list(remaining_items):
                 if idx > machine_idx and (idx < next_machine_idx or next_machine_idx == float('inf')):
-                    add_ons.append(all_items[idx])
+                    add_on_item = dict(all_items[idx])
+                    add_on_item["machine_type"] = "option"
+                    add_ons.append(add_on_item)
                     remaining_items.remove(idx)
-            machine_name = all_items[machine_idx].get('description', '').split('\n')[0]
+            main_item = dict(all_items[machine_idx])
+            main_item["machine_type"] = "main"
+            description = main_item.get("description", "")
+            machine_name = description.split('\n')[0] if isinstance(description, str) else ""
             machines.append({
                 "machine_name": machine_name,
-                "main_item": all_items[machine_idx],
-                "add_ons": add_ons
+                "description": description,
+                "machine_type": "main",
+                "main_item": main_item,
+                "add_ons": add_ons,
             })
 
     for idx in remaining_items:
-        common_items.append(all_items[idx])
+        common_item = dict(all_items[idx])
+        common_item["machine_type"] = "common"
+        common_items.append(common_item)
 
     return {"machines": machines, "common_items": common_items}
 
