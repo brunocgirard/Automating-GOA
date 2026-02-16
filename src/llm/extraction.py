@@ -88,6 +88,85 @@ from src.utils.template_utils import add_section_aware_instructions, select_sort
 from src.utils.quote_library import get_quote_library_context
 
 
+def _safe_positive_int_env(var_name: str, default: int) -> int:
+    raw_value = str(os.getenv(var_name, "")).strip()
+    if not raw_value:
+        return default
+    try:
+        parsed = int(raw_value)
+        return parsed if parsed > 0 else default
+    except ValueError:
+        return default
+
+
+MAX_FIELDS_PER_EXTRACTION_GROUP = _safe_positive_int_env("LLM_MAX_FIELDS_PER_GROUP", 180)
+
+
+def _chunk_contexts(
+    contexts: Dict[str, Any],
+    chunk_size: int,
+) -> List[Dict[str, Any]]:
+    if chunk_size <= 0 or len(contexts) <= chunk_size:
+        return [contexts]
+    items = list(contexts.items())
+    return [dict(items[i : i + chunk_size]) for i in range(0, len(items), chunk_size)]
+
+
+def _rebalance_grouped_contexts(
+    grouped_contexts: Dict[str, Dict[str, Any]],
+    *,
+    max_fields_per_group: int,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Prevent oversized extraction groups that can stall requests.
+
+    Primary strategy:
+    - Split large groups by section when section metadata is available.
+    - Fall back to deterministic chunking by field count.
+    """
+    rebalanced: Dict[str, Dict[str, Any]] = {}
+
+    for group_name, group_contexts in grouped_contexts.items():
+        if len(group_contexts) <= max_fields_per_group:
+            rebalanced[group_name] = group_contexts
+            continue
+
+        section_buckets: Dict[str, Dict[str, Any]] = {}
+        unsectioned: Dict[str, Any] = {}
+        for field_key, field_context in group_contexts.items():
+            section_name = ""
+            if isinstance(field_context, dict):
+                section_name = str(field_context.get("section", "")).strip()
+            if section_name:
+                section_buckets.setdefault(section_name, {})[field_key] = field_context
+            else:
+                unsectioned[field_key] = field_context
+
+        if section_buckets:
+            section_index = 1
+            for section_name, section_contexts in section_buckets.items():
+                section_label = re.sub(r"\s+", " ", section_name).strip()[:48] or f"Section {section_index}"
+                chunks = _chunk_contexts(section_contexts, max_fields_per_group)
+                for chunk_index, chunk in enumerate(chunks, start=1):
+                    chunk_suffix = f" #{chunk_index}" if len(chunks) > 1 else ""
+                    rebalanced[f"{group_name} | {section_label}{chunk_suffix}"] = chunk
+                section_index += 1
+
+            if unsectioned:
+                chunks = _chunk_contexts(unsectioned, max_fields_per_group)
+                for chunk_index, chunk in enumerate(chunks, start=1):
+                    chunk_suffix = f" #{chunk_index}" if len(chunks) > 1 else ""
+                    rebalanced[f"{group_name} | Unsectioned{chunk_suffix}"] = chunk
+            continue
+
+        chunks = _chunk_contexts(group_contexts, max_fields_per_group)
+        for chunk_index, chunk in enumerate(chunks, start=1):
+            chunk_suffix = f" #{chunk_index}" if len(chunks) > 1 else ""
+            rebalanced[f"{group_name}{chunk_suffix}"] = chunk
+
+    return rebalanced
+
+
 def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
                              template_placeholder_contexts: Dict[str, str],
                              full_pdf_text: str) -> Dict[str, str]:
@@ -659,21 +738,23 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     # Helper to find group
     def find_group(key, context=None):
         # Strategy 1: Use section name from schema context if available
-        if isinstance(context, dict) and "section" in context:
-            section = context["section"].lower()
-            
+        if isinstance(context, dict):
+            section = str(context.get("section", "")).strip().lower()
             # Map sections to groups
-            if any(x in section for x in ["control", "electrical", "program", "guard", "code", "coding", "inspect"]):
+            if section and any(
+                x in section for x in ["control", "electrical", "program", "guard", "code", "coding", "inspect"]
+            ):
                 return "Controls & Electrical"
-            
-            if any(x in section for x in ["liquid", "fill", "bottle", "handling", "tablet", "cotton", "desiccant", "gas"]):
+
+            if section and any(
+                x in section for x in ["liquid", "fill", "bottle", "handling", "tablet", "cotton", "desiccant", "gas"]
+            ):
                 return "Liquid Filling & Handling"
-            
-            if any(x in section for x in ["cap", "label", "induction", "sleeve", "conveyor", "plug", "belt", "shrink", "retorquer"]):
+
+            if section and any(
+                x in section for x in ["cap", "label", "induction", "sleeve", "conveyor", "plug", "belt", "shrink", "retorquer"]
+            ):
                 return "Capping, Labeling & Other"
-                
-            # Default for other sections (Basic Info, Utility, Warranty, etc.)
-            return "General & Utility"
 
         # Strategy 2: Fallback to key prefixes (backward compatibility)
         for group_name, rules in FIELD_GROUPS.items():
@@ -682,7 +763,9 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
             for prefix in rules["prefixes"]:
                 if key.startswith(prefix):
                     return group_name
-        return "General & Utility" # Default fallback
+
+        # Default for sections/keys that are not covered by existing heuristics.
+        return "General & Utility"
 
     for key, context in template_placeholder_contexts.items():
         group = find_group(key, context)
@@ -690,6 +773,21 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
 
     # Remove empty groups to avoid unnecessary calls
     active_groups = {k: v for k, v in grouped_contexts.items() if v}
+    largest_group_size = max((len(group) for group in active_groups.values()), default=0)
+    if largest_group_size > MAX_FIELDS_PER_EXTRACTION_GROUP:
+        print(
+            f"[WARN] Large extraction group detected ({largest_group_size} fields). "
+            f"Rebalancing to max {MAX_FIELDS_PER_EXTRACTION_GROUP} fields per group."
+        )
+        active_groups = _rebalance_grouped_contexts(
+            active_groups,
+            max_fields_per_group=MAX_FIELDS_PER_EXTRACTION_GROUP,
+        )
+        group_sizes = [len(group) for group in active_groups.values()]
+        print(
+            f"[OK] Rebalanced extraction into {len(active_groups)} groups "
+            f"(min={min(group_sizes)}, max={max(group_sizes)} fields)."
+        )
 
     all_extracted_data = {}
 
