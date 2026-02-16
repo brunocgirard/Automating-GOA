@@ -1,0 +1,2641 @@
+
+
+Quote Library
+
+Date: Sunday, February 15, 2026
+
+
+Table of Contents
+Project Contacts	4
+Project Technical Specifications	7
+Components Reference Pictures &/or Drawings	7
+Components Detail Chart	7
+Equipment General Specification	7
+Equipment Configuration and Price	8
+Machine Technical Specifications	9
+(Unscramblers)	9
+Bottle Unscrambler Feeder Model – RoboSort 2	9
+Bottle Unscrambler Feeder Model – RoboSort 4	11
+Bottle Unscrambler Feeder Model – RoboSort 6	13
+Bottle Unscrambler Model: ThunderStar	15
+Bottle Unscrambler Model “SortStar”	16
+(Available Options for Unscramblers)	19
+(Turn Tables)	28
+(Labellers)	31
+LabelStar Model System 1 ECO	31
+LabelStar Model System 1 HS-LSA-100	33
+LabelStar Model System 1 HS/FLRS - 100	35
+LabelStar Model Trunnion 100	39
+LabelStar Model Trunnion 200	42
+LabelStar Model System 1 100	45
+LabelStar Model System 1 200	48
+(Available Options for Labellers)	51
+Proposed Equipment Picture	63
+(Unscrambler Picture)	63
+(Labeller Pictures)	64
+Validation and Service Specifications	71
+Validation Document Time Frame	79
+Project Management & Milestones	80
+Customer Responsibilities	82
+Parts Requirement Table:	83
+Service Rates & Spare Parts	83
+Payment Terms & Delivery	86
+Capmatic General Terms and Conditions	88
+(Style Library)	93
+Heading 1	93
+Heading 2	93
+Heading 3	93
+(Header & Footer)	94
+
+Project Contacts
+Your Local Representative:
+<Company>
+<Contact>
+?: <Address 1>,<Address 2>
+<Address 3> <City> <Province>
+<Postcode> <Country>
+?: + <Phone><Phone Ext->
+?: + <Mobile Phone>
+?:  <E-mail>
+Your Factory Representative:
+
+Mr. Christian Normandin
+International Sales Director 
+?: 12180 Albert Hudon
+Montreal-North, Quebec, H1G-3K7
+?: + 1 514-322-0062 Ext: 207
+?: + 1514-867-3968 
+?: chris@capmatic.com
+
+Your Local Representative:
+<Company>
+<Contact>
+?: <Address 1>,<Address 2>
+<Address 3> <City> <Province>
+<Postcode> <Country>
+?: + <Phone><Phone Ext->
+?: + <Mobile Phone>
+?:  <E-mail>
+
+Your Head Quarter Representative:
+
+Mr. Tony Lucifero
+Business Development Specialist
+North Americain West Coas
+?: 12180 Albert Hudon
+Montreal-North, Quebec, H1G-3K7
+?: + 1 514-322-0062 Ext:250
+?: + 1- 514 513-7498
+?: tony@capmatic.com
+
+Your Local Representative:
+<Company>
+<Contact>
+?: <Address 1>,<Address 2>
+<Address 3> <City> <Province>
+<Postcode> <Country>
+?: + <Phone><Phone Ext->
+?: + <Mobile Phone>
+?:  <E-mail>
+Your Factory Representative:
+
+Mr. Wendy Ocean
+Business Development Specialist
+Midwest – North America
+?: 12180 Albert Hudon
+Montreal-North, Quebec, H1G-3K7
+?: + 1 514-322-0062 Ext: 213
+?: + 1514-827-7227 
+?: wocean@capmatic.com
+
+Your Local Representative:
+<Company>
+<Contact>
+?: <Address 1>,<Address 2>
+<Address 3> <City> <Province>
+<Postcode> <Country>
+?: + <Phone><Phone Ext->
+?: + <Mobile Phone>
+?:  <E-mail>Your Factory Representative:
+
+Mr. Jairo Martinez
+Business Development Specialist
+Latin America
+?: 12180 Albert Hudon
+Montreal-North, Quebec, H1G-3K7
+?: + 1 514-322-0062 Ext:205
+?: + 1-514-679-0360
+?: Jmartinez@capmatic.com
+
+Your Local Representative:
+<Company>
+<Contact>
+?: <Address 1>,<Address 2>
+<Address 3> <City> <Province>
+<Postcode> <Country>
+?: + <Phone><Phone Ext->
+?: + <Mobile Phone>
+?:  <E-mail>Your Factory Representative:
+
+Mr. Nick Perugini
+Business Development Specialist
+?: 12180 Albert Hudon
+Montreal-North, Quebec, H1G-3K7
+?: + 1 514-322-0062 Ext: 253
+?: + 1 514-242-5490 
+?: nperugini@capmatic.com
+
+
+Mr. Alioscia Bassani
+President
+?: 12180 Albert Hudon
+Montreal-North, Quebec, H1G-3K7
+?: + 1 514-322-0062 Ext: 206
+?: + 514-979-2800
+?:ali@capmatic.com
+
+Project Technical Specifications
+Components Reference Pictures &/or Drawings
+Not Available
+Components Detail Chart
+
+Ref #Bottle Size (mm)Bottle MaterialBottle CapacityNeck Opening (mm)Projected Speed1ØPlasticmlØ BPM
+Equipment General Specification
+Line DirectionConveyor 
+Height / Width
+(mm)Power Compress Air RequirementCFR 21, Part 11Noise Level
+From Left to Right
+H 915 ± 38 
+H 36’’ ± 1.5’’
+Width 114 (4.5’’)415 380 220 Volts, 3 Phases, 
+60/50 Hz + Neutral(90 PSI) 6.9 BarYes/No? 85db
+
+Customer Specifications: from last received E-mail on XX 2025
+
+Customer Specifications: from last received E-mail on 2025-XX-XX
+
+WARNING:
+•	Production speeds quoted in this offer are based on information received and calculated to provide a projected output speed for the proposed equipment and are subject to final testing.
+•	More accurate speeds may be obtained by testing with actual components and product samples. Speeds may also vary depending on component quality and processing time.
+
+This quotation may be subject to modification and/or changes upon:
+
+•	Further examination of bottles samples or relevant drawings and tolerances for project components.
+•	Further study of the actual conditions for the integration of Capmatic equipment with the customer's existing upstream and downstream equipment (e.g. wedge conveyor).
+
+Equipment Configuration and Price
+QtyDescriptionUnit CostSelected Item* Total Price for Selected Items (US dollars) $.00Note: The technical description of all the equipment quoted can be found on the following pages.
+TBD: To Be Determined
+
+Machine Technical Specifications
+Blank: ? 
+(Unscramblers)
+
+Bottle Unscrambler Feeder Model – RoboSort 2
+Capable of feeding plastic containers into transporting puck at speed of up to 100 Bottles per minute
+Bottle diameter from:			25 to 125 mm 
+Bottle height from:			50 to 300 mm
+
+Machine Base:
+* Totally enclosed with stainless steel 304 sheeting
+* Lockable movable doors which give access to the internal parts
+* Adjustable levelers for inline positioning 
+* Adjustable in height ±38 mm (1 ½ ‘’) for ease in levelling of the equipment
+* Interlocked Lexan guarding automatically stops the machine if one of the doors is opened
+* Machine base integrated with loading hopper in stainless steel 304 
+* 150 mm (6’’) clearance from the base to the ground
+Bottle Handling System:
+* Loading hopper capacity of approximately 1500 liters (53 ft³)
+* Loading hopper feeder conveyor with inverting motion to quickly emptying the bottle during change over
+* Fixed speed motorization of horizontal and vertical elevator belt
+* Lifting conveyor belts in white polyurethane 
+* Lexan covering of the front vertical side of the elevator
+* 4267 mm (14 ft) anti slip motorized conveyor to feed the container to the pick & place robot with recycling chute 
+* Motorized rotary blades to remove excess bottles at the outfeed and return them to the sorting bowl 
+* Integrated Vision system station with proper lighting teaching the robot the position of the bottles
+* Two (X 2) five axis ABB Delta robot model 390° FlexPaker
+* Loading force of 10Kg. (22lbs.) using NSF H1 Food grade Lubricants and FDA Compliant material
+* Quick interchangeable picking heads with Vacuum suction cup 
+* Lower return bottles conveyor to feed back the unused bottles directly into the feeder hopper 
+* No change parts required for bottle change changeovers
+* Puck filling station with servo driven feed screw
+* 6400 mm (21 ft) stainless steel section of motorized loop conveyor with variable speed control
+* Transfer of the filled puck into an existing conveyor through side transfer system
+
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Solid Red = machine stop
+* Flashing Red = emergency Stop
+* Solid Yellow = stopped for alarm
+* Flashing Yellow = low component warning
+* Solid Green = machine running
+* Flashing Green = machine in Stand-By Mode (automatic restart)
+* Audible alarms
+Control System:
+* Stainless steel panel control 
+* Stainless-steel, tubular holding post with twin axis swivel control panel
+* Electrical system integrated with unscrambler
+* Emergency Stop on the control panel 
+* Ethernet connection (required IP address)
+* Machine controlled with industrial PLC. 
+* 255 mm (10’’) multi-colour touchscreen control interface
+* HMI resolution of 1024 X 600
+* Programmable conveyor, feeder speed, etc. 
+* Capable of memorizing multiple recipes
+* Capable of normal machine operation with alarm display
+* Can set number of bottles per run
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Equipment Specifications, Utility, and Installation Requirements:
+* 220 volts, 3 phases, 60 Hz, 15 amp 
+* Power consumption 4 kw
+* Air requirement 90 psi (6.9 bar), 
+* Air consumption 1 CFM (28Lt./m)
+* 21 CFR part 11 Ready
+* Built in accordance with North American standards (UL) and CSA (Canadian Standard Association)
+Note: Specifications may vary depending on final equipment configuration and the options selected.
+Quick Changeover Features:
+* Dial indicators and/or reference counters/scales are used to obtain quick, repeatable changeovers
+* All mechanical adjustments are done using numerical counters for reference to create easy changeovers 
+* No change parts required
+
+
+Bottle Unscrambler Feeder Model – RoboSort 4
+Capable of feeding plastic containers into transporting puck at speed of up to 200 Bottles per minute
+Bottle diameter from:			25 to 125 mm 
+Bottle height from:			50 to 300 mm
+
+Machine Base:
+* Totally enclosed with stainless steel 304 sheeting
+* Lockable movable doors which give access to the internal parts
+* Adjustable levelers for inline positioning 
+* Adjustable in height ±38 mm (1 ½ ‘’) for ease in levelling of the equipment
+* Interlocked Lexan guarding automatically stops the machine if one of the doors is opened
+* Machine base integrated with loading hopper in stainless steel 304 
+* 150 mm (6’’) clearance from the base to the ground
+Bottle Handling System:
+* Loading hopper capacity of approximately 20000 liters (71 ft³) 
+* Loading hopper feeder conveyor with inverting motion to quickly emptying the bottle during change over
+* Fixed speed motorization of horizontal and vertical elevator belt
+* Lifting conveyor belts in white polyurethane 
+* Lexan covering of the front vertical side of the elevator
+* 4267 mm (14 ft) anti slip motorized conveyor to feed the container to the pick & place robot with recycling chute 
+* Motorized rotary blades to remove excess bottles at the outfeed and return them to the sorting bowl 
+* Integrated Vision system station with proper lighting teaching the robot the position of the bottles
+* Four (X 4) five axis ABB Delta robot model 390° FlexPaker
+* Loading force of 10Kg. (22lbs.) using NSF H1 Food grade Lubricants and FDA Compliant material
+* Quick interchangeable picking heads with Vacuum suction cup 
+* Lower return bottles conveyor to feed back the unused bottles directly into the feeder hopper 
+* No change parts required for bottle change changeovers
+* Puck filling station with servo driven feed screw
+* 9450 mm (31ft) stainless steel section of motorized loop conveyor with variable speed control
+* Transfer of the filled puck into an existing conveyor through side transfer system
+
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Solid Red = machine stop
+* Flashing Red = emergency Stop
+* Solid Yellow = stopped for alarm
+* Flashing Yellow = low component warning
+* Solid Green = machine running
+* Flashing Green = machine in Stand-By Mode (automatic restart)
+* Audible alarms
+Control System:
+* Stainless steel panel control 
+* Stainless-steel, tubular holding post with twin axis swivel control panel
+* Electrical system integrated with unscrambler
+* Emergency Stop on the control panel 
+* Ethernet connection (required IP address)
+* Machine controlled with industrial PLC. 
+* 255 mm (10’’) multi-colour touchscreen control interface
+* HMI resolution of 1024 X 600
+* Programmable conveyor, feeder speed, etc. 
+* Capable of memorizing multiple recipes
+* Capable of normal machine operation with alarm display
+* Can set number of bottles per run
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Equipment Specifications, Utility, and Installation Requirements:
+* [Volts] volts, 3 phases, [Frequency] Hz, [Amperes] amp 
+* Power consumption 4 kW
+* Air requirement [PSI(Bars)], 
+* Air consumption [CFM(Lt/m]
+* 21 CFR part 11 Ready
+* Built in accordance with North American standards (UL) and CSA (Canadian Standard Association)
+Note: Specifications may vary depending on final equipment configuration and the options selected.
+Quick Changeover Features:
+* Dial indicators and/or reference counters/scales are used to obtain quick, repeatable changeovers
+* All mechanical adjustments are done using numerical counters for reference to create easy changeovers 
+* No change parts required
+
+
+Bottle Unscrambler Feeder Model – RoboSort 6
+Capable of feeding plastic containers into transporting puck at speed of up to 400 Bottles per minute
+Bottle diameter from:			25 to 125 mm 
+Bottle height from:			50 to 300 mm
+
+Machine Base:
+* Totally enclosed with stainless steel 304 sheeting
+* Lockable movable doors which give access to the internal parts
+* Adjustable levelers for inline positioning 
+* Adjustable in height ±38 mm (1 ½ ‘’) for ease in levelling of the equipment
+* Interlocked Lexan guarding automatically stops the machine if one of the doors is opened
+* Machine base integrated with loading hopper in stainless steel 304 
+* 150 mm (6’’) clearance from the base to the ground
+Bottle Handling System:
+* Loading hopper capacity of approximately 2500 liters (88 ft³)
+* Loading hopper feeder conveyor with inverting motion to quickly emptying the bottle during change over
+* Fixed speed motorization of horizontal and vertical elevator belt
+* Lifting conveyor belts in white polyurethane 
+* Lexan covering of the front vertical side of the elevator
+* 4267 mm (14 ft) anti slip motorized conveyor to feed the container to the pick & place robot with recycling chute 
+* Motorized rotary blades to remove excess bottles at the outfeed and return them to the sorting bowl 
+* Integrated Vision system station with proper lighting teaching the robot the position of the bottles
+* Six (X 6) five axis ABB Delta robot model 390° FlexPaker
+* Loading force of 10Kg. (22lbs.) using NSF H1 Food grade Lubricants and FDA Compliant material
+* Quick interchangeable picking heads with Vacuum suction cup 
+* Lower return bottles conveyor to feed back the unused bottles directly into the feeder hopper 
+* No change parts required for bottle change changeovers
+* Puck filling station with servo driven feed screw
+* 12500 mm (41ft) stainless steel section of motorized loop conveyor with variable speed control
+* Transfer of the filled puck into an existing conveyor through side transfer system
+
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Solid Red = machine stop
+* Flashing Red = emergency Stop
+* Solid Yellow = stopped for alarm
+* Flashing Yellow = low component warning
+* Solid Green = machine running
+* Flashing Green = machine in Stand-By Mode (automatic restart)
+* Audible alarms
+Control System:
+* Stainless steel panel control 
+* Stainless-steel, tubular holding post with twin axis swivel control panel
+* Electrical system integrated with unscrambler
+* Emergency Stop on the control panel 
+* Ethernet connection (required IP address)
+* Machine controlled with industrial PLC. 
+* 255 mm (10’’) multi-colour touchscreen control interface
+* HMI resolution of 1024 X 600
+* Programmable conveyor, feeder speed, etc. 
+* Capable of memorizing multiple recipes
+* Capable of normal machine operation with alarm display
+* Can set number of bottles per run
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Equipment Specifications, Utility, and Installation Requirements:
+* 415 380 volts, 3 phases, 60/50 Hz, 15 amp
+* Power consumption 6 kw
+* Air requirement 90 psi (6.9 bar), 
+* Air consumption 1 CFM (28Lt./m)
+* 21 CFR part 11 Ready
+* Built in accordance with North American standards (UL) and CSA (Canadian Standard Association)
+Note: Specifications may vary depending on final equipment configuration and the options selected.
+Quick Changeover Features:
+* Dial indicators and/or reference counters/scales are used to obtain quick, repeatable changeovers
+* All mechanical adjustments are done using numerical counters for reference to create easy changeovers 
+* No change parts required
+
+
+Bottle Unscrambler Model: ThunderStar
+For arranging and conveying plastic containers at a speed of up to 300 BPM (depending on the bottle size and shape) with the ability to code, inspection, and clean pharmaceutical bottles to meet with Track & Trace requirements.
+* Bottle diameter from:			25 to 125 mm 
+* Bottle height from:			50 to 210 mm
+* Bottle neck opening (minimum)	 	Ø12 mm
+
+Machine Base:
+* Machine frame in anodized aluminium and stainless steel 
+* Totally enclosed with stainless steel 304 sheeting
+* Lockable movable doors which give access to the internal parts
+* Adjustable levelers for inline positioning 
+* Adjustable in height ±38 mm (1 ½ ‘’) for ease in levelling of the equipment
+* Interlocked Lexan guarding automatically stops the machine if one of the doors is opened
+* Machine base integrated with loading hopper in stainless steel 304 
+* Detection of component level in the integrated elevator hopper by photocell
+* 150 mm (6’’) clearance from the base to the ground
+* Machine overall dimensions 3200 X 1350 mm (126’’ X 53’’)
+* Weight 3,200 lb. (1450 kg) (approximately)
+Bottle Handling System:
+* Loading hopper capacity of approximately 500 liters (18 ft³) 
+* Fixed speed motorization of horizontal and vertical elevator belt
+* Lifting conveyor belts in white polyurethane 
+* Lexan covering of the front vertical side of the elevator
+* Centrifugal sorting system with variable speed control 
+* Motorized rotary blades to remove excess bottles at the outfeed and return them to the sorting bowl 
+* Stainless steel sorting wall support 
+* 1220 mm (4 ft) stainless steel section of motorized transfer conveyor with variable speed control
+* Transporting Delrin chain, 114 mm (4½’’) wide
+* Side rail is adjustable without the use of any tools
+* One vertical rotary vacuum pickup star wheel (5 arms)
+* One horizontal rotary transport star wheel with 18 mechanical clamping jaws
+* Rotation of 180° of each clamping arm for proper bottle presentation, depending on the option chosen 
+* Built-in reject station with lockable door 
+* Handwheel adjustment with numerical counters for fast, repeatable set-ups
+* No change parts required for changeovers
+* 4267 mm (14 ft) stainless steel section of motorized outfeed conveyor with variable speed control
+* Bottles exit machine in an upright position
+
+
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Solid Red = machine stop
+* Flashing Red = emergency Stop
+* Solid Yellow = stopped for alarm
+* Flashing Yellow = low component warning
+* Solid Green = machine running
+* Flashing Green = machine in Stand-By Mode (automatic restart)
+* Audible alarms
+Control System:
+* Stainless steel panel control 
+* Stainless-steel, tubular holding post with twin axis swivel control panel
+* Electrical system integrated with unscrambler
+* Emergency Stop on the control panel 
+* Ethernet connection (required IP address)
+* Machine controlled with industrial PLC. 
+* 255 mm (10’’) multi-colour touchscreen control interface
+* HMI resolution of 1024 X 600
+* Programmable conveyor, feeder speed, etc. 
+* Capable of memorizing multiple recipes
+* Capable of normal machine operation with alarm display
+* Can set number of bottles per run
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Equipment Specifications, Utility, and Installation Requirements:
+* 220 volts, 3 phases, 60 Hz, 15 amp 
+* Power consumption 4 kw
+* Air requirement 90 psi (6.9 bar), 
+* Air consumption 1 CFM (28Lt./m)
+* 21 CFR part 11 Ready
+* Built in accordance with North American standards (UL) and CSA (Canadian Standard Association)
+Note: Specifications may vary depending on final equipment configuration and the options selected.
+Quick Changeover Features:
+* Dial indicators and/or reference counters/scales are used to obtain quick, repeatable changeovers
+* All mechanical adjustments are done using numerical counters for reference to create easy changeovers 
+* No change parts required
+
+
+Bottle Unscrambler Model “SortStar”
+For arranging and conveying plastic containers at a speed of up to 300 BPM (depending on the bottle size and shape).
+* Bottle diameter from:			25 to 125 mm 
+* Bottle height from:			50 to 210 mm
+* Bottle neck opening (minimum) 		Ø12 mm
+
+Machine Base:
+* Machine frame in anodized aluminium and stainless steel 
+* Totally enclosed with stainless steel 304 sheeting
+* Lockable movable doors which give access to the internal parts
+* Adjustable levelers for inline positioning 
+* Adjustable in height ±38 mm (1 ½ ‘’) for ease in levelling of the equipment.
+* Interlocked Lexan guarding automatically stops the machine if one of the doors is opened
+* Machine base integrated with loading hopper in stainless steel 304 
+* Detection of component level in the integrated elevator hopper by photocell
+* 150 mm (6’’) clearance from the base to the ground
+* Machine overall dimensions 2620 X 1244 mm (103’’ X 50’’)
+* Weight 2,200 lb. (1000kg) (approximately)
+Bottle Handling System:
+* Loading hopper capacity of approximately 500 liters (18 ft³) 
+* Fixed speed motorization of horizontal and vertical elevator belt
+* Lifting conveyor belts in white polyurethane 
+* Lexan covering of the front vertical side of the elevator 
+* Centrifugal sorting system with variable speed control 
+* Motorized rotary blades to remove excess bottles at the outfeed and return them to the sorting bowl 
+* Stainless steel sorting wall support
+* First set of motorized lateral belts for outfeed bottle spacing before pneumatic lifting arm
+* Pneumatic lifting arm with adjustable pressure (used to orient containers in upright position before discharge)
+* Adjustable mechanical cam to bring bottle back into upright position
+* Easy, toolless, no change parts, size changeover done with only 3 handwheel adjustment system
+* Handwheel adjustment with numerical counters for fast, repeatable set-ups
+* Independently adjustable speeds for pacing and transporting conveyor belts
+* Bottles exit machine in an upright position, moving onto an existing conveyor
+
+
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Solid Red = machine stop
+* Flashing Red = emergency Stop
+* Solid Yellow = stopped for alarm
+* Flashing Yellow = low component warning
+* Solid Green = machine running
+* Flashing Green = machine in Stand-By Mode (automatic restart)
+* Audible alarms
+Control System:
+* Stainless steel panel control 
+* Stainless steel, tubular holding post with twin axis swivel control panel
+* Emergency Stop on the control panel 
+* Machine controlled with industrial PLC 
+* 255 mm (10’’) multi-colour touchscreen control interface
+* HMI resolution of 1024 X 600
+* Ethernet connection (required IP address)
+* Programmable conveyor, feeder speed, etc. 
+* Capable of memorizing multiple recipes
+* Capable of normal machine operation with alarm display
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Equipment Specifications, Utility, and Installation Requirements:
+* 220 volts, 3 phases, 60 Hz, 15 amp 
+* Power consumption 4 kw
+* Air requirement 90 psi (6.9 bar), 
+* Air consumption 1 CFM (28Lt./m)
+* Air regulator with filter with ¼’’ quick connect male with ½’’ NPT
+* 21 CFR part 11 Ready
+* Built in accordance with of North American standards (UL) and CSA (Canadian Standard Association)
+Note: Specifications may vary depending on final equipment configuration and the options selected
+Quick Changeover features:
+* Dial indicators and or reference counters/scales are used to obtain quick, repeatable changeovers.
+* Exit door with reverse horizontal conveyor to eliminate any bottles left in the system
+* All mechanical adjustments are done using numerical counters for reference to create easy changeovers 
+* No change parts required
+
+
+
+Available Options for the Unscrambler
+
+Ink Jet Coding System Model Domino Ax350i
+System includes:
+- One (1) Ax350i high resolution Printer standard ink 
+- Touch-panel Type 3
+- Beacon assembly Type 2
+- Product Detector Reflective assembly
+- Shaft encoder kit
+- Operator and maintenance manual
+- Built and certify to meet CE requirement 
+- Rapidly prints clean and clear codes
+- Supports leading industrial communication protocols
+- Enterprise Resource Planning (ERP)
+- Newly designed intuitive Domino interface
+- Robust, high IP66 rating
+- Designed for even the most demanding applications 
+
+VIDEOJET® Ink Jet Coding System Model VJ 1520
+System includes:
+One (1) printing head with 3-meter conduct cable 
+Stainless steel 316 Cabinet
+Automatic cleaning system
+Integrated key board QWERTY WYSIWIG
+English interface
+Operator and maintenance manual
+Built and certify to meet CSA & UL requirement 
+Control Unit
+Membrane style with tactile Feedback, including 72 numeric, alphabetic, and special function keys. PC-Style layout to approximate international PC convention
+Stainless steel (316) cabinet designed to IP53 (BS EN 60529: 1992)
+Cabinet dimensions: 391 X 338 X h 553 mm (13.58” x 13.3” x 21.77”)
+Weight: 21 kg (46 lbs.)
+Printing Capability 
+Can print 1 to 5 lines at speed of up to 278.6 Meter/minute 914 fpm (10 characters per inch single line of print)
+Linear bar codes: UPC A&E, EAN8 & 13, Code 128 A B & C, UCC/EAN128, Code 39, Code 93, Interleaved 2 of 5
+Characters height from 2 mm to 10 mm (0.08” to 0.40”) depending on the font chosen
+Font matrix configuration
+Single line: 5 X 5, 5 X 7, 7 X 9, 8 X 12, 11 X 16, 17 X 24, 23 X 34
+Twin Line: 5 X 5, 5 X 7, 8 X 12, 11 X 16
+Tri Line: 5 X 5, 5 X 7, 7 X 9
+Quad Line: 5 X 5, 5 X 7
+Five lines: 5 X 5
+Data matrix codes
+10 X 10, 12 X 12, 14 X 14, 16 X 16, 18 X 18, 20 X 20, 24 X 24, 34 X 34
+Controls
+Membrane style Keyboard with tactile feed back
+72 numeric, alphabetic, and special function keys
+P.C. style layout to approximate international PC convention
+Display 320 X 240 Bright Blue backlit 5.7” LCD display
+WYSIWYG onscreen message editing
+Logo or graphics can be created by individual user on printer or PC with optional VIDEOJET Logo Creator software
+Optional
+IP65- (no plant required)
+Dry air kit for high humidity (required plant air
+Expandable I/O for remote message select and reverse print
+60 or 70-micron nozzle
+Food grade version
+90º degree print-head
+Wide range of accessory
+Ink System
+Make up fluid consumption as low as 2.4 ml per hour
+Fluid container Ink Smart cartridge 750 ml, Make up smart Cartridge 750 ml
+Print head
+Dimensions: 269 mm X 41.3 mm (10.72” x 1.63”)
+Conduit length: 3 m (9’04) Diameter 23 mm 0.91” Bend Radius 76.2 mm
+Positive air: 
+Heated print-head
+Throwing distance Optimal of 12 mm 0,472” range 5 mm to 15 mm
+Environment
+Temperature range: 0 – 50°C (32 – 122°F) 
+Operating humidity: 0 – 90% (non-condensing)
+Electrical requirements: Single phase, fully auto-ranging 100 – 240V, 50-60Hz 120 W
+Data Interface
+RS232, RS485 and Ethernet (Standard)
+Clarisoft/Clarinet® via RS232 and Ethernet
+Message management via USB
+Store up to 100 messages
+
+VIDEOJET® Laser Marking System Model 3330
+Marking Speed
+Up to 1,300 characters/sec. (1)
+Line Speed
+Up to 15m/sec. (49ft/sec.) (1)
+Marking Window
+Approx. 25 x 20mm to 485 x 351mm
+Wavelengths
+10.6?m, 10.2?m and 9.3?m
+Marking Formats
+Standard industrial fonts (Type 1 Windows® TrueType®) and Single line fonts
+Machine readable codes (OCR, 2D-matrix, etc.)
+Bar codes: BC25, BC251, BC39, BC128, GS1-128, EAN13, UPC_A, RSS14,
+RSS14 Truncated, RSS14 Stacked, RSS14 Stacked Omnidirectional, RSS Limited,
+RSS Expanded, etc.
+Graphics, logos, symbols, etc.
+Linear, circular, angular, reverse, rotate
+Sequential and batch numbering
+Automatic date, layer and time coding; real-time clock
+Dot mode enables marking 2D codes faster than traditional grid mode
+Laser Tube
+Sealed CO2 laser, power class 30-Watt
+Beam Deflection
+Steered beam with digital high-speed galvanometer scanners
+Focusing
+Focal lengths: 64/ 95/ 127/ 190/ 254 mm (2.5/ 3.75/ 5.0/ 7.5/ 10.0 inches);
+63.5/ 85/ 100/ 150/ 200/ 300/ 351/ 400 mm (2.50/ 3.35/ 3.94/ 5.9/ 7.87/ 11.8/
+13.8/ 15.75 inches)
+Multiple Operator Interface Options
+Handheld controller
+PC software
+CLARiTY® Laser Controller
+Smart Graph ComCommunication
+Ethernet, TCP/IP and RS232 optional
+Inputs for encoders and product detector triggers
+3 inputs/ 7 outputs for start/ stop signals, machine/ operator interlocks, alarm outputs;
+with additional I/Os available
+Customer-specific solutions available
+Integration
+Direct integration into complex production lines via scripting interface
+Flexible beam delivery options (beam extension unit/ beam turning unit)
+Detachable umbilical for simple integration; available in 3 lengths
+Electrical Requirements
+100-240 VAC (auto range), ~50/60Hz, 1PH, 0.70KW
+Cooling System
+Air cooled
+Environment
+Temperature 40-105° F (5-40° C)
+Humidity 10%-90%, non-condensing
+Sealing and Safety Standards
+Supply Unit: IP32, optional IP54 and IP65
+Marking Unit: IP54, optional IP65
+Optional safety module provides Performance Level d (PFL-d) in accordance
+to EN 13849-1
+IEC/EN 60825-1:2007
+Approximate Weight
+Supply Unit (IP32/IP54): 16 lbs. (7kg)
+Marking Unit (IP54): 46lbs (20.9kg)
+Applicable Certifications
+CE, TÜV/NRTL, FCC
+Compliance (no certification required): ROHS, CDRH/FDA
+
+
+
+Laser Fume Extractor System Model Oracle
+
+The Advantage Access Laser Fume Extractor was designed specifically for low-to-medium throughput applications. Its basic design meets the performance needs of most 10W laser applications while providing a filter condition indicator as standard.
+Key Features Include:
+* Close loop automatic flow control
+* Two (X 2) stages F8 pre-filter with large surface area
+* Reverse flow
+* Small footprint and low noise level
+
+Ionized Bottle Blowing System Assisted with Vacuum Unit
+* Upside down flip arm mounted on the conveyor belt of the unscrambler
+* Bottles will be treated upside down ensuring elimination of particle 
+* Blowing station with Three (X 3) fixed Ionized blowing nozzles to help removing the static commonly see with plastic bottle.
+* Cleaning sequences assisted with Vacuum system for particles aspiration
+* Once bottle have been treated, they are put back in the up-right position to exit onto a conveyor.
+* Air blowing fault alarm
+* Ionized nozzle fault alarm
+* Vacuum fault alarm 
+* All alarms monitor through the HMI
+N.B. this system cannot guaranty the perfect elimination of all particles from inside or outside the bottles
+
+Cognex Camera Vision System for Quality Control
+To verify the printing on bottle OCR/OCV, 2D Bar-code 
+* System fully integrated to the machine HMI
+* One (1) Insight 7000 series (OCV/OCR & Hot Stamp)
+* Insight Ethernet Cable (5 m) 
+* One (1) appropriate Lens 
+* One (1) appropriate Light
+* Camera and Light Brackets with micro adjustment system to properly position the camera at the right place 
+
+H.E.P.A. Filter Hood with Laminar Flow
+* Eight (X 8) low energy HEPA Fan Filter units @ 1.4 Amps each. Filter enclosure necessary to cover unscrambler platform and the out-feed part of the equipment 
+* Provides frame and fans for HEPA-filtered microenvironment 
+* Enclosure will provide better than CLASS 100 (ISO5) conditions as per Federal Standard 209E
+* HEPA filters rated 99.99% efficient at 0.3 microns
+* Extruded aluminium support frame to be attached to Euro guarding. 
+* Four (X 4) Tear drop shaped light fixture. 
+* Optional stainless-steel upgrade. 
+* Height (X 8) Minihelic gauges to monitor loading on HEPA filters
+* Light weight corrosion resistant aluminium housing
+* Energy efficient motorized impeller
+* Anodized aluminium HEPA filter frame
+* Standard variable speed control with on/off, 
+* Duplex outlet in filter housing for joining multiple units together
+* Tubular stainless-steel guarding on the base of the machine for proper air evacuation
+
+
+
+
+
+
+
+Motorized Automatic Adjustment System
+Designed to automatically adjust mechanical setting according to pre-set recipes from the HMI.
+Includes:
+* Additional motors to automatically adjust belts and other alignments device to properly handle bottles.
+* Sensors to link all adjustment point ensuring all changes were made according to set-up.
+Note: the lifting arm may need to be manually adjusted depending on the bottle shape and height
+
+Explosion Resistant (EXP - ATEX) Control System
+Pepperl+Fuchs 6000 Series Purge/ Pressurization products offer a safe approach to installing electrical equipment in hazardous locations. By creating a safe area inside a standard enclosure, general-purpose equipment can be used in hazardous (classified) areas.
+
+Flammable gas collected inside the enclosure is removed and the accumulation of gases or ignitable dust within the pressurized enclosure is prevented. 
+The Pepperl+Fuchs Bebco EPS 6000 series Type X purging system is a complete automatic system that will purge and pressurize the protected enclosure and maintain pressure within the enclosure.
+
+The 6000 series purge system reduces the classification within the protected enclosure from Zone 1 and 21 to non-hazardous area. 
+
+* Class one division two (intrinsically safe) panel control 
+* Includes 6000 series Purge System
+* All electrical wirings are channeled in sealed hard conduct piping
+* Includes explosion proof, sealed motors
+* Includes intrinsically safe barriers
+* Includes Nema 4 electrical box
+* Includes intrinsically safe Namur sensors
+* Suitable for Class I and II, Division 1/ Zone 1 and Zone 21 to non-hazardous area applications
+* Enclosure sizes up to 450 cubic ft. (12.7 cubic meters)
+* The Type X system conforms to ATEX, NFPA 496 and ISA 12.4
+* DEMKO, UL cULus, IEC Ex
+*  Emergency switch on the panel control
+* Air at 100 PSI using 20 CFM
+
+
+Automatic Reject Station
+To be install on the existing conveyor
+* Fail safe reject station 
+* To reject non-conformed bottle after vision inspection
+* Included the tracking sensor
+* Ejection pneumatic piston 
+* Stainless steel accumulation table
+* Stainless steel lockable reject station
+* Reject confirmation sensor
+* Maximum speed of 150 BPM
+
+HS- Automatic Reject Station
+To be install on the existing conveyor
+* Fail-safe design
+* To reject non-conformed bottle after vision inspection
+* High speed rejection multiple pneumatic pistons system to properly remove the faulty component standing in upright position
+* 1828 mm (8 ft) section of reject conveyor with variable speed
+* One transporting Delrin chain of 114 mm wide
+* Set of adjustable guides without tools 
+* Reject confirmation sensor
+* Maximum speed of 300 BPM
+
+Pharmaceutical Air Exchange Safety Guard
+* Tubular stainless-steel guarding on the base of the machine for proper air evacuation
+
+HEPA Filter Hood with Laminar Flow
+* Five (X 5) low energy HEPA Fan Filter units @ 1.4 Amps each. Filter enclosure necessary to cover unscrambler platform and the out-feed part of the equipment 
+* Provides frame and fans for HEPA-filtered microenvironment 
+* Enclosure will provide better than CLASS 100 (ISO5) conditions as per Federal Standard 209E
+* HEPA filters rated 99.99% efficient at 0.3 microns
+* Extruded aluminium support frame to be attached to Euro guarding. 
+* Four (X 4) Tear drop shaped light fixtures. 
+* Optional stainless-steel upgrade. 
+* Minihelic gauges to monitor loading on HEPA filters
+* Light weight corrosion resistant aluminium housing
+* Energy efficient motorized impeller
+* Anodized aluminium HEPA filter frame
+* Standard variable speed control with on/off, 
+* Duplex outlet in filter housing for joining multiple units together
+* Tubular stainless-steel guarding on the base of the machine for proper air evacuation
+
+
+
+Automatic Bottle Orientor System
+* 2440 mm (8’) section of sanitary motorized raised bed conveyor in stainless steel 
+* Variable speed control
+* Transporting Delrin chain of 114 mm (4½’’) wide
+* Tool-less adjustable guide rails 
+* Machine frame in anodize aluminium and Stainless steel 
+* Totally enclosed with stainless steel 304 sheeting
+* Adjustable levelers for inline positioning 
+* Adjustable in height ± 30 mm to ease up leveling of the equipment.
+* Pneumatic rotary gating system to turn the bottle 180° degree to face the right position 
+* Lexan cover to protect the operator
+* Bottle position detected by two adjustable sensors 
+* Continuous flow system
+* Speed of up to 200 BPM depending on the bottle 
+
+Automatic Fallen or Inverted Bottle Detection System
+Included:
+* Two (X 2) reading sensor for bottle positioning 
+* Micrometric adjustment system for each sensor
+* Pneumatic air blast 
+* Automatic recycling stainless steel chute into the main hopper
+* For speeds, up to 250 BPM depending on the bottle to handle
+Available only with over size hopper 680 liters (24 ft³)
+
+Automatic Fallen or Inverted Bottle Detection System
+Included:
+* Two (X 2) reading sensor for bottle positioning 
+* Micrometric adjustment system for each sensor
+* Pneumatic air blast 
+* Stainless steel bin for manual Recycling into the main hopper
+* For speeds, up to 250 BPM depending on the bottle to handle
+
+Fallen Bottle Diverter
+Enable to removed the fallen bottle form a motorized conveyor and ensuring stand up bottle coming in the upward equipment 
+* Set of adjustable diverting guide 
+* Stainless steel recuperation bin 
+* Lexan cover to visualized the amount of fallen bottle into it
+* Quick Tool less detachable bin for 
+/Available Options for Unscramblers End
+
+(Turn Tables)
+
+Buffer Turntable Ø 990 mm (39’’)
+To accumulated bottle before the labeling machine while new reel of label is being install to avoid stopping the production line, this system will feed back the bottle once machine as regain production 
+* One accumulation table in stainless steel 
+* Ø 990 mm (39’’) turntable in stainless steel
+* Variable speed control
+* Completely covered stainless steel base with removable access door
+* Four (X 4) adjustable stabilizing feet
+* Set of adjustable guides and double side rail for container positioning
+
+
+Buffer Turntable Ø 1220 mm (48’’)
+To accumulated bottle before the labeling machine while new reel of label is being install to avoid stopping the production line, this system will feed back the bottle once machine as regain production 
+* One accumulation table in stainless steel 
+* Ø 1220 mm (48’’) turntable in stainless steel
+* Variable speed control
+* Completely covered stainless steel base with removable access door
+* Four (X 4) adjustable stabilizing feet
+* Set of adjustable guides and double side rail for container positioning
+
+
+Buffer Turntable Ø 1525 mm (60’’)
+To accumulated bottle before the labeling machine while new reel of label is being install to avoid stopping the production line, this system will feed back the bottle once machine as regain production 
+* One accumulation table in stainless steel 
+* Ø 1525 mm (60’’) turntable in stainless steel
+* Variable speed control
+* Completely covered stainless steel base with removable access door
+* Four (X 4) adjustable stabilizing feet
+* Set of adjustable guides and double side rail for container positioning
+
+
+Alignment System for Shaped Bottles
+To help aligned shape bottle at the out feed of the turntable 
+* Air motor with variable speed guided with air regulator
+* Mounted directly onto the cross-section support of the guiding system of the turntable
+* Spinning wheel cover with protective material preventing scratches on the bottles 
+* Efficiency of this system depend on the shape and particularity of the bottle itself and may not be perfectly efficient
+
+
+Fallen Bottles Diverter
+Removes fallen bottles form a motorized conveyor and ensuring stand up bottle coming in the upward equipment 
+* Set of adjustable diverting guide 
+* Stainless steel recuperation bin 
+* Lexan cover to visualized the amount of fallen bottle into it
+* Quick Tool less detachable bin for 
+
+
+Outfeed Turntable Ø 990 mm (39’’)
+To accumulate stable base container
+* One outfeed accumulation table in stainless steel 
+* Ø 990 mm (39’’) turntable in stainless steel
+* Ø 1220 mm (48’’) turntable in stainless steel
+* Ø 1525 mm (60’’) turntable in stainless steel
+* Variable speed control
+* Completely covered stainless steel base with removable access door
+* Four (X 4) adjustable stabilizing feet
+* Set of adjustable guides and double side rails for container positioning
+* Stainless steel transfer plate 
+
+
+Outfeed Turntable Ø 1220 mm (48’’)
+To accumulate stable base container
+* One outfeed accumulation table in stainless steel 
+* Ø 990 mm (39’’) turntable in stainless steel
+* Ø 1220 mm (48’’) turntable in stainless steel
+* Ø 1525 mm (60’’) turntable in stainless steel
+* Variable speed control
+* Completely covered stainless steel base with removable access door
+* Four (X 4) adjustable stabilizing feet
+* Set of adjustable guides and double side rails for container positioning
+* Stainless steel transfer plate 
+
+
+Outfeed Turntable Ø 1525 mm (60’’)
+To accumulate stable base container
+* One outfeed accumulation table in stainless steel 
+* Ø 990 mm (39’’) turntable in stainless steel
+* Ø 1220 mm (48’’) turntable in stainless steel
+* Ø 1525 mm (60’’) turntable in stainless steel
+* Variable speed control
+* Completely covered stainless steel base with removable access door
+* Four (X 4) adjustable stabilizing feet
+* Set of adjustable guides and double side rails for container positioning
+* Stainless steel transfer plate 
+
+/Turn Table End
+
+(Labellers)
+
+LabelStar Model System 1 ECO
+Automatic Labeling machine to apply a pressure sensitive label onto a round container with partial or total wrap around application
+
+Machine Base and Mechanical Features:
+* Frame in anodized aluminium completely covered in stainless steel 304 
+* Adjustable support legs for in-line positioning and levelling. from ± 38 mm (1 ½ ‘’)
+* Raised working surface for easy cleaning
+* Most Electrical and mechanical part located inside the machine frame for a complete protection
+* Top plate of the base completely sealed against liquid infiltration protecting all internal mechanical parts
+* Wide lockable inspection doors for routine maintenance
+* 150 mm (6’’) clearance from the base to the ground
+Bottle Handling System:
+* 2440 mm (8’) 3050 mm (10’) 3660 mm (12’) section of stainless-steel motorized conveyor
+* Variable speed control
+* Transporting Delrin chain of 114.3 mm (4 ½’’) wide
+* Adjustable side rail without the use of any tools
+Labeling Station:
+* One electronic labeling head model LS ECO
+* Maximum width of paper 97 mm (3.81’’)
+* Maximum dispensing speed of 40 meters (195 foot) per minute
+* System to adjust the head mounted on biaxial system with double shaft and a very precise scale
+* High precision Stepper motor
+* System pull push for label stability
+* Maximum reel diameter of 380 mm (15’’)
+* Bottle detection with photo start programmable from the touch screen
+* Label detection with photo stop programmable from the panel control
+* Height adjustment system of the labeling head with hand wheel for easy change over
+* Change over label with automatic self-learning device
+* Labeling head control with CPU 
+* Stainless steel peal plate for label distribution
+* One 90 mm (3.5’’) wrap around system (Vertical carpet style) with variable speed electronically synchronized by encoder with the labeling head for label speed distribution  
+* Front pressure plate according to your requirement
+* Height adjustment system with slotted screws with system stabilizer
+
+
+Control Panel:
+* One complete switch button control affixed to the machine frame 
+* Alarm for end roll, breakage of paper
+* Automatic stopping of the machine in case of any alarm by stopping the infeed system.
+* Emergency stop installed on the control panel
+* Main power 220-volt single phases 50/60 Hz 15 Amps
+Quick Changeover Features:
+* Dial indicators and or reference counter/scales are used to obtain repeatable quick changeovers.
+* Self-programming system for label change
+* Single Ballonets system for quick closure of the labeling roller head avoiding passing paper label true hard places when doing change over label
+Other Features:
+* Mechanical change over size is done without the use of any tools and is done in approximately 15 minutes including programming of the labeling head
+* Pharmaceutical stainless-steel base very easy to clean protecting all internal components
+* Removing or channeled as much as possible any wire use to connect all external components 
+* Electrical components are all connected with Brad Harrison quick disconnect system for easy maintenance 
+* Back up sensor at the exit conveyor that stops the machine in case of accumulation
+Machine Specifications:
+* Core diameter in between 38 to 76 mm (1 ½ ‘’ to 3’’)
+* Maximum roll diameter 380 mm (15’’)
+* Maximum dispensing speed of 40 meters (197 ft) per minute
+* Maximum width of paper 97 mm (3.8’’) 
+* Minimum label size 10 X 10 mm
+* Bottle size minimum ø 10 mm – Maximum ø 100 mm
+* Maximum bottle height 300 mm (12’’)
+* Normal roll change over time in between 1 to 4 minutes
+
+
+LabelStar Model System 1 HS-LSA-100
+Automatic Labeling machine to apply a pressure sensitive label onto a round container with partial or total wrap around application at a speed of up to 300 BPM (depending on the label length and bottle diameter product 
+
+Machine Base and Mechanical Features:
+* Frame in anodized aluminium completely covered in stainless steel 304 
+* Adjustable support legs for in-line positioning and levelling. from ± 38 mm (1 ½ ‘’)
+* Raised working surface for easy cleaning
+* Electrical and mechanical part located inside the machine frame for a complete protection
+* Top plate of the base completely sealed against liquid infiltration protecting all internal mechanical parts
+* Wide lockable inspection doors for routine maintenance
+* 150 mm (6’’) clearance from the base to the ground
+* Euroguard Safety Interlock System with 13 mm (½’’) thick Lexan doors
+* Doors are mounted in stainless steel frame where electric wires are channeled into
+* Safety interlocks ensure safety before start-up and during operation
+Bottle Handling System:
+* 3660 mm (12’) section of stainless-steel Motorized conveyor
+* Variable speed control 
+* One transporting Delrin chain of 114 mm (4 ½’’) wide
+* Set of adjustable guides without tools
+* Product separation by feed screw system with variable speed control
+* Width adjustment system
+* Quick interchangeable screw system
+Labeling Head Features:
+* One (X 1) electronic labeling head model LSA 100X 
+* Maximum width of paper 100 mm 
+* Maximum dispensing speed of 80 meters per minute
+* Labeling head motorized height adjustment system
+* Labeling head positioning system guided with précised numerical counter, composed of four (X 4) axis mounted on sliding plate
+* Stepper motor
+* Motorized retake of backing paper (unwinder)
+* System pull push 
+* Maximum reel diameter of 380 mm
+* Bottle detection with photo start very easy to adjust on a sliding Harm affixed to the machine 
+* Label detection with fixed position Eagle Eyes sensor for clear label detection
+* Change over label with automatic self-learning device
+
+Label Application System:
+* One 90 mm (3.5’’) 45 mm (1.7’’) 150 mm (6’’) wrap around system (Vertical carpet style) 
+* Variable speed Control
+* Electronically synchronization by encoder with the labeling head for label speed distribution  
+* Front pressure plate according to your requirement
+* Height adjustment system with slotted screws with system stabilizer
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Red solid = machine stop
+* Red flashing = emergency stop
+* Yellow solid = stopped for alarm
+* Yellow flash = low component warning
+* Green solid = machine running
+* Green flashing = machine in stand-by (automatic restart)
+Control System:
+* Stainless steel panel control 
+* Stainless steel, tubular holding post with twin axis swivel control panel
+* Emergency Stop on the control panel 
+* Machine controlled with industrial PLC 
+* 255 mm (10’’) multi-colour touch screen control
+* HMI resolution of 1024 X 600
+* Ethernet communication port (required IP address)
+* Calling recipes pre-store in labeling head from the main machine panel control: label length, label positioning, labeling dispensing speed, etc.
+* Capable of memorizing multiple recipes
+* For normal machine operation with alarm display
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Machine Specifications:
+* Core diameter in between 38 to 76 mm (1 ½ ‘’ to 3’’)
+* Maximum roll diameter 400 mm (16’’)
+* Maximum dispensing speed of 60 (197 ‘) 80 (260 ‘) metre/minute
+* Maximum width of paper 100 mm (4 in)
+* Minimum label size 10 X 10 mm
+* Bottle size minimum ø 10 mm – Maximum ø 100 mm (4 in)
+* Maximum bottle height 300 mm (12’’)
+* Main power 220 volt 3 phases 50/60 Hz 15 amps
+* Power consumption 3.5kw
+* Main power 380 volt 3 phases 50/60 Hz 15 amps
+* Power consumption 5.7kw
+* Normal roll change over time in between 1 to 4 minutes
+* Air consumption 4 CFM (113 Lt/m) at 90 PSI (6.2 bar) with hot stamp coding 
+* Air regulator with filter with ¼’’ quick connect male with ½’’ NPT
+* Built in accord with North American standards UL / CSA (Canadian Standard Association)
+N.B. Specification may varies depending on final equipment configuration and options selected
+Safety Features:
+* Emergency stop pushbutton switch install directly onto the panel control
+* Torque-limiting sensor on all motion system
+* Back up sensor at the exit conveyor that stops the machine in case of accumulation
+Euroguard Safety Interlock System
+* 13 mm (½’’) thick Lexan barrier doors shield the machine perimeter
+* Doors are mounted in stainless steel tubing where electric wires are channeled
+* Safety interlocks ensure safety before start-up and during operation
+Quick Changeover Features:
+* Dial indicators and or reference counter/scales are used to obtain repeatable quick changeovers.
+* Dedicated quick removable application system with location pin 
+* Pre-set recipes store in the HMI
+* Single Ballonets system for quick closure of the labeling roller head avoiding passing paper label true hard places when doing change over label
+* Mechanical change over size is done without the use of any tools and is done in approximately 20 minutes including programming of the labeling head
+Change Parts for LabelStar 1 HS-LSA-100
+
+Change Part for Difference Size Bottle
+* Quick interchangeable feed screw for different size bottle
+* Quick interchangeability system
+* Feed screw made of UHMW
+
+
+LabelStar Model System 1 HS/FLRS - 100
+Automatic Labeling machine to apply a pressure sensitive label onto a round container with partial or total wrap around application at a speed of up to 300 BPM (depending on the label length and bottle diameter product 
+
+Machine Base and Mechanical Features:
+* Frame in anodized aluminium completely covered in stainless steel 304 
+* Adjustable support legs for in-line positioning and levelling. from ± 38 mm (1 ½ ‘’)
+* Raised working surface for easy cleaning
+* Electrical and mechanical part located inside the machine frame for a complete protection
+* Top plate of the base completely sealed against liquid infiltration protecting all internal mechanical parts
+* Wide lockable inspection doors for routine maintenance
+* 150 mm (6’’) clearance from the base to the ground
+* Euroguard Safety Interlock System with 13 mm (½’’) thick Lexan doors
+* Doors are mounted in stainless steel frame where electric wires are channeled into
+* Safety interlocks ensure safety before start-up and during operation
+Bottle Handling System:
+* 3660 mm (12’) section of stainless-steel Motorized conveyor
+* Variable speed control 
+* One transporting Delrin chain of 114 mm (4 ½’’) wide
+* Set of adjustable guides without tools
+* Product separation by feed screw system with variable speed control
+* Width adjustment system
+* Quick interchangeable screw system
+Labeling Head Features:
+* One (X 1) electronic labeling head model LSA 100X 
+* Maximum width of paper 100 mm 
+* Maximum dispensing speed of 80 meters per minute
+* Labeling head motorized height adjustment system
+* Labeling head positioning system guided with précised numerical counter, composed of four (X 4) axis mounted on sliding plate
+* Stepper motor
+* Motorized retake of backing paper (unwinder)
+* System pull push 
+* Maximum reel diameter of 380 mm
+* Bottle detection with photo start very easy to adjust on a sliding Harm affixed to the machine 
+* Label detection with fixed position Eagle Eyes sensor for clear label detection
+* Change over label with automatic self-learning device
+HS Labeling Head FLRS Upgrade
+With Faulty Label Reconciliation System)
+* Electronic labeling head model HS 100 
+* Maximum width of paper 100 mm 
+* Maximum dispensing speed of 60 meters per minute
+* Low Label Sensor Detection
+* Labeling head motorized height adjustment system
+* Heavy duty Labeling head positioning system mounted on 4-axis sliding plate
+* Motorized retake of backing paper (unwinder)
+* Maximum reel diameter of 400 mm
+* Bottle detection with photo start very easy to adjust on a sliding Harm affixed to the machine 
+* Label detection with fixed position Eagle Eyes Plus sensor for clear label detection
+* Change over label with automatic self-learning device
+* Programming directly from the labeling head with call back recipes from the machine panel control
+* Dedicated station to install a coding device and / or a vision system with hand wheel adjustment system guided with numerical counter for precise and repeatable positioning 
+* Automatic system to remove the Non-Compliant-Label from the roll of label onto an independent roller system before the label is apply onto the container without stopping the labelling machine 
+* System built directly onto the existing Labelling head
+* Mechanical system stopping the container with was supposed to receive the faulty label directly built in at the entrance of the transporting star wheel to avoid any bottle reject cause by faulty label removal
+* Mechanical diverter to ensure removing of the faulty label onto an independent backing paper for accumulation, reconciliation and inspection after a production
+* Independent label tensioning system
+* Ø 280 mm (11’’) diameter roll support for rejected label
+
+          
+Label Application System:
+* One 90 mm (3.5’’) 45 mm (1.7’’) 150 mm (6’’) wrap around system (Vertical carpet style) 
+* Variable speed Control
+* Electronically synchronization by encoder with the labeling head for label speed distribution  
+* Front pressure plate according to your requirement
+* Height adjustment system with slotted screws with system stabilizer
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Red solid = machine stop
+* Red flashing = emergency stop
+* Yellow solid = stopped for alarm
+* Yellow flash = low component warning
+* Green solid = machine running
+* Green flashing = machine in stand-by (automatic restart)
+Control System:
+* Stainless steel panel control 
+* Stainless steel, tubular holding post with twin axis swivel control panel
+* Emergency Stop on the control panel 
+* Machine controlled with industrial PLC 
+* 255 mm (10’’) multi-colour touch screen control
+* HMI resolution of 1024 X 600
+* Ethernet communication port (required IP address)
+* Calling recipes pre-store in labeling head from the main machine panel control: label length, label positioning, labeling dispensing speed, etc.
+* Capable of memorizing multiple recipes
+* For normal machine operation with alarm display
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Machine Specifications:
+* Core diameter in between 38 to 76 mm (1 ½ ‘’ to 3’’)
+* Maximum roll diameter 400 mm (16’’)
+* Maximum dispensing speed of 60 (197 ‘) 80 (260 ‘) metre/minute
+* Maximum width of paper 100 mm (4 in)
+* Minimum label size 10 X 10 mm
+* Bottle size minimum ø 10 mm – Maximum ø 100 mm (4 in)
+* Maximum bottle height 300 mm (12’’)
+* Main power 220 volt 3 phases 50/60 Hz 15 amps
+* Power consumption 3.5kw
+* Main power 380 volt 3 phases 50/60 Hz 15 amps
+* Power consumption 5.7kw
+* Normal roll change over time in between 1 to 4 minutes
+* Air consumption 4 CFM (113 Lt/m) at 90 PSI (6.2 bar) with hot stamp coding 
+* Air regulator with filter with ¼’’ quick connect male with ½’’ NPT
+* Built in accord with North American standards UL / CSA (Canadian Standard Association)
+N.B. Specification may varies depending on final equipment configuration and options selected
+Safety Features:
+* Emergency stop pushbutton switch install directly onto the panel control
+* Torque-limiting sensor on all motion system
+* Back up sensor at the exit conveyor that stops the machine in case of accumulation
+Euroguard Safety Interlock System
+* 13 mm (½’’) thick Lexan barrier doors shield the machine perimeter
+* Doors are mounted in stainless steel tubing where electric wires are channeled
+* Safety interlocks ensure safety before start-up and during operation
+Quick Changeover Features:
+* Dial indicators and or reference counter/scales are used to obtain repeatable quick changeovers.
+* Dedicated quick removable application system with location pin 
+* Pre-set recipes store in the HMI
+* Single Ballonets system for quick closure of the labeling roller head avoiding passing paper label true hard places when doing change over label
+* Mechanical change over size is done without the use of any tools and is done in approximately 20 minutes including programming of the labeling head
+Change Parts for LabelStar 1 HS/FLRS - 100
+
+Change Part for Difference Size Bottle
+* Quick interchangeable feed screw for different size bottle
+* Quick interchangeability system
+* Feed screw made of UHMW
+LabelStar Model Trunnion 100
+Thanks to its special vertical bottle alignment rollers system synchronized with the machine wrap around belt, this automatic labeling machine can apply a tall pressure sensitive label onto a circular bottle with extreme precision at a speed of up to 150 BPM (depending on the label length and bottle diameter product
+
+Machine Base and Mechanical Features:
+* Frame in anodized aluminium completely covered in stainless steel 304 
+* Adjustable support legs for in-line positioning and levelling. from ± 38 mm (1 ½ ‘’)
+* Raised working surface for easy cleaning
+* Electrical and mechanical part located inside the machine frame for a complete protection
+* Top plate of the base completely sealed against liquid infiltration protecting all internal mechanical parts
+* Wide lockable inspection doors for routine maintenance
+* 150 mm (6’’) clearance from the base to the ground
+* Euroguard Safety Interlock System with 13 mm (½’’) thick Lexan doors
+* Doors are mounted in stainless steel frame where electric wires are channeled into
+* Safety interlocks ensure safety before start-up and during operation
+Bottle Handling System:
+* 3657 mm (12-ft) section of stainless-steel Motorized conveyor
+* Variable speed control 
+* One transporting Delrin chain of 114 mm (4 ½’’) wide
+* Set of adjustable guides without tools
+* Product separation by feed screw system with variable speed control
+* Hand wheel width and height adjustment system 
+* All mechanical adjustments are guided with numerical counter for quick and repeatable change over 
+* Quick release system for the feed screw
+* Back up sensor at the exit conveyor that stops the machine in case of accumulation
+Labeling Head Features:
+* One electronic labeling head model LS 100 200
+* Maximum width of paper 97 mm (3.81’’)
+* Maximum dispensing speed of 60 meters (195 foot) per minute
+* Maximum width of paper 197 mm (7.75 in)
+* Maximum dispensing speed of 50 meters (165 foot) per minute
+* System to adjust the head mounted on biaxial system with double shaft and a very precise scale
+* High precision Stepper motor
+* System pull push for label stability
+* Maximum reel diameter of 380 mm (15”)
+* Bottle detection with photo start programmable from the touch screen
+* Label detection with photo stop programmable from the panel control
+* Height adjustment system of the labeling head with hand wheel for easy change over
+* Change over label with automatic self-learning device
+* Labeling head control with CPU 
+* Stainless steel peal plate for label distribution
+
+Label Application System:
+* One 90 mm (3 ½ ‘’) 45 mm (1.7’’) 150 mm (6’’) wrap around system (Vertical carpet style) 
+* Variable speed Control
+* Electronically synchronization by encoder with the labeling head for label speed distribution  
+* Servo driven vertical rollers for bottle alignment electronically synchronized with the labeling head and the wrap around system 
+* Alignment roller capable of handling bottles height of up to 300 mm 
+* Hand wheel width and height adjustment system 
+* All mechanical adjustments are guided with numerical counter for quick and repeatable change over 
+
+
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Red solid = machine stop
+* Red flashing = emergency stop
+* Yellow solid = stopped for alarm
+* Yellow flash = low component warning
+* Green solid = machine running
+* Green flashing = machine in stand-by (automatic restart)
+Control System:
+* Stainless steel panel control 
+* Stainless steel, tubular holding post with twin axis swivel control panel
+* Emergency Stop on the control panel 
+* Machine controlled with industrial PLC 
+* 255 mm (10’’) multi-colour touch screen control
+* HMI resolution of 1024 X 600
+* Ethernet communication port (required IP address)
+* Calling recipes pre-store in labeling head from the main machine panel control: label length, label positioning, labeling dispensing speed, etc.
+* Capable of memorizing multiple recipes
+* For normal machine operation with alarm display
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Machine Specifications:
+* Core diameter in between 38 to 76 mm (1 ½ ‘’ to 3’’)
+* Maximum roll diameter 400 mm (16’’)
+* Maximum dispensing speed of 60 metre/minute
+* Maximum width of paper 200 mm
+* Minimum label size H 20 X L 10 mm
+* Bottle size minimum ø 25 mm (1’’) – Maximum ø 50 mm (2’’)
+* Bottle size minimum ø 50 mm (2’’) – Maximum ø 90 mm (3.5’’)
+* Main power 220 volt 3 phases 50/60 Hz 15 amps
+* Bottle minimum height 30 mm (11.8’’)- Maximum height 300 mm (12’’)
+* Power consumption 3.5kw
+* Main power 380 volt 3 phases 50/60 Hz 15 amps
+* Power consumption 5.7kw
+* Normal roll change over time in between 1 to 4 minutes
+* Air consumption 4 CFM (113 Lt/m) at 90 PSI (6.2 bar) with hot stamp coding 
+* Air regulator with filter with ¼’’ quick connect male with ½’’ NPT
+* Built in accord with North American standards UL / CSA (Canadian Standard Association)
+N.B. Specification may varies depending on final equipment configuration and options selected
+Quick Changeover Features:
+* Dial indicators and or reference counter/scales are used to obtain repeatable quick changeovers.
+* Dedicated quick removable application system with location pin 
+* Pre-set recipes store in the HMI
+* Single Ballonets system for quick closure of the labeling roller head avoiding passing paper label true hard places when doing change over label
+* Mechanical change over size is done without the use of any tools and is done in approximately 20 minutes including programming of the labeling headChange Parts for the LabelStar Trunnion
+
+Change Part for Difference Size Bottle
+* Quick interchangeable feed screw for different size bottle
+* Quick interchangeability system
+* Feed screw made of UHMW
+
+
+LabelStar Model Trunnion 200
+Thanks to its special vertical bottle alignment rollers system synchronized with the machine wrap around belt, this automatic labeling machine can apply a tall pressure sensitive label onto a circular bottle with extreme precision at a speed of up to 150 BPM (depending on the label length and bottle diameter product
+
+Machine Base and Mechanical Features:
+* Frame in anodized aluminium completely covered in stainless steel 304 
+* Adjustable support legs for in-line positioning and levelling. from ± 38 mm (1 ½ ‘’)
+* Raised working surface for easy cleaning
+* Electrical and mechanical part located inside the machine frame for a complete protection
+* Top plate of the base completely sealed against liquid infiltration protecting all internal mechanical parts
+* Wide lockable inspection doors for routine maintenance
+* 150 mm (6’’) clearance from the base to the ground
+* Euroguard Safety Interlock System with 13 mm (½’’) thick Lexan doors
+* Doors are mounted in stainless steel frame where electric wires are channeled into
+* Safety interlocks ensure safety before start-up and during operation
+Bottle Handling System:
+* 3657 mm (12-ft) section of stainless-steel Motorized conveyor
+* Variable speed control 
+* One transporting Delrin chain of 114 mm (4 ½’’) wide
+* Set of adjustable guides without tools
+* Product separation by feed screw system with variable speed control
+* Hand wheel width and height adjustment system 
+* All mechanical adjustments are guided with numerical counter for quick and repeatable change over 
+* Quick release system for the feed screw
+* Back up sensor at the exit conveyor that stops the machine in case of accumulation
+Labeling Head Features:
+* One electronic labeling head model LS 100 200
+* Maximum width of paper 97 mm (3.81’’)
+* Maximum dispensing speed of 60 meters (195 foot) per minute
+* Maximum width of paper 197 mm (7.75 in)
+* Maximum dispensing speed of 50 meters (165 foot) per minute
+* System to adjust the head mounted on biaxial system with double shaft and a very precise scale
+* High precision Stepper motor
+* System pull push for label stability
+* Maximum reel diameter of 380 mm (15”)
+* Bottle detection with photo start programmable from the touch screen
+* Label detection with photo stop programmable from the panel control
+* Height adjustment system of the labeling head with hand wheel for easy change over
+* Change over label with automatic self-learning device
+* Labeling head control with CPU 
+* Stainless steel peal plate for label distribution
+
+Label Application System:
+* One 90 mm (3 ½ ‘’) 45 mm (1.7’’) 150 mm (6’’) wrap around system (Vertical carpet style) 
+* Variable speed Control
+* Electronically synchronization by encoder with the labeling head for label speed distribution  
+* Servo driven vertical rollers for bottle alignment electronically synchronized with the labeling head and the wrap around system 
+* Alignment roller capable of handling bottles height of up to 300 mm 
+* Hand wheel width and height adjustment system 
+* All mechanical adjustments are guided with numerical counter for quick and repeatable change over 
+
+
+Machine Status Beacon Light (3 colours)
+Equipment status easily identified from a distance 
+* Red solid = machine stop
+* Red flashing = emergency stop
+* Yellow solid = stopped for alarm
+* Yellow flash = low component warning
+* Green solid = machine running
+* Green flashing = machine in stand-by (automatic restart)
+Control System:
+* Stainless steel panel control 
+* Stainless steel, tubular holding post with twin axis swivel control panel
+* Emergency Stop on the control panel 
+* Machine controlled with industrial PLC 
+* 255 mm (10’’) multi-colour touch screen control
+* HMI resolution of 1024 X 600
+* Ethernet communication port (required IP address)
+* Calling recipes pre-store in labeling head from the main machine panel control: label length, label positioning, labeling dispensing speed, etc.
+* Capable of memorizing multiple recipes
+* For normal machine operation with alarm display
+* Possibility to have different language interfaces
+* Multi-level password protected screens for different access control
+Machine Specifications:
+* Core diameter in between 38 to 76 mm (1 ½ ‘’ to 3’’)
+* Maximum roll diameter 400 mm (16’’)
+* Maximum dispensing speed of 60 metre/minute
+* Maximum width of paper 200 mm
+* Minimum label size H 20 X L 10 mm
+* Bottle size minimum ø 25 mm (1’’) – Maximum ø 50 mm (2’’)
+* Bottle size minimum ø 50 mm (2’’) – Maximum ø 90 mm (3.5’’)
+* Main power 220 volt 3 phases 50/60 Hz 15 amps
+* Bottle minimum height 30 mm (11.8’’)- Maximum height 300 mm (12’’)
+* Power consumption 3.5kw
+* Main power 380 volt 3 phases 50/60 Hz 15 amps
+* Power consumption 5.7kw
+* Normal roll change over time in between 1 to 4 minutes
+* Air consumption 4 CFM (113 Lt/m) at 90 PSI (6.2 bar) with hot stamp coding 
+* Air regulator with filter with ¼’’ quick connect male with ½’’ NPT
+* Built in accord with North American standards UL / CSA (Canadian Standard Association)
+N.B. Specification may varies depending on final equipment configuration and options selected
+Quick Changeover Features:
+* Dial indicators and or reference counter/scales are used to obtain repeatable quick changeovers.
+* Dedicated quick removable application system with location pin 
+* Pre-set recipes store in the HMI
+* Single Ballonets system for quick closure of the labeling roller head avoiding passing paper label true hard places when doing change over label
+* Mechanical change over size is done without the use of any tools and is done in approximately 20 minutes including programming of the labeling headChange Parts for the LabelStar Trunnion
+
+Change Part for Difference Size Bottle
+* Quick interchangeable feed screw for different size bottle
+* Quick interchangeability system
+* Feed screw made of UHMW
+
+LabelStar Model System 1 100
+Automatic Labeling machine to apply a pressure sensitive label onto a round container with partial or total wrap around application
+
+Machine Base Features:
+* Monocoque base completely made of stainless steel 304 
+* Smooth finish for very easy maintenance
+* Adjustable support legs for in-line positioning and levelling. from ± 38 mm (1 ½ ‘’)
+* Most of electrical and mechanical part are located inside the machine frame for a better protection
+* Top plate of the base completely sealed against liquid infiltration protecting all internal mechanical parts
+* Wide lockable inspection doors for routine maintenance
+* 150 mm (6’’) clearance from the base to the ground
+Bottle Handling System:
+* 3050 mm (10’) section of motorized stainless-steel conveyor
+* Variable speed control
+* Transporting Delrin chain of 114.3 mm (4 ½’’) wide
+* Adjustable side rail without the use of any tools
+Labeling Head Features:
+* One electronic labeling head model LS 100
+* Maximum width of paper 97 mm (3.81’’)
+* Maximum dispensing speed of 60 meters (195 foot) per minute
+* System to adjust the head mounted on biaxial system with double shaft and a very precise scale
+* High precision Stepper motor
+* System pull push for label stability
+* Maximum reel diameter of 380 mm (15”)
+* Bottle detection with photo start programmable from the touch screen
+* Label detection with photo stop programmable from the panel control
+* Height adjustment system of the labeling head with hand wheel for easy change over
+* Change over label with automatic self-learning device
+* Labeling head control with CPU 
+* Stainless steel peal plate for label distribution
+
+Label Application System:
+* One 90 mm (3 ½ ‘’) 45 mm (1.7’’) 150 mm (6’’) wrap around system (Vertical carpet style) 
+* Variable speed Control
+* Electronically synchronization by encoder with the labeling head for label speed distribution  
+* Front pressure plate according to your requirement
+* Hand wheel width and height adjustment system 
+* All mechanical adjustments are guided with numerical counter for quick and repeatable change over
+Control Panel:
+* Stainless steel Panel control mounted directly onto the machine 
+* Emergency Stop on the control panel 
+* Machine controlled with Industrial PLC
+* Ethernet communication port (required IP address)
+* 145mm (5.7’’) multi-colour touch screen control interface
+* HMI resolution of 640 X 480
+* Programmable recipes for quick and repeatable change over
+* Trouble shooting alarm for end roll, breakage of paper, etc.
+* Automatic stopping of the machine in case of any alarm by stopping the infeed system.
+* Emergency stop installed on the control panel
+* For normal machine operation with alarm display
+* Possibility to have different language interface
+* 4 level password protected screens for operators, maintenance, supervisors and manager
+Quick Changeover Features:
+* Dial indicators and or reference counter/scales are used to obtain repeatable quick changeovers.
+* Dedicated change part with location pin 
+* Self-programming system for label change
+* Single Ballonets system for quick closure of the labeling roller head avoiding passing paper label true hard places when doing change over label
+Other Features:
+* Mechanical change over size is done without the use of any tools and is done in approximately 15 minutes including programming of the labeling head
+* Pharmaceutical stainless-steel base very easy to clean protecting all internal components
+* Removing or channeled as much as possible any wires use to connect all external components 
+* Electrical components are all connected with Brad Harrison quick disconnect system for easy maintenance 
+* Back up sensor at the exit conveyor that stops the machine in case of accumulation
+Machine Specifications:
+* Core diameter in between 38 to 76 mm (1 ½ ‘’ to 3’’)
+* Maximum roll diameter 380 mm (15’’)
+* Maximum dispensing speed of 40 m (197 ft) per minute
+* Maximum width of paper 97 mm (3.8’’)
+* Minimum label size 10 X 10 mm
+* Bottle size minimum ø 10 mm – Maximum ø 150 mm
+* Maximum bottle height 300 mm (12’’)
+* Main power 220 volts 3 phases 50/60 Hz 15 amps
+* Power consumption 3.5kw
+* Normal roll change over time in between 1 to 4 minutes
+* Air consumption 4 CFM (113 L/m) at 90 PSI (6.2 bar) with reject station and hot stamp coding
+* Air regulator with filter with ¼’’ quick connect male with ½’’ NPT
+* Built in accord with North American standards UL / CSA (Canadian Standard Association)
+N.B. Specification may varies depending on final equipment configuration and options selected
+
+
+LabelStar Model System 1 200
+Automatic Labeling machine to apply a pressure sensitive label onto a round container with partial or total wrap around application
+
+Machine Base Features:
+* Monocoque base completely made of stainless steel 304 
+* Smooth finish for very easy maintenance
+* Adjustable support legs for in-line positioning and levelling. from ± 38 mm (1 ½ ‘’)
+* Most of electrical and mechanical part are located inside the machine frame for a better protection
+* Top plate of the base completely sealed against liquid infiltration protecting all internal mechanical parts
+* Wide lockable inspection doors for routine maintenance
+* 150 mm (6’’) clearance from the base to the ground
+Bottle Handling System:
+* 3660 mm (12’) section of motorized stainless-steel conveyor
+* Variable speed control
+* Transporting Delrin chain of 114.3 mm (4 ½’’) wide
+* Adjustable side rail without the use of any tools
+Labeling Head Features:
+* One electronic labeling head model LS 200
+* Maximum width of paper 197 mm (7.75 in)
+* Maximum dispensing speed of 50 meters (165 foot) per minute
+* System to adjust the head mounted on biaxial system with double shaft and a very precise scale
+* High precision Stepper motor
+* System pull push for label stability
+* Maximum reel diameter of 380 mm (15”)
+* Bottle detection with photo start programmable from the touch screen
+* Label detection with photo stop programmable from the panel control
+* Height adjustment system of the labeling head with hand wheel for easy change over
+* Change over label with automatic self-learning device
+* Labeling head control with CPU 
+* Stainless steel peal plate for label distribution
+
+Label Application System:
+* One 90 mm (3 ½ ‘’) 45 mm (1.7’’) 150 mm (6’’) wrap around system (Vertical carpet style) 
+* Variable speed Control
+* Electronically synchronization by encoder with the labeling head for label speed distribution  
+* Front pressure plate according to your requirement
+* Hand wheel width and height adjustment system 
+* All mechanical adjustments are guided with numerical counter for quick and repeatable change over
+Control Panel:
+* Stainless steel Panel control mounted directly onto the machine 
+* Emergency Stop on the control panel 
+* Machine controlled with Industrial PLC
+* Ethernet communication port (required IP address)
+* 145mm (5.7’’) multi-colour touch screen control interface
+* HMI resolution of 640 X 480
+* Programmable recipes for quick and repeatable change over
+* Trouble shooting alarm for end roll, breakage of paper, etc.
+* Automatic stopping of the machine in case of any alarm by stopping the infeed system.
+* Emergency stop installed on the control panel
+* For normal machine operation with alarm display
+* Possibility to have different language interface
+* 4 level password protected screens for operators, maintenance, supervisors and manager
+Quick Changeover Features:
+* Dial indicators and or reference counter/scales are used to obtain repeatable quick changeovers.
+* Dedicated change part with location pin 
+* Self-programming system for label change
+* Single Ballonets system for quick closure of the labeling roller head avoiding passing paper label true hard places when doing change over label
+Other Features:
+* Mechanical change over size is done without the use of any tools and is done in approximately 15 minutes including programming of the labeling head
+* Pharmaceutical stainless-steel base very easy to clean protecting all internal components
+* Removing or channeled as much as possible any wires use to connect all external components 
+* Electrical components are all connected with Brad Harrison quick disconnect system for easy maintenance 
+* Back up sensor at the exit conveyor that stops the machine in case of accumulation
+Machine Specifications:
+* Core diameter in between 38 to 76 mm (1 ½ ‘’ to 3’’)
+* Maximum roll diameter 380 mm (15’’)
+* Maximum dispensing speed of 40 m (197 ft) per minute
+* Maximum width of paper 197 mm (7.75’’)
+* Minimum label size 10 X 10 mm
+* Bottle size minimum ø 10 mm – Maximum ø 150 mm
+* Maximum bottle height 300 mm (12’’)
+* Main power 220 volts 3 phases 50/60 Hz 15 amps
+* Power consumption 3.5kw
+* Normal roll change over time in between 1 to 4 minutes
+* Air consumption 4 CFM (113 L/m) at 90 PSI (6.2 bar) with reject station and hot stamp coding
+* Air regulator with filter with ¼’’ quick connect male with ½’’ NPT
+* Built in accord with North American standards UL / CSA (Canadian Standard Association)
+N.B. Specification may varies depending on final equipment configuration and options selected
+
+
+
+
+
+Available Options for the LabelStar
+
+
+Product Separation Wheel System
+* Motorized bottle separation system
+* Width and Height adjustment system 
+* Variable speed motor with quick disconnect motor
+* No change part necessary
+
+Product Separation Star Wheel System
+* Motorized system for précised bottle separation and indexation
+* Width adjustment system
+* Variable speed motor
+* Quick interchangeable star wheel system
+
+
+Change Parts for Difference Size Bottle
+* Quick interchangeable star wheel for different size bottle
+* Dedicated anodized aluminium hub with location pin providing very quick set up 
+* Star wheel made of U.H.M.W.
+
+
+Product Separation Feed Screw System
+* Motorized system for bottle separation and indexation
+* Variable speed motor 
+* Quick interchangeable screw system
+* Hand wheel width and height adjustment system 
+* All mechanical adjustments are guided with numerical counter for quick and repeatable change over
+
+
+Change Part for Difference Size Bottle
+* Quick interchangeable feed screw for different size bottle
+* Quick interchangeability system
+* Feed screw made of UHMW
+
+
+Bottle Separation and Indexing Belt System
+* Motorized system for large bottle separation and indexing
+* Width adjustment system
+* Variable speed motor
+* No change part necessary
+* Wide Anti slip holding belt 
+
+
+Motorized Round Bottle Positioning System
+For round bottle with handle 
+* Dual heavy-duty pneumatic gating system mounted on an anodize aluminium plate with quick adjustment system
+* Infeed sensor mounted on a sliding harm
+* Twin rollers system mounted onto a pneumatic piston to hold the bottle while turning
+* One Motorized wheel to make the container turning 
+* Two spotting sensors mounted on a sliding harm 
+* Adjustable timer to set up position of the bottle 
+* Stainless steel guarding to avoid possible pinch point
+
+
+High Speed Vertical Double Reel Label Unwinder
+This system is to give a longer autonomy without stopping the production
+* Quick interchangeable reel system
+* Ergonomic splicing table 
+* Two (X 2) reel holder and plate with maximum label roll diameter of 480 mm each 
+* Two alignments roller to feed the labeling heads 
+* Frame supported made of anodized aluminium with adjustable stabilizer feet 
+* Motorize label advancement system control by the PLC. of the machine itself
+* Automatic speed advancement system to pass the spliced label (at lower speed to prevent backing paper breakage
+* Low pre-advancement label control by a sensor 
+* Status light showing low label onto the reel
+
+
+Additional Labeling Head
+To apply a third label onto the bottle (to be used with Twin feed screw positioning system)
+* One electronic labeling head model LS 100
+* Maximum width of paper 97 mm (3.81’’) 
+* Maximum dispensing speed of 60 meters (195 ft) per minute
+* System to adjust the head mounted on biaxial system with double shaft and a very precise scale
+* Step by step motor
+* System pull push 
+* Manual speed adjustment system
+* Maximum reel diameter of 380 mm (15’’)
+* Bottle detection with photo start very easy to adjust on a sliding arm 
+* Label detection with photo stop on a sliding arm
+* Height adjustment system of the labeling head with hand wheel for easy change over
+* Change over label with automatic self-learning device
+* Stainless steel peal plate for label distribution with adjustable pressure roller
+* System resting onto stainless steel platform with 4 adjustable stabilized feet for in line machine positioning 
+
+
+Low Label Sensor Detection
+* That will stop the infeed or will show status on stack Light (not included)
+
+
+Eagle Eyes Plus Sensor
+Sensor able to detect every style of label onto backing paper with minimum adjustment 
+
+
+
+“L” Shape Arm for Vision / Coding System Installation
+To integrate a Hot stamp, thermal transfer coder, or vision system onto the labeling head directly, giving you more space to do the equipment adjustment 
+
+
+OpenDate Hot Stamp Coding System Model “E Coder”
+Automatic system for the printing information on a pressure sensitive label with hot stamps
+Including:
+* Anodize aluminium structure for the system to be mounted on the labeling head
+* Micro-adjustment system to position the text on the label
+* Cassette type charger for kick interchange
+* 182 meters (600 ft.) thermal transfer roll of foil
+* Printing up to 3 lines
+* Foil maximum width 40 mm (1 ½’’)
+* Rear plate adjustable for the best definition possible
+* Maximum speed up to 300 codes per Minute 
+* Adjustable heat control 70 to 220ºC (158 to 428ºF)
+* One block holder for letter with one, two or three lines
+* Alarm for end of foil
+* Alarm for film broken
+* Alarm for heating system fail
+* Alarm for Thermistor fail
+* Alarm for low air pressure
+* Print area 16 X 40 mm (.63 X 1.6 in)
+* Air consumption 254 cc @ 80 PSI
+* Control dimension 240 x 145 X h 66 mm 
+* Printing Head dimension 203 x 152 X h 136 mm
+
+
+
+OpenDate Hot Stamp Coding System Model “Eurocode 300”
+Automatic system for the printing information on a pressure sensitive label with hot stamps
+Including:
+* Anodize aluminium structure for the system to be mounted on the labeling head
+* Micro-adjustment system to position the text on the label
+* Cassette type charger for kick interchange
+* 305 meters (1000 ft.) thermal transfer roll of foil
+* Printing up to 3 lines
+* Foil maximum width 40 mm (1.6”)
+* Rear plate adjustable for the best definition possible
+* Maximum speed up to 400 codes per Minute 
+* Adjustable heat control 70 to 220ºC (158 to 428ºF)
+* One block holder for letter with one, two or three lines
+* Alarm for end of foil
+* Alarm for film broken
+* Alarm for heating system fail
+* Alarm for Thermistor fail
+* Alarm for low air pressure
+* Print area 28 X 40 mm (.1.6 X 1.1 in)
+* Air consumption 254 cc @ 100 PSI
+* Control dimension 240 x 145 X h 66 mm 
+* Printing Head dimension 136 x 218 X h 203 mm
+
+
+
+
+Hot Stamp Start Up Kit
+Including:
+* 2 set of complete number (0 to 9)
+* 1 set of punctuation (. / `; : EXP LOT)
+* Brass type of sizes H.1, 8 x W. 1,6 mm
+* 6 rolls of 240 meters of thermal transfer
+
+
+VIDEOJET® Thermal Transfer Over Printer Model DataFlex 6530 (53mm)
+Automatic system for the printing information on a pressure sensitive label with thermal transfer system
+The system is complete with the following: 
+Print head:
+* 53 mm, 300 dpi (12 dots/mm)
+Printing area for 53 mm unit
+Intermittent printing mode:
+* 53 mm X 75 mm (2.1” x 3.0”)
+Continuous printing mode:
+* 53 mm X 300 mm (2.1” x 11.8”)
+Minimum Print Speed for 53 mm unit:
+* Intermittent :10 mm/sec (0.4”)
+* Continuous: 1 mm/sec (0.04”)
+Maximum Print Speed for 53 mm unit:
+Continuous Mode 1000 mm/sec / 39.3 inch/sec
+Intermittent Mode 800mm/sec / 31.5”) inch/sec
+Ribbon width
+* Minimum ribbon width 20 mm (0.8”)
+* Maximum ribbon width 55 mm (2.2”)
+Ribbon Drive:
+* Normal ribbon waste between successive prints 0.5 mm / 0.02”
+* Solid state, clutches bi-directional ribbon drive
+* Ribbon break detection, end of reel detection
+* Ribbon consumption indication
+Operator Interface:
+* TFT SVGA 800x480 full-colour LCD and touch screen, WYSIWYG print preview, full on-board diagnostics, 3 levels of password protection, extensive language support
+External communications:
+* Ethernet, USB memory stick RS 232 Binary and ASCII comms protocols and windows driver)
+Remote coder configuration software:
+* CLARiTY Configuration manager
+* Off line set up and parameter storage available as standard
+* Image design Software CLARISOFT
+* Network Management Software CLARiNET
+
+Printing Capabilities:
+* Full downloadable font support using Window True type fonts
+* Fixed, variable and merge text fields
+* Flexible data / Time formats (base on internal real-time clock)
+* Flexible shift code formats
+* Auto best before date calculation and concession management
+* Auto incrementing/decrementing text, counter and bar code
+* Multiple graphic formats supported (up to maximum print area)
+* Link Fields to database
+* Scalable text and text blocks
+Bar Code:
+* EAN 8, EAN 13, UPC-A, UPC-E, Code 39, EAN 128, Code 128, ITF, RSS (including 2D composite codes) Other available upon request
+
+
+VIDEOJET® Thermal Transfer Over Printer Model DataFlex 6530 (107mm)
+Automatic system for the printing information on a pressure sensitive label with thermal transfer system
+The system is complete with the following: 
+Print head:
+* 107 mm, 300 dpi (12 dots/mm)
+Printing area for 107 mm unit
+Intermittent printing mode:
+* 107 mm X 75 mm (4.2” x 3.0”)
+Continuous printing mode:
+* 107 mm X 300 mm (4.2” x 11.8”)
+Minimum Print Speed for 107 mm unit:
+* Intermittent :10 mm/sec (0.4”)
+* Continuous: 1 mm/sec (0.04”)
+Maximum Print Speed for 107 mm unit:
+Continuous Mode 1000 mm/sec / 39.3 inch/sec
+Intermittent Mode 600mm/sec / 23.6”) inch/sec
+Ribbon width
+* Minimum ribbon width 55 mm (2.2”)
+* Maximum ribbon width 110 mm (4.33”)
+Ribbon Drive:
+* Normal ribbon waste between successive prints 0.5 mm / 0.02”
+* Solid state, clutches bi-directional ribbon drive
+* Ribbon break detection, end of reel detection
+* Ribbon consumption indication
+Operator Interface:
+* TFT SVGA 800x480 full-colour LCD and touch screen, WYSIWYG print preview, full on-board diagnostics, 3 levels of password protection, extensive language support
+External communications:
+* Ethernet, USB memory stick RS 232 Binary and ASCII comms protocols and windows driver)
+Remote coder configuration software:
+* CLARiTY Configuration manager
+* Off line set up and parameter storage available as standard
+* Image design Software CLARISOFT
+* Network Management Software CLARiNET
+
+Printing Capabilities:
+* Full downloadable font support using Window True type fonts
+* Fixed, variable and merge text fields
+* Flexible data / Time formats (base on internal real-time clock)
+* Flexible shift code formats
+* Auto best before date calculation and concession management
+* Auto incrementing/decrementing text, counter and bar code
+* Multiple graphic formats supported (up to maximum print area)
+* Link Fields to database
+* Scalable text and text blocks
+Bar Code:
+* EAN 8, EAN 13, UPC-A, UPC-E, Code 39, EAN 128, Code 128, ITF, RSS (including 2D composite codes) Other available upon request
+
+
+VIDEOJET® Ink Jet Thermal Transfer Printer Model 8520
+Automatic system for the printing information on a pressure sensitive label with Ink jet thermal transfer system
+The system is complete with the following: 
+* Maximum Print resolution of 600 X 600 dpi
+* 5-360fpm (1.5-109mpm) at 600 X 240 dpi
+Operator Interface:
+* CLARiTY™ 8.4” TFT SVGA (800 X 600) full colour LCD and touch screen
+* WYSIWYG print preview
+* Full On-board diagnostics
+* 3 levels of password protection
+* Multiple language support
+Printing Capabilities:
+* Full downloadable font support using True type fonts
+* Fixed, variable and merge text fields
+* Flexible data / Time formats (base on internal real-time clock)
+* Auto best before date calculation and concession management
+* Auto incrementing/decrementing text, counter, and bar code
+* Multiple graphic formats supported (up to maximum print area)
+Print Cartridge:
+* Maximum of 12.7mm tall, 600 dpi print cartridges (stacked/stitched or deployed independently
+* Feature available with authentic Videojet TIJ ink cartridges: auto cartridge recognition and parameter set up, ink batch/lot number tracking, portable ink level tracking and enhance print speed
+
+
+Data Interface:
+RS232, Ethernet, USB memory stick support, Text communication protocol
+Bar Code:
+* EAN 8, EAN 13, UPC-A/E, Code 39, EAN 128, Code 128, GS1 DataBar (including 2D composite) DataMatrix, QR, PDF417
+
+
+Hot Stamp Presence Sensor
+Will detect the presence of a printed Black square on the label itself 
+
+
+Fixed-Mount Barcode Scanner (CLV)
+SICK's standard for high performance scanners
+Integrated housing to achieve excellent reading rates even in the worst environmental conditions (involving ambient light; small module widths; and very high reading distances)
+* Reflector polling generates an integrated trigger
+* Profile programming makes configuration easy
+* Auto-setup for flexible adjustment
+* Autocollimation guarantees high reading reliability
+* Beeper reports the reading gate
+* Power supply tolerates a wide range of input voltage
+* Compact housing for small spaces
+* Software to control interface 
+
+
+Label Presence with Two (X 2) UV Sensors
+* Two (X 2) UV Sensors, SICKTM LUT3 Model
+* Software for Interface, Parameters, Statistics & Ejection
+* Trigger Sensor
+* Complete Bracket with Adjustment
+
+
+Cognex Camera Vision System for Label Placement Inspection
+To detect the position and placement of the label onto the bottle
+* Programed directly from the machine HMI 
+* System built in directly onto the Capmatic equipment 
+* Possibility to connect, up to 6 cameras
+* One (X 1) In-Sight Micro 7600 series (camera for single inspection)
+* Insight Ethernet Cable (5 m) 
+* One (X 1) appropriate Lens 
+* One (X 1) appropriate Light
+* Camera & Light Brackets with micro adjustment system to properly position the camera  
+
+
+Cognex Camera Vision System for Web Inspection
+To verify the printing on labels OCR/OCV and Bar Code directly from the Web
+* Programed directly from the machine HMI 
+* One (X 1) Insight 7600 series (OCV/OCR & Hot Stamp)
+* Up to four (X 4) frames inspection on each label depending of their distance and position
+* Insight Ethernet Cable (5 m) 
+* One (X 1) appropriate Lens 
+* One (1) PatMax and Red Light 
+* Micro adjustment system to properly position the camera
+* Micro Triggers/ Strobe/ (5 m)
+Very Important note: could require a second camera depending on the information to be read and the size of label to be confirm by Capmatic engineering department     
+
+
+Automatic Reject Station
+* To reject non-conformed bottle
+* Ejection pneumatic piston 
+* Stainless steel accumulation table
+* Reject confirmation sensor
+* Maximum speed of 200 BPM
+
+
+Automatic Reject Station with Locking Mechanism
+* To reject non-conformed bottle
+* Cap presence sensor
+* Ejection pneumatic piston 
+* Stainless steel accumulation table
+* Lockable system to secure reject components
+* Reject confirmation sensor
+* Maximum speed of 200 BPM
+
+
+HS- Automatic Reject Station
+* To reject non-conformed bottle
+* High speed rejection multiple pneumatic pistons system to properly remove the faulty component standing in upright position
+* Reject accumulation conveyor
+* 1830 mm (6’) section conveyor with variable speed
+* One transporting Delrin chain of 114 mm (4 ½’’) wide
+* Set of adjustable guides without tools 
+* Reject confirmation sensor
+* Fail-safe design
+
+
+Production History Printable Data Report Capability.
+Including:
+* Stainless steel enclosure panel control
+* Software with Capacity of 300 tags
+* Downtime Tracking & analysis Module
+* Advance reporting module capability
+* Web Script Modules
+* 380mm (15’’) color touch screen interface
+* Window base Industrial P.C.
+* HMI Resolution of 1366 x 768
+* Comply with USFDA CFR 21-part 11 regulation
+Complete Data Report
+* Batch starting time
+* Batch finishing time
+* Number of bottles entering the machine
+* Number of bottles out-feeding the machine
+* Number of reject and their reason why 
+* Downtime of the equipment and reasons
+* Upstream downtime
+* Downstream downtime
+* Up time
+* Waiting time
+* Statistical, percentage, graphic, etc.…
+* Audit trail of all user password
+
+
+Electrical Swivel Panel with Double Axis (“U” Shape)
+* Tubular stainless-steel structure
+* Rotation at the base and at the extension arm 
+* Heavy duty bearing system for smooth operation 
+* Locking system
+* cGMP design 
+
+
+Machine Status Beacon Light (3 colours)
+Showing you from a distance the status of the machine 
+* Red solid = machine stop
+* Red flashing = emergency stop
+* Yellow solid = stopped for alarm
+* Yellow flash = low component warning
+* Green solid = machine running
+* Green flashing = machine in stand-by (automatic restart)
+
+
+Euro-Guard Safety Interlock System (Lexan)
+* 13 mm (½’’) thick Lexan barrier doors shield the machine perimeter
+* Doors are mounted in stainless steel tubing where electric wires are channeled
+* Safety interlocks ensure safety before start-up and during operation
+* May be required to meet your Local, State or Federal safety requirements 
+
+
+Tempered Glass-Euro-Guard Upgrade
+* 6 mm (¼’’) thick Tempered Glass doors shield the machine perimeter 
+
+
+
+
+
+Proposed Equipment Picture
+(Unscrambler Picture)
+
+?
+
+(Labeller Pictures)
+
+?
+
+?
+
+
+
+
+
+?
+
+
+
+??
+
+?
+
+?
+NOTE: 
+* Pictures and Equipment Layout are for preliminary use only and do not necessarily reflect actual equipment features as quoted on the configuration and price page
+
+
+Validation and Service Specifications
+
+
+Remote Technical Services
+Capmatic’s goal has always been to provide our clients with the best possible service, under all conditions. Production systems and information systems have become inseparable, and that's created a significant opportunity to use the connected operations to provide additional service options. We’ve incorporated modern technology to be able to offer Remote Technical Service (RTS) alongside our standard service packages, saving our customers time and money.
+
+During RTS our technicians use a computer to remotely connect to the customer’s Capmatic equipment and work directly on the remote system. The technicians can access the equipment screens in order to troubleshoot and test functionalities and, if the equipment has a vision system, the technician can use the camera to view the equipment. There are many benefits to this kind of remote service, including saving our customers on service charges related to travel and technician costs, speeding up response time to machine malfunctions, and minimizing inactivity during production periods.
+
+Capmatic can deliver remote technical support to our customers worldwide via a simple internet connection. An ethernet cable is recommended for the best performance, but it is also possible to connect to the Secomea device via a Wi-Fi router with a small USB antenna.
+
+The Remote Technical Service Starter Pack includes:
+* Remote Technical Service starter pack (Secomea)
+* 25 hours remote technical assistance 
+
+Additional Remote Technical Service hours can be purchased through the Capmatic Service Department.?
+
+Pre-Delivery Inspection (PDI)
+Quality Control of the equipment
+* System verification
+* Safety feature verification, including alarm challenging
+Mechanical inspection
+* Including random checks of fasteners
+* Electrical inspection
+* Pneumatic inspection
+Production Tests
+* Runs for all bottle presentations
+* Ensuring correct parameters are all recipes are set
+* Observations recorded in Test Summary, including the bottling rate
+Cleaning of the Equipment
+* Complete cleaning of equipment, inside and out
+* Checks for physical damage
+* Check for sharp edges
+* Check for presence of variable safety or hazard warning signs 
+Preparation for Shipping
+* All change parts collected and accounted for before packaging
+* Sensitive parts individually wrapped and braced for transport
+* Equipment properly braced for transport
+* Special preparations for overseas packaging
+* Certificates supplied with all crating materials (i.e., wood)?
+
+IQ & OQ Validation Protocol Packages
+Include One Round of Document Review/Comments by the Customer
+The Installation Qualification (IQ) and Operational Qualification (OQ). Validation Protocols enable you to have confidence in your equipment, as well as documented proof of its ability to perform the tasks you require.  These tests are typically carried out after the equipment installation at the user’s facility. 
+
+The IQ Validation Protocol verifies that the equipment and its subsystems have been built and installed to specification, and that all supporting services (i.e., utilities such as water, electricity, etc.) are available and connected properly.  It also details a list of all the cGMP requirements that are applicable.  These requirements must all be satisfied before the qualification process can progress to the OQ.
+
+The IQ Protocol also ensures that:
+* All documentation necessary is available
+* The electrical and pneumatic specifications are verified and correct
+* The dimensions of the machine correspond to the approved layout
+* All change parts are available and well identified
+* The safety measures have been respected
+* The sensors and switches are correctly installed and functional
+
+The OQ Validation Protocol provides documented evidence that the equipment operates effectively and in accordance with all requirements, and can produce a consistent result within predetermined specifications.  
+
+The OQ Protocol tests that all features of the equipment are operational and functioning properly. This includes testing the machine’s access levels (to determine which users have access to which machine functions), the alarms (emergency, major & minor), the inputs & outputs, the control panel and the HMI screens. Mechanical tests are also done to verify that:
+* Containers proceed through the machine as required 
+* Each of the subsystem’s specifications are respected (ex. filling, tightening, labelling, etc.)
+* All acceptance criteria are met for the different subsystems
+Both the IQ and OQ Validation Packages:
+* Includes an electronic file
+* A hard copy of the test will also be provided if it is requested with the initial order
+* Provide ongoing email support for customer from Capmatic’s validation specialists
+* Are available as supplements to the standard Capmatic Documentation Package?
+
+FAT Validation Protocol Package
+Include One Round of Document Review/Comments by the Customer
+Factory Acceptance Tests (FAT) are done at the Capmatic facilities in Montreal, where customers are invited to participate in a simulation and validation of the system before it is installed at their site. The FAT is beneficial not just for the customer but for Capmatic as well.  This test will assure both parties that the equipment meets all the contractual specifications and that any issues that arise can be addressed before arriving at the customer’s site. 
+
+There are many other advantages to having a FAT. The customer will be able to see that the equipment’s hardware and software are performing optimally before it is installed and gain better insight into how the system works. This is also an opportunity for preliminary operator training. This simulation also saves time and money during start up as typical first-run issues can be resolved prior to delivery. This is important because custom-made solutions can be adapted faster and easier at Capmatic’s facility than at the customer’s site due to the in-house availability of our engineers and design experts.  Upgrades and changes can easily be made.
+
+Customers are free to perform their own tests and/or provide Capmatic their test protocols (preferably with PO). In the event where Capmatic provides the protocols for the FAT, the document and proposed functional tests will be sent to the customer in advance to enable test selection and planning for execution during the FAT.
+
+After inspection and testing of the equipment and review of the documentation, the customer’s approval is required before the system can be delivered.
+
+The FAT activity typically includes verification/testing of the following:
+* Mechanical assembly 
+* Electrical assembly 
+* Review of the documentation 
+* Verification and functional testing 
+* Complete system test
+If, during the testing, the equipment fails to meet satisfactory standards, as outlined in the F.A.T. protocols developed by Capmatic, the manufacturer (Capmatic) will correct the situation prior to delivery of the machine.
+
+The FAT Validation Package:
+* Includes electronic and signed hard copies of files
+* Provides ongoing email support for customer from Capmatic’s validation specialists
+* Testing will be done in the presence of a project leader and testing engineer from Capmatic
+* Is available as a supplement to the standard Capmatic Documentation Package?
+
+SAT Validation Protocol Package
+The Site Acceptance Test (SAT) is a useful tool to determine the functionality of equipment at the customer’s site after its installation.
+
+The SAT tests the equipment in accordance with client approved test plans and specifications to show that the equipment and all its subsystems are installed properly and interface with other systems in the working environment.
+
+The SAT is not only a test of efficiency, but also a test of quality. By conducting an SAT, quality assurance is met along with good manufacturing practice, safe quality risk management and efficient quality control checks.
+
+The SAT Validation Package:
+* Includes an electronic file
+* A hard copy of the test will also be provided if it is requested with the initial order
+* Provides ongoing email support for customer from Capmatic’s validation specialists
+* Is available as a supplement to the standard Capmatic Documentation Package
+* Validation support during SAT at client site is also available (at extra cost)?
+
+Installation Supervision at Site
+The qualified local/Capmatic technicians’ responsibilities are to:
+* That all equipment is properly unpacked
+* That the equipment is in line (in proper position) with other equipment 
+* That the equipment is level
+Client responsibilities are:
+* That the equipment’s are connected by a local certify electrician/plumber with their proper utilities (water, clean compressed air, and electricity)
+* That the components are readily available
+* Proper disposable of packaging material 
+* Forklift, building modifications or alterations, piping, tubing, compress air, etc. need to be supplies by customer
+
+Note:  Price is based on an 8-hour shift. Any overtime performed during the Start Up and Commissioning or any delays which prevent the Capmatic technician from performing these functions (not caused by Capmatic technicians or its equipment) will be charged to the client at the standard service rate (refer to the Service Rate section in this document).?
+
+Start Up and Commissioning at your Plant
+Client responsibilities are to ensure:
+* That the equipment is connected to the proper utilities (water, clean compressed air, and electricity)
+* That the components are readily available
+
+The qualified Capmatic technicians’ responsibilities are to:
+* Verify that all utilities have been properly connected (air, electricity, etc.)
+* Verify that all equipment is properly connected and interfaced with other equipment
+* Verify that all equipment is level
+* Perform a Site Acceptance Test (SAT) in order to prove and document the efficiency of the equipment, or a similar test as specified in the sales contract
+Note: If the customer would like Capmatic to provide the SAT, it must be ordered at the time of the initial PO
+* Equipment set-up training with line operators, maintenance personnel, and managers
+* Equipment training with line operators, maintenance, set-up personnel, and managers
+
+Note:  Price is based on an 8-hour shift. Any overtime performed during the Start Up and Commissioning or any delays which prevent the Capmatic technician from performing these functions (not caused by Capmatic technicians or its equipment) will be charged to the client at the standard service rate (refer to the Service Rate section in this document).?
+
+Training Session for Operators and Maintenance Personnel
+The following steps can normally be done during the Start Up and Commissioning/SAT at the Customer’s facility, or during the FAT which is done at the Capmatic facility in Montreal.
+
+Basic Training Steps Consist of:
+Initial Machine Setup
+Preliminary control 
+Start-up procedure for a production run
+
+Machine Production
+Machine workflow
+Understanding why a machine stops during a production run
+End procedures following a production run
+
+Component Changeovers
+How to prepare the machine for a changeover procedure
+Introductory changeover instructions
+Complete changeover procedures
+
+Safety Features
+Safety Protection Systems
+Safety warning labels
+Warning lights
+Emergency Stops
+Re-start sequence after an Emergency Stop
+
+Cleaning Procedure
+General cleaning procedures
+
+Note: The level of training needed should be discussed in advance to understand and establish the depth and expectations of the training to be performed. Capmatic provides basic training, but cannot guarantee the successful training of any employee during this basic training. Should more advanced training sessions be required, the Customer will be charged the standard service rate for the duration of the additional training (refer to the Service Rate section at the end of this document). ?
+
+Yearly Preventative Maintenance Program
+The purpose of the preventive maintenance:
+* Increase the life span of the equipment.
+* Increase reliability of equipment, thus reducing the probability of failure in service and reducing costs of failure and improve availability.
+* Improve the scheduling of work.
+* Reduce and regulate the workload.
+* Reduce downtime in case of revision or failure
+* Preventing costly corrective maintenance interventions
+* Allow to decide corrective maintenance in good conditions
+* Avoid abnormal energy consumption, lubricant, etc. and facilitate inventory management.
+* Improving the working conditions and training of the production staff
+* Decrease the maintenance budget and improvement of revenues
+
+The Preventive Maintenance (PM) performed by a Qualified Capmatic Ltd. technician at your plant:
+* Maintenance will be performing in the production area 
+* Complete Machine lubrication and general inspection
+* Visual inspection of all internal and external mechanisms will be performed to look for any abnormal wear. 
+* Verification that all connections in the electrical cabinet and control panel are properly connected and interfacing with each other correctly. 
+* All belts and chains will be inspected for wear and adjusted as needed 
+* List all suggested wear parts for purchase ensuring good client inventories of parts that may needed to be replaced during the coming year due to normal wear 
+* Replace any parts that need to be replaced from client stock or supplied by Capmatic, billed at list price 
+
+Note: Critical parts that need to be replaced can be ordered as required and can be installed the next day (assuming that Capmatic has the parts in stock available for immediate shipment)?
+
+Validation Document Time Frame
+TimelineRequirementDQ8 Weeks after URS receptionURS 
+-Signed layout drawing FS8 weeks after project kick off-DQ Approval
+-3D & 2D drawings DS5 Weeks after final design review kickoffFS Approval
+-3D & 2D drawings
+-Electrical & pneumatic schematicsHDS3 weeks after schematics release + BOMDS Approval
+-Electrical & pneumatic schematics
+-Preliminary BOMSDS4 Weeks after HMI screens releaseHDS Approval
+-Programming done
+-HMI screens availableFAT/SAT2 weeks before FAT date.
+Pref-FAT is done 2 weeks before too.All pre-builds documents approval
+-Electrical & pneumatic schematics
+-2D drawing and material certificates
+-HMI screens available
+-Sample matrixIQ1 week after FAT approval and post-mortemFAT Approval
+-BOMOQ2 weeks after FAT approval and post-mortemFAT Approval
+- HMI screens availableManual3 weeks after post-mortemDrawings & spare parts catalog
+Cut sheets
+Recovery procedure
+Change parts
+Instructions
+
+Project Management & Milestones 
+Project Management
+Capmatic has an experienced Project Management Department that will take control of the project after the order has been placed.  Upon receipt of the purchase order and first payment, a Project Coordinator is assigned to lead a Project Team which consists of mechanical engineering, electrical engineering, and technical support personnel.  The Project Coordinator provides a single point of contact for all project-related issues.  Capmatic believes effective two-way communication is the most important factor in any successful project execution.  To this end, the Capmatic Project Coordinator will provide periodic reports to the Customer regarding the project status. 
+
+Project Milestones
+Project Milestones identify all the steps necessary to achieve project completion, from receipt of purchase order to system start-up.  Upon mutual agreement between the Customer and Capmatic, certain milestones will be established which detail orderly performance increments.  Non-compliance of scheduled milestone requirements could affect project execution.  Capmatic reserves the right to move delivery to the next available delivery slot should the Customer fail to satisfy the requirements of any milestone.  
+
+Purchase Order
+Upon receipt of the purchase order, Capmatic begins the process of assembling the Project Team.  A Project Coordinator is assigned and the lead technical support personnel are identified.  Once the Project Team is assembled, the Planning Department schedules the project Kick-Off Meeting in order to brief the Team on the contract and performance requirements.
+
+Kick-Off Meeting
+The Kick-Off meeting introduces the Capmatic Project Team to the Customer’s project.  The project scope, performance requirements, and schedule are detailed so that the preliminary design process can begin.  In this way, the equipment proposal is handed over as a contract to the Project Management Team.  The Customer is welcome to attend this meeting at the Capmatic factory site in Montreal.  Customer costs for such attendance will be borne by the Customer.  
+
+Planning Design Review (PDR)
+The purpose of the in-house Planning Design Review is to ensure that the  equipment design, manufacturing processes, and schedule requirements have developed as expected since the Kick-Off Meeting.  Additional PDR topics include the list of Customer-supplied parts/materials, applicable standards, and the finalized acceptance test procedures and format (if any). Upon successful completion of the PDR any agreed-upon design changes are incorporated, potential impacts to cost and schedule are evaluated, costly and/or long lead-time components are ordered (or fabricated) and the process of design implementation begins.
+
+Documentation
+Capmatic provides one electronic copy of the documentation with its machinery. This package includes installation, operation, and maintenance manuals, vendor documentation for outsourced components, and drawings for electrical, pneumatic systems and assemblies, as well as mechanical systems.  Hard copies of the documentation can also be ordered at extra cost. Translations to languages other than English can also be ordered.  Requests for additional documentation should be included with the purchase order.
+
+Validation
+Capmatic created the Validation Department in order to assist its customers in qualifying their equipment with standard documentary evidence.  Orders for all validation documents should be included with the purchase order.  If Customers wish to provide their own Factory Acceptance Test (FAT), this should be sent to the Project Coordinator at least one month before the scheduled FAT.
+
+Training
+Capmatic would like to emphasize the importance of training Customer operators, maintenance, and setup personnel to ensure the successful use of new equipment.  While we do provide an instruction manual, tooling drawings, etc., it is important for Customer personnel to be confidently able to operate and maintain the equipment at their facility. Hands-on experience at the Capmatic factory site in Montreal, under the guidance of our engineering and assembly personnel, is the best way to obtain this training.  We suggest Customer personnel spend two days in our factory so they can be trained.  Capmatic provides this convenient one-time training as a part of the contract.  Apart from this, training at the Customer plant can be scheduled in accordance with Capmatic’s standard service rates and conditions.
+Customer Responsibilities
+Capmatic believes effective two-way communication is the most important factor in any successful project execution.  To this end, the Customer will be informed of all scheduled design reviews and milestone events.  In turn, the Customer must promptly document and forward to Capmatic any changes from the contractual baseline in the product, process, or equipment specifications.  It is assumed that the Customer will provide each item on the following list in a timely manner (the Project Milestone Agreement will be provided showing all required dates).  After order placement, the Project Manager will submit a project schedule for those items which are required to support the quoted delivery date.
+
+Note: This list is provided as a guide with the understanding that it may not be all-inclusive.
+
+The Customer will provide:
+1. An individual in the Customer organization who is the responsible, single point of contact for the Capmatic Project Manager.
+2. Payments as scheduled in the Project Milestone agreement. If the payment schedule is not respected, it is understood that delays to the delivery may occur.
+3. Drawings of current component parts.
+4. All Customer plant/facility drawings, which include the location of power, air, and water sources, floor space requirements, and site survey information, which is required by Capmatic engineering.
+5. The URS (when applicable) must be included with the purchase order.
+6. Parts (components) for design, development, machine debug, and acceptance.  It is assumed that the parts are clean, separated, dry of oil, and without contaminants.
+7. For any process component part, any information which identifies features, conditions, or tolerances, that are not written on the parts but must be accommodated by the proposed machine.
+8. Design review and approvals within two weeks of receipt of drawings.
+9. Production and support personnel adequate to conduct machine acceptance.
+10. Personnel to conduct data recording and analysis of acceptance testing activities.
+11. Proper unloading, transportation, and uncrating of the equipment at the installation site.
+12. Positioning, re-assembling, and securing of the equipment.
+13. Power drops and proper utility connections (water, clean compressed air, electricity) to the equipment.
+14. Qualified maintenance and repair personnel suitable for training on the purchased equipment.
+15. FAT protocol (if applicable) and customer expectations for equipment acceptance.
+16. Preparation of the installation site, including the removal of any obstacles.
+17. Approval of occupancy for the building in which the equipment is to be installed.
+18. Formulas, calculation formats, software, practices, or methods, which are expected to be a part of (or which can affect) equipment acceptance.
+
+Part Requirements
+Due to the short delivery time of the equipment, all dates in the Project Milestone Agreement must be met in order to keep the project on time. Quantities listed are Capmatic’s requested amounts, but if availability is limited, actual quantity changes can be negotiated with the project manager.
+
+All piece parts shipped to Capmatic should be identified by part number and accompanied by a packing slip and piece part drawing for identification purposes.  If you elect to ship all the required parts to us in a single shipment, parts to be used for various purposes should be in separate containers and each container should be labeled with the quantity of parts contained within.  
+For example, the 3,000 parts needed for feeder bowl development should be packed in a separate container from the 30,000 parts needed for machine development and debug.
+If parts are not separated in this manner, we separate them at our plant in Montreal and charge you for the extra labour of sorting, counting, and repackaging these piece parts.
+
+Parts Requirement Table:
+
+QuantityPart DescriptionPart UseDelivery5 Liter Each ProductsDesignWith PO20 Liter Each ProductsFAT2-4 weeks ARO12 Each StyleBottlesDesignWith PO6,000 Each Style BottlesFeeder Development2-4 weeks ARO12 Each StyleCapDesignWith PO6,000 Each Style CapFeeder Development2-4 weeks ARO1 Box Each StyleOutsertDesignWith PO2 Boxes Each Style OutsertFeeder Development2-4 weeks ARO1 Reel Each StyleLabelsDesignWith PO3 Reel Each StyleLabelsDevelopment, FAT*14 weeks ARO 
+Sufficient filling product is required for machine tests (accuracy and speed). Quantity shall be determined ARO.
+
+PO=Purchase Order
+ARO=After Receipt of Order
+
+Service Rates & Spare Parts
+(Rates CAD)
+Technical Assistance Rates for a Capmatic Technician:
+Labour: 				$150.00 / hour (normal working hours)
+Note: Beyond regular working hours, the rates are calculated as follows: 
+       1.5x standard labour rate for overtime 
+       2x standard labour rate for weekends & holidays
+
+Travel time: 				$85.00 / hour 
+Note: A standard travel day is anything up to 8 hours.  Beyond this standard, the rates are calculated as follows: 
+       1.5x standard travel rate for extended travel (over 8 hours)
+       Travel rate for weekends & holidays (Service department to provide)
+
+Note: Travel time is in addition to scheduled working days.
+
+Food: 					$85.00 / day (Budget)
+Hotel: 					$275.00 / day (Budget)
+Car rental, others & misc.:		$200.00 / day (Budget)
+Airfare: 				The price depends on the destination and advance notice.
+Note: Labour and travel time rates are fixed rates. All other expenses are charged at actual cost.
+Spare Parts
+Upon request, Capmatic can quote spare parts for the system. For budgetary purposes, we recommend adding 2-4% 
+(Rates USD)
+Technical Assistance Rates for a Capmatic Technician:
+Labor: 					$150.00 / hour (normal working hours)
+Note: Beyond regular working hours, the rates are calculated as follows: 
+       1.5x standard labor rate for overtime 
+       2x standard labor rate for weekends & holidays
+
+Travel time: 				$85.00 / hour 
+Note: A standard travel day is anything up to 8 hours.  Beyond this standard, the rates are calculated as follows: 
+       1.5x standard travel rate for extended travel (over 8 hours)
+       Travel rate for weekends & holidays (Service department to provide)
+
+Note: Travel time is in addition to scheduled working days.
+
+Food: 					$85.00 / day (Budget)
+Hotel: 					$275.00 / day (Budget)
+Car rental, others & misc.:		$200.00 / day (Budget)
+Airfare: 				The price depends on the destination and advance notice.
+Note: Labor and travel time rates are fixed rates. All other expenses are charged at actual cost.
+Spare Parts
+Upon request, Capmatic can quote spare parts for the system. For budgetary purposes, we recommend adding 2-4%
+(Rates EURO)
+Technical Assistance Rates for a Capmatic Technician:
+Labour: 				€150.00 / hour (normal working hours)
+Note: Beyond regular working hours, the rate is calculated as follows: 
+       1.5 X standard labour rate for overtime 
+2 X standard travel rate for weekends & holidays
+
+Travel time: 				€ 85.00 / hour
+Note: A standard travel day is anything up to 8 hours.  Beyond this standard, the rates are calculated as follows: 
+       1.5x standard travel rate for extended travel (over 8 hours)
+       Travel rate for weekends & holidays (Service department to provide)
+
+Food: 					€ 85.00 / day (Budget)
+Hotel: 					€ 275.00 / day (Budget)
+Car rental, others & misc.: 		€ 200.00 / day (Budget)
+Airfare: 				The price depends on the destination and advance notice.
+Note: Labour and travel time rates are fixed rates. All other expenses are charged at actual cost.
+Spare Parts
+Upon request, Capmatic can quote spare parts for the system. For budgetary purposes, we recommend adding 2-4%
+
+
+Payment Terms & Delivery
+Form of Payment:40% with purchase order
+30% upon client layout approval
+30% at the acceptation of the equipment at Capmatic (FAT)
+10% net 30 days from date of shipment
+Payable to.
+BANK'S NAME:              Banque Royal du Canada
+BANK'S ADDRESS :     Succursale Place Carillon, 7155 Rue Jean Talon Est, 
+                                      Anjou, Québec, H1M 3A4, Canada
+SWIFT CODE:               ROYCCAT2
+A/C NUMBER:                40039841051192
+INSTITUT:                       003
+TRANSIT:                       05575
+CURRENCY:                  USD 
+BENEFICIARY:              CAPMATIC LTD
+Note: Any banking fees, or any other fees, generated by other terms and condition mentioned in this offer will be entirely covered by the client.
+The equipment remains the property of Capmatic Ltd. until the machine is paid in full.Ready for Inspection (FAT)Currently 6 to 7 Months
+After receiving your order, first payment, approved representative samples, product matrix, layout, and all other technical information needed to manufacture the equipment according to this contract, a firm production schedule will be established.
+Delivery is also contingent on receiving the requested bulk samples on time, as well as all following progress payments, according to the information provided by the Capmatic project coordinator.
+Depending on the number of changeovers and products to be tested, more time may be required to finalized the project.
+Please note that Capmatic will be closed for seven working days at the end of December.
+ShippingEX Work, Capmatic Ltd. Montreal CanadaFreight:Customer chargeInstallationUnloading, localization of the machinery and connection of all services required for proper functioning is the customer's responsibility.Start UpCapmatic technicians can do start-up of the machine, if requested. Additional charges are applied for this service. Travel and living expenses will be charged at actual cost.ConfidentialityThe Purchaser, the Supplier and/or the Agent consider extremely confidential the information received by Capmatic; therefore, they affirm that they will not disclose this information to a third party.ValidityThis quotation is valid for 30 days.								Christian Normandin
+Authorized Representative					International Sales director 
+								
+														
+<Company>. 						Capmatic Ltd.
+
+								Wendy Ocean
+								Tony Lucifero
+								Jairo Martinez
+								Nick Perugini
+Authorized Representative					Business Development Specialist
+
+
+														
+<Company>. 						Capmatic Ltd.
+
+Capmatic General Terms and Conditions
+THE FOLLOWING TERMS AND CONDITIONS ARE IN ADDITION TO, AND FORM AN INTEGRAL PART OF, OUR QUOTATION
+
+1. Interpretation
+1.1 In these Terms:
+“BUYER” means the person who accepts the seller’s verbal or written quotation for the sale of the Goods, or whose written order for the Goods is accepted by the Seller.
+“GOODS” or “EQUIPMENT” means the goods as a whole, regardless of whether it is a supply of a single machine or an entire line of Equipment, which the Seller agrees to supply in accordance with these Terms.
+ in accordance with these Terms.
+“SELLER” means Capmatic and its authorized representatives.
+ “TERMS” means the standard Terms and Conditions of sale set out in this document and includes any special terms agreed in writing between the Buyer and Seller.
+“CONTRACT” means these Terms and the Buyer’s Purchase Order to Capmatic 
+
+2. Offer and Acceptance
+2.1 Buyer’s purchase order constitutes an offer to Seller, which is subject to written acceptance by Seller’s authorized representative.
+2.2 All purchase orders are subject to acceptance by the Seller by way of the issuance of its Order Confirmation.  The Seller reserves the right to partially or fully accept or refuse any purchase order and to submit to the Buyer a counter offer which may include any additional or different terms and conditions, including those which are contained in these Terms.  It is hereby agreed between the Parties that silence on the part of the Seller with respect to any term or condition proposed orally and/or in writing by the Buyer shall not constitute an amendment to these Terms.
+
+3. Quotation & Price
+3.1 A quotation is valid for a period of 30 days from cover date, provided that the Seller has not previously withdrawn it.
+3.2 The price of the Goods (“Price”) shall be the Seller’s quoted price.
+3.3 The Price shall be quoted and payable in the currency specified in this quotation.
+3.4 All Prices quoted or accepted are exclusive of taxes.
+3.5 Any banking fees or any fees generated for legalization or certification of documents shall be paid by the Buyer.
+
+4. Payment Terms
+4.1 Payment terms are specified in the Seller’s quotation and cannot be altered unless changed in writing by the Seller.
+4.2 Capmatic reserves the right to suspend production and delivery schedules in respect of any order if the account is not paid when due. 
+4.3 The Buyer accepts charges of 1.5 % interest per month (18 % per year) on overdue amounts.
+4.4 The Goods remain the property of the Seller until payment is made in full, at which point the title to property will pass to the Buyer.
+
+5. Taxes
+5.1 Any applicable value added tax or any other taxes, export taxes, duties, or other statutory levies or payments shall be paid by the Buyer.
+5.2 The Buyer agrees to indemnify and protect the Seller against any and all liabilities for taxes, as well as any legal fees or costs incurred by the Seller in connection therewith.
+
+6. Changes
+6.1 Seller reserves the right to alter designs and incorporate improvements as required to ensure proper operation of all equipment, parts and accessories ordered. 
+6.2 Changes requested by the Buyer once work is in progress are subject to additional charges for reasonable costs and expenses incurred as a result of such changes, and for labour, materials, and services required to effect the changes.
+
+7. Cancellation, Termination, and suspension 
+7.1 Acceptance of this proposal creates a Contract, which can be terminated or canceled only upon Buyer’s written request and Seller’s written consent thereto, subject to such conditions as Seller may reasonably require.  
+7.2 In case of termination or cancellation, the Seller shall have the right to retain the amounts paid by the Buyer up to the date of termination as a lump-sum compensation for damages suffered, including indirect damages, expenses, and costs, save for compensation for any additional damages incurred and without prejudice to additional and/or other rights. 
+7.3 The Buyer may, for any reasons whatsoever and at its sole discretion suspend the performance of the Contract by giving written notice to the Seller. The Seller shall not be obliged to accept suspension for more than four (4) months even cumulatively. Therefore, in the event that the suspension will last for a longer period, the conditions for termination under Article 7.2 shall automatically apply. 
+7.4 Without prejudice to any other rights or remedies to which the Seller may be entitled, the Seller shall have the right to terminate this Contract with immediate effect and without any liability if the Buyer: 
+- Delays payment of any amount due to the Seller under this Contract for a period exceeding thirty (30) days from agreed terms; or
+- Commits a material or persistent breach of any other terms of this Contract and (if such a breach is remediable) fails to remedy that breach within thirty (30) days of being noticed in writing of the breach; or
+- Is declared insolvent or bankrupt; makes an assignment for the benefit of its creditors; has all or any substantial portion of its capital stock or assets expropriated by any governmental authority; is dissolved or liquidated (except as a consequence of a merger, consolidation or other corporate reorganization not involving the solvency of such Party).
+Under such breach of Contract, The Seller shall automatically apply termination as stated in Article 7.2. 
+
+
+8. Samples and Testing
+8.1 Samples supplied for testing purposes are to be supplied at Buyer’s cost, in accordance with the terms and conditions as indicated in the Order Confirmation.
+8.2 All samples will be returned with the tested machinery. In the case where returning product will significantly increase the freight costs, Buyer will have the option of paying for proper disposal of their samples.
+8.3 Estimated Speeds are subject to testing of Buyer’s bulk samples. In those cases where bulk samples are not supplied, the Equipment will be tested for normal functioning only. Performance on products not submitted to Capmatic, whether express or implied, is not guaranteed.
+8.4 Seller is not liable in the event that the quality of the materials and the products used in the production are found to differ from the quality of the material and products supplied by the Buyer for testing.
+8.5 Any costs incurred for the changes to the Equipment due to the use of materials which differ from those used during the execution of the testing activities shall be borne by the Buyer. Consequently, Buyer shall not be entitled to raise claims against the Seller if delays in delivery of the Equipment are caused by fault of the Buyer.
+8.6 Materials and consumables especially tamper evident neck banding and body banding materials should not be purchased in bulk by the Buyer until actual samples have been proven satisfactory in production tests. Seller cannot be responsible regardless of testing performed and recommendations made, beyond the cost of new tooling, should changes be required.
+
+9. Intellectual Property
+9.1 The entire rights, title, interest, and the ownership of the know-how, technical information, designs, specifications or documentation, ideas, concepts, methods, processes, technology and inventions (the ‘Intellectual Property Rights’) developed or created by the Seller, or by any third parties commissioned by the Seller, shall be owned by the Seller. The Buyer shall keep all such information confidential and shall not reveal such information to any third parties unless and until such information becomes available in the public domain. Furthermore, such information must not be used by the Buyer for purposes which differ to those relating to the use of the Seller’s equipment without prior written consent of the Seller.
+9.2 The Seller shall retain the ownership of the patents, copyrights, trade secrets, design rights and any other Intellectual Property Rights relating to the Equipment and, with the exception of what is expressly agreed in this agreement, the Buyer shall not acquire any Intellectual Property Rights, including technical information, know-how, designs and specifications provided by the Seller and concerning the Equipment.
+9.3 The trademarks and any other brand which identifies the Seller and those belonging to any other company connected to or controlled by the Seller shall be used respecting the destination impressed to it by the Seller in the way as the Seller applies it to the Equipment or to the related documentation.
+
+10. Delivery Dates
+10.1 Any dates specified by the Seller for delivery of the Goods are intended to be an estimate and time of delivery shall not be of the essence.
+10.2 Seller will notify Buyer of any substantial change in those dates.
+10.3 Delivery dates are based on prompt receipt of all necessary information from the Buyer including original purchase order, advance payment where applicable, samples as required, and confirmation of all technical details.  Delays in receipt may cause delays in delivery.
+10.4 Seller will make every reasonable effort to deliver before or on schedule, however, the Seller shall not be liable for any damages whatsoever due to a delay in delivery howsoever caused.
+
+11. Precedence of the Terms and Conditions
+The foregoing terms and conditions take precedence over all other terms and conditions whatsoever contained in any document submitted by the Buyer, unless Capmatic Agrees in comply with new terms and conditions.
+12. Acceptance of Goods
+12.1 When Goods are complete, Buyer will be requested to visit Seller’s production facility in Montreal, Canada for the Factory Acceptance Testing (FAT).
+12.2 The Goods will be deemed to be complete and accepted by Buyer when Seller has demonstrated the Goods operating at the required speeds and quality specified in the Contract.
+
+13. Storage
+13.1 If the delivery is delayed by the Buyer for any cause, the Seller shall be entitled to payment for the goods and to charge Buyer for storage of the Goods until delivery.
+
+14. Shipping Weights and Dimensions
+14.1 Where published in the quotation, costs are estimates only and are not guaranteed. Actual crate weight and dimensions can only be advised once Equipment is fully packed. 
+14.2 Freight weights are also estimated and will be finalized at time of shipping.
+
+15. Damage Claims
+15.1 Great care is taken in packing all machines, parts, and accessories. After Seller receives a ‘Received in Good Order’ receipt by the transportation company, Seller cannot be held responsible for damage that occurred in transit.
+15.2 All claims for breakage or damage, whether concealed or obvious, must be made to the carrier as soon as possible after receipt of the shipment.  Seller will render all possible assistance to secure satisfactory adjustment of such damage claims.
+
+16. Force Majeure
+16.1 The parties shall not be responsible for any failure or delay in performance of their respective obligations or for any loss, cost, damage, expense and penalty whatsoever to the extent due to a Force Majeure Event. Notwithstanding the foregoing, a Party’s inability to make payment due to lack of funds shall not be considered a Force Majeure Event.
+16.2 On the occurrence of a force Majeure Event, the Party affected shall be excused from performance of the affected obligations for as long as the Force Majeure Event and effects continue. Occurrence Included but not limited to inability to obtain timely delivery of materials from suppliers. The performance of obligations shall resume upon cessation of such Force Majeure Event and effects thereof.
+16.3 If performance is still delayed by a Force Majeure Event after the expiry of six (6) months from the date of first delay or prevention, either Party may terminate the Contract for convenience by written notice to the other Party and without any obligation to pay damages to the other Party as a consequence of such termination.
+The Seller shall automatically apply termination as stated in Article 7.2.
+
+
+17. Installation
+17.1 Seller prices for equipment, parts, and accessories do not include an allowance for installation or final on-site adjustment.  
+17.2 The installation and start up service performed by Capmatic will be charged as a separate item and can be included in quotation if required.
+
+18. Returned Goods
+18.1 In no case are Goods to be returned without Seller’s written permission.
+18.2 All returned Goods must be ‘as new’.
+18.3 Goods accepted by Seller for credit are subject to a minimum service charge of 20% plus all transportation costs.
+18.4 Any Goods authorized for return must be packed securely to prevent damage during shipping.
+
+19. Warranty
+19.1 Seller’s warranty of standard quality, as set forth in the Terms and in the quotation, is expressly in lieu of any other warranties, expressed or implied, including any implied warranty of merchantability or fitness for a particular purpose.
+19.2 Seller warrants that the goods be of sound quality and will conform to expressly agreed specifications.
+19.3 All Equipment manufactured by Seller is guaranteed against defective workmanship, according to the schedule below.
+
+Mechanical PartsA period of one (X 1) year, 30 days following equipment leaving Capmatic premises, or up to a maximum of 2,000 hours of operations. whichever occurs firstElectrical PartsA period of six (X 6) months, 30 days following equipment leaving Capmatic premises, or up to a maximum of 1,000 hours of operationsMalfunctions or faults occurring with the functionality of any of the equipment systems or features. These should be reported in writing.Malfunctions are guaranteed for three (X 3) months from the date of installation, or up to a maximum of 500 working hours. whichever occurs firstMalfunctions that occur prior to the performance of the SAT should be documented and addressed during the SAT., a final and signed SAT document copy must be provided to Capmatic for proper traceability documentation@capmatic.com
+19.4 Warranties for equipment and components not manufactured by Seller are in accordance with those of the original equipment manufacturer.
+19.5 Seller reserves the right to repair or replace faulty parts as it deems suitable on FOB Seller Works basis.
+19.6 Parts replaced on warranty basis must be returned to Seller, freight prepaid.
+19.7 Seller covers labour to replace items under warranty for 60 days from the date of installation; however, travel time and travel expenses shall be paid by the Buyer.
+
+20. Liability
+20.1 Seller neither assumes nor authorizes any person to assume on its behalf, any obligation or liability in connection with its Goods or any part thereof, which have been subjected to repairs by unauthorized individuals or which have been abused, altered, not used in accordance with the application originally intended, or subjected to any other form of negligence or misuse, regardless of how same occurred.
+20.2 This Contract and all matters relating to the interpretation of the same, any claim for consequential or incidental damages and any claims, right of action and demands, regardless of how same are described, whether in law or equity, shall be interpreted according to the laws of the Province of Quebec, Canada and they shall be pursued solely in the Province of Quebec, Canada.
+20.3 In case of Goods manufactured to Buyer’s designs or instructions, Buyer guarantees that such goods or the process of manufacture do not infringe on any patent, registered designs, or other property rights, and agrees to absolve Seller from all liabilities, costs, claims and demands which may be brought against Seller.
+20.4 Seller’s liability for any claims arising out of any contract formed between Seller and any Buyer, including any warranty claims and claims based on the alleged negligence of Seller, its officers, agents, or employees, and any Buyer shall not include any special, consequential, incidental or penal damages including loss of profit or revenues, loss of use of the goods or any associated equipment or system in which a product is installed, damage to associated equipment or systems, cost of capital, cost of substitute products, facilities, services or replacements, downtime costs or claims of Buyer’s customer for any such damages.
+20.5 In no event shall Seller’s liability exceed the cost of the Goods furnished in accordance with this limited warranty, and subject to any claim hereunder.
+20.6 In no event shall this warranty be expanded by any advice, experimentation, or other participation which Seller may render, in the design, development of materials, tools, parts, etc. for Buyer’s use.
+
+21. Waiver
+21.1 Seller’s failure to insist upon a strict performance of any of the terms and conditions herein shall not be deemed a waiver of any rights that Seller may have, and shall not be deemed a waiver of any subsequent breach or default in these conditions.
+
+22. Miscellaneous
+22.1 The Buyer shall not assign or transfer the rights deriving from the Offer/Order Confirmation, including the Special Conditions of Sale, these Terms and any annexes thereto (the ‘Agreement’) without the prior written consent of the Seller.  
+22.2 In the event any provision of the Agreement conflicts with the law under which this Agreement is to be construed or if any such provision is held illegal, invalid or unenforceable, in whole or in part, by a competent authority, such provision shall be deemed to be restated to reflect as nearly as possible the original intentions of the parties in accordance with applicable law.  The legality, validity and enforceability of the remaining provisions shall not be affected thereby and shall remain in full force and effect.
+22.3 This agreement shall constitute the entire agreement between the Buyer and Seller and set forth the entire terms and conditions under which this Agreement will be performed.  There are no other agreements, oral or written, with respect to the subject matter of the Agreement, and all oral and written correspondence relating to the subject matter hereof are superseded by the Agreement. This Agreement shall be binding on the Buyer and Seller and their respective successors.
+22.4 Guarding: The standard guarding provided by Capmatic may not suit all local requirements. Additional guarding, at extra cost, can be provided to meet specific requirements.
+22.5 Recommended Spare Parts/Spare Part Kits are provided as part of the Documentation material.
+
+(Style Library)
+Table of Content
+StyleFontSizeLine SpacingNormalArial10Multiple 1.08TOC 1Arial10TOC 2Montserrat Medium12BoldTOC 3Arial10TOC 4Arial10
+
+Main Document
+StyleFontSizeLine SpacingNormalArial10Multiple 1.08Heading 118Heading 2Montserrat Medium14Bold #FF0000Heading 3Montserrat Medium16Bold Heading 4Arial 11Bold #0000FFHeading 5Montserrat Medium16BoldCenteredMultiple 1.5Heading 6Montserrat Medium11Bold #0000FFTitleMontserrat Medium12Bold Centered
+
+(Header & Footer)
+Capmatic
+Header_Title_Capmatic
+
+
+Header_Capmatic
+  Quotation#  QUOTE_LIB_PRESENTATION.docx
+
+Footer_Capmatic
+
+
+Capmatic America
+Header_Title_CapmaticAmerica
+
+
+Header_CapmaticAmerica
+  Quotation#  2 SortStar USA 2026
+
+Footer_CapmaticAmerica
+
+
+
+Capmatic Europa
+Header_Title_CapmaticEuropa
+
+
+Header_CapmaticEuropa
+  Quotation#  2 SortStar Euro 2026
+
+Footer_CapmaticEuropa
+
+
+ CAPMATIC® 	
+
+
+
+
+This document contains proprietary and confidential information and is the property of Capmatic Ltd.
+Disclosure to a third party without prior written consent is prohibited.
+Capmatic Ltd. ?2026 All Rights Reserved.
+
+ CAPMATIC® 	
+
+This document contains proprietary and confidential information and is the property of Capmatic Ltd.
+Disclosure to a third party without prior written consent is prohibited.
+Capmatic Ltd. ?2026 All Rights Reserved.
+
+  QUOTE_LIBRARY.docx	Table of Contents
+
+		Page 3 of 28
+
+  QUOTE_LIBRARY.docx	Project Contacts
+
+  QUOTE_LIBRARY.docx	Project Contacts
+
+		Page 3 of 98
+
+  QUOTE_LIBRARY.docx	Project Technical Specification
+
+  QUOTE_LIBRARY.docx	Equipment Configuration and Price
+
+  QUOTE_LIBRARY.docx	Machine Technial Specifications
+
+  QUOTE_LIBRARY.docx	Equipment Picture
+
+  QUOTE_LIBRARY.docx	Validation and Service Specifications
+
+  QUOTE_LIBRARY.docx	Validation Document Timeframe
+
+  QUOTE_LIBRARY.docx	Project Management & Milestones
+
+  QUOTE_LIBRARY.docx	Customer Responsabilities
+
+  QUOTE_LIBRARY.docx	Parts Requirement & Service Rates
+
+  QUOTE_LIBRARY.docx	Payment Terms & Delivery
+
+  QUOTE_LIBRARY.docx	Capmatic General Terms and Conditions
+
+  QUOTE_LIBRARY.docx	Style Library
+

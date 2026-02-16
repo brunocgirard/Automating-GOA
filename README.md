@@ -123,4 +123,36 @@ flowchart TB
    npm run dev
    ```
 
+## Credential Safety
+
+- Keep real credentials only in local `.env` files, never in tracked files.
+- Tracked examples are limited to `.env.example` templates.
+- Enable the repo hook to block secret commits:
+  ```bash
+  git config core.hooksPath .githooks
+  ```
+- Manual scan (same logic as the hook):
+  ```bash
+  python scripts/check_secrets.py --staged
+  ```
+
+## QUOTE_LIBRARY Machine Specs
+
+`src/llm/extraction.py` injects matched machine specs from `QUOTE_LIBRARY.txt` into the LLM extraction prompt.
+
+- Default file: `QUOTE_LIBRARY.txt` at repo root
+- Optional override: set `QUOTE_LIBRARY_PATH` in `.env`
+- Optional limits: `QUOTE_LIBRARY_MAX_SECTIONS` and `QUOTE_LIBRARY_MAX_CHARS`
+
+When adding new machine specs, use either:
+
+1. Existing heading style with `Model` in the title (for example `LabelStar Model System 1 ECO`), or
+2. Explicit header format:
+   ```text
+   Machine: <Machine Name>
+   <spec lines...>
+   ```
+
+No code changes are required when appending new machine sections in either format.
+
 Legacy Streamlit files are archived in `legacy/`.

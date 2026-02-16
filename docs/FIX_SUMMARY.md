@@ -173,8 +173,8 @@ FutureWarning: google.generativeai package has ended support.
 Please switch to google.genai package.
 ```
 
-**Impact:** Non-critical, functionality still works
-**Recommendation:** Update to `google-genai` package in next iteration
+**Impact:** Non-critical at the time of this report, functionality still worked
+**Update (2026-02-16):** Migrated runtime usage to `google.genai` and updated dependency manifests to `google-genai`.
 **Migration Guide:** https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
 
 ### 3. Few-Shot Learning Status
@@ -223,12 +223,8 @@ python test_template_filling.py
 # Full diagnostics
 python test_pipeline_diagnosis.py
 
-# Run verification suite
-python verify_step1_environment.py
-python verify_step2_langchain.py
-python verify_step3_fewshot.py
-python verify_step4_html_templates.py
-python verify_step5_end_to_end.py
+# Run tests
+python -m pytest tests/ -v
 ```
 
 ### Adding New Fields
@@ -292,7 +288,7 @@ python verify_step5_end_to_end.py
 1. ✅ **DONE:** Fix missing imports and unicode issues
 2. ✅ **DONE:** Validate template filling works
 3. **Optional:** Complete `src/llm/` refactoring integration or remove unused code
-4. **Optional:** Update to `google-genai` package (from deprecated `google.generativeai`)
+4. ✅ **DONE (2026-02-16):** Updated to `google-genai` package (from deprecated `google.generativeai`)
 
 ### Medium Priority
 5. Test SortStar Word template filling (not tested in this session)

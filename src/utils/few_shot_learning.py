@@ -5,35 +5,12 @@ This module provides functionality to enhance LLM prompts with high-quality exam
 from previous successful extractions, improving accuracy over time.
 """
 
-import re
 from typing import Dict, List, Optional, Tuple, Any
 from src.utils.db.few_shot import (
     save_few_shot_example, get_few_shot_examples, get_similar_examples,
     add_few_shot_feedback
 )
-
-def determine_machine_type(machine_name: str) -> str:
-    """
-    Determines the machine type based on the machine name.
-    
-    Args:
-        machine_name: Name of the machine
-    
-    Returns:
-        str: Machine type category
-    """
-    machine_name_lower = machine_name.lower()
-    
-    if any(keyword in machine_name_lower for keyword in ["sortstar", "unscrambler", "bottle unscrambler"]):
-        return "sortstar"
-    elif any(keyword in machine_name_lower for keyword in ["label", "labeling", "labelstar"]):
-        return "labeling"
-    elif any(keyword in machine_name_lower for keyword in ["fill", "filler", "filling"]):
-        return "filling"
-    elif any(keyword in machine_name_lower for keyword in ["cap", "capper", "capping"]):
-        return "capping"
-    else:
-        return "general"
+from src.utils.machine_type import determine_machine_type
 
 def extract_field_context_for_example(field_name: str, machine_data: Dict, 
                                     common_items: List[Dict], full_pdf_text: str) -> str:

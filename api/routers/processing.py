@@ -63,6 +63,7 @@ from src.utils import template_utils
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.form_generator import OUTPUT_HTML_PATH, display_label, generate_goa_form, load_rows
 from src.utils.html_doc_filler import fill_and_generate_html, fill_html_template
+from src.utils.machine_type import is_sortstar_machine
 from src.utils.pdf_utils import identify_machines_from_items
 
 router = APIRouter(prefix="/api/processing", tags=["Processing"])
@@ -197,10 +198,6 @@ def _sanitize_machine_name(machine_name: str) -> str:
     return safe or "machine"
 
 
-def _is_sortstar_machine(machine_name: str) -> bool:
-    return bool(re.search(r"\b(sortstar|unscrambler|bottle unscrambler)\b", (machine_name or "").lower()))
-
-
 def _is_sortstar_template_row(template_row: dict[str, Any]) -> bool:
     template_type = str(template_row.get("template_type", "")).lower()
     machine_name = str(template_row.get("machine_name", "")).lower()
@@ -209,7 +206,7 @@ def _is_sortstar_template_row(template_row: dict[str, Any]) -> bool:
         return True
     if generated_file_path.endswith(".docx"):
         return True
-    return bool(re.search(r"\b(sortstar|unscrambler|bottle unscrambler)\b", machine_name))
+    return is_sortstar_machine(machine_name)
 
 
 def _resolve_sortstar_template_path() -> str:
@@ -222,7 +219,7 @@ def _resolve_sortstar_template_path() -> str:
 def _resolve_output_path(existing_file_path: str | None, machine_id: int, machine_name: str) -> str:
     if existing_file_path and existing_file_path.lower().endswith((".html", ".docx", ".pdf")):
         return existing_file_path
-    if _is_sortstar_machine(machine_name):
+    if is_sortstar_machine(machine_name):
         return f"output_SORTSTAR_{_sanitize_machine_name(machine_name)}_GOA.docx"
     return f"output_{machine_id}_{_sanitize_machine_name(machine_name)}_GOA.html"
 

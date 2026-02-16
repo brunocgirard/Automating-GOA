@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from src.llm.client import configure_gemini_client, get_generative_model, genai
 from src.utils.db import save_client_info, save_document_content, save_machines_data, save_priced_items
 from src.utils.pdf_utils import extract_full_pdf_text, extract_line_item_details, identify_machines_from_items
 
@@ -39,9 +40,10 @@ def _extract_standard_fields_via_llm(full_text: str, fallback_quote_ref: str) ->
     }
 
     try:
-        from src.utils.llm_handler import GENERATIVE_MODEL, configure_gemini_client, genai
-
-        if not configure_gemini_client() or GENERATIVE_MODEL is None:
+        if not configure_gemini_client():
+            return standard_fields
+        model = get_generative_model()
+        if model is None:
             return standard_fields
 
         prompt = (
@@ -50,7 +52,7 @@ def _extract_standard_fields_via_llm(full_text: str, fallback_quote_ref: str) ->
             + "\n\nQuote text:\n"
             + full_text[:12000]
         )
-        response = GENERATIVE_MODEL.generate_content(
+        response = model.generate_content(
             prompt,
             generation_config=genai.types.GenerationConfig(temperature=0.2, top_p=0.95, max_output_tokens=2048),
         )
@@ -165,4 +167,3 @@ def save_profile(profile: dict[str, Any]) -> str:
 
     save_document_content(quote_ref, profile.get("full_text", ""), profile.get("pdf_filename", ""))
     return quote_ref
-

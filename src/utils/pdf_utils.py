@@ -350,30 +350,35 @@ def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]], pri
     current_machine = None
     common_items = []
     
-    # Keywords that typically indicate a main machine
+    # Keywords that typically indicate a main machine (case-insensitive via re.IGNORECASE)
     main_machine_indicators = [
-        r"model.*[A-Z0-9]{2,}",     # Model followed by alphanumeric
-        r".*\bmonoblock\b.*",        # Contains "monoblock"
-        r".*\bunscrambler\b.*",      # Contains "unscrambler"
-        r".*\bfiller\b.*",           # Contains "filler" 
-        r".*\bcapper\b.*",           # Contains "capper"
-        r".*\blabeler\b.*",          # Contains "labeler"
-        r".*\bcartoner\b.*",         # Contains "cartoner"
-        r".*\bcase\s*packer\b.*"     # Contains "case packer"
+        (r"model.*[A-Z0-9]{2,}", re.IGNORECASE),
+        (r"\bmonoblock\b", re.IGNORECASE),
+        (r"\bunscrambler\b", re.IGNORECASE),
+        (r"\bfiller\b", re.IGNORECASE),
+        (r"\bcapper\b", re.IGNORECASE),
+        (r"\blabeler\b", re.IGNORECASE),
+        (r"\blabeller\b", re.IGNORECASE),
+        (r"\bcartoner\b", re.IGNORECASE),
+        (r"\bcase\s*packer\b", re.IGNORECASE),
+        (r"\bsort[\s_-]*star\b", re.IGNORECASE),
+        (r"\brobo[\s_-]*sort\b", re.IGNORECASE),
+        (r"\bthunder[\s_-]*star\b", re.IGNORECASE),
+        (r"\blabel[\s_-]*star\b", re.IGNORECASE),
     ]
     
     # Keywords that typically indicate common items (not specific to one machine)
     common_item_indicators = [
-        r"warranty",
-        r"installation",
-        r"documentation",
-        r"training",
-        r"spare\s*parts\s*kit",
-        r"service",
-        r"maintenance",
-        r"validation",
-        r"shipping",
-        r"delivery"
+        (r"warranty", re.IGNORECASE),
+        (r"installation", re.IGNORECASE),
+        (r"documentation", re.IGNORECASE),
+        (r"training", re.IGNORECASE),
+        (r"spare\s*parts\s*kit", re.IGNORECASE),
+        (r"service", re.IGNORECASE),
+        (r"maintenance", re.IGNORECASE),
+        (r"validation", re.IGNORECASE),
+        (r"shipping", re.IGNORECASE),
+        (r"delivery", re.IGNORECASE),
     ]
 
     # Extract numeric price from item if available
@@ -413,8 +418,8 @@ def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]], pri
             return True
             
         # Check for main machine indicator patterns
-        for pattern in main_machine_indicators:
-            if re.search(pattern, desc_lower):
+        for pattern, flags in main_machine_indicators:
+            if re.search(pattern, desc_lower, flags):
                 return True
                 
         return False
@@ -425,8 +430,8 @@ def identify_machines_from_items(line_items: List[Dict[str, Optional[str]]], pri
         if not desc:
             return False
         desc_lower = desc.lower()
-        for pattern in common_item_indicators:
-            if re.search(pattern, desc_lower):
+        for pattern, flags in common_item_indicators:
+            if re.search(pattern, desc_lower, flags):
                 return True
         return False
     

@@ -91,9 +91,8 @@ def format_options_listing(soup: BeautifulSoup, text_val: str) -> BeautifulSoup:
         wrapper.append(p)
         return wrapper
     
-    # Split into lines
-    lines = text_val.splitlines()
-    lines = [line.strip() for line in lines if line.strip()]
+    # Split into lines while preserving indentation (needed for nested bullets).
+    lines = [line.rstrip() for line in text_val.splitlines() if line.strip()]
     
     if not lines:
         p = soup.new_tag('p')
@@ -104,10 +103,11 @@ def format_options_listing(soup: BeautifulSoup, text_val: str) -> BeautifulSoup:
     
     # Single line that doesn't look like a bullet
     if len(lines) == 1:
-        line = lines[0]
+        line = lines[0].strip()
         # Check if it's a bullet point
         bullet_prefixes = ['-', '*', '•', '·', '–', '—', '►', '▸']
-        is_bullet = any(line.startswith(prefix) for prefix in bullet_prefixes)
+        line_without_indent = line.lstrip()
+        is_bullet = any(line_without_indent.startswith(prefix) for prefix in bullet_prefixes)
         
         if not is_bullet:
             # Single non-bullet line - display as paragraph
@@ -121,7 +121,11 @@ def format_options_listing(soup: BeautifulSoup, text_val: str) -> BeautifulSoup:
     body_lines = []
 
     # Check if first line is MACHINE: description (special formatting)
-    first_line = lines[0]
+    def _is_indented(raw_line: str) -> bool:
+        return (len(raw_line) - len(raw_line.lstrip(' \t'))) > 0
+
+    first_line_raw = lines[0]
+    first_line = first_line_raw.strip()
     if first_line.upper().startswith('MACHINE:'):
         # Extract machine description (may span multiple lines with sub-bullets)
         machine_main_text = first_line[8:].strip()  # Remove "MACHINE:" prefix
@@ -132,7 +136,7 @@ def format_options_listing(soup: BeautifulSoup, text_val: str) -> BeautifulSoup:
         while i < len(lines):
             line = lines[i]
             # Check if line is indented (sub-bullet of machine)
-            if line.startswith('  ') and line.strip():
+            if _is_indented(line) and line.strip():
                 machine_lines.append(line)
                 i += 1
             elif not line.strip():
@@ -157,7 +161,7 @@ def format_options_listing(soup: BeautifulSoup, text_val: str) -> BeautifulSoup:
         ]
 
         bullet_chars = ['-', '*', '•', '·', '–', '—', '►', '▸']
-        first_is_bullet = any(first_line.startswith(c) for c in bullet_chars)
+        first_is_bullet = any(first_line.lstrip().startswith(c) for c in bullet_chars)
         first_is_header = (
             not first_is_bullet and
             (first_line.endswith(':') or any(pat in first_line.lower() for pat in header_patterns))
@@ -222,10 +226,10 @@ def format_options_listing(soup: BeautifulSoup, text_val: str) -> BeautifulSoup:
 
         for raw_line in body_lines:
             # Check if line is indented (sub-bullet)
-            is_indented = raw_line.startswith('  ') and raw_line.strip()
+            is_indented = _is_indented(raw_line) and raw_line.strip()
 
             # Strip leading whitespace and bullet characters
-            line = raw_line.strip()
+            line = raw_line.lstrip(' \t').strip()
             for char in bullet_chars:
                 if line.startswith(char):
                     line = line[1:].strip()

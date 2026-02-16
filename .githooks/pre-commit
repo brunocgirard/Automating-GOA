@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+set -eu
+
+if command -v python >/dev/null 2>&1; then
+  python scripts/check_secrets.py --staged
+  exit $?
+fi
+
+if command -v py >/dev/null 2>&1; then
+  py -3 scripts/check_secrets.py --staged
+  exit $?
+fi
+
+echo "Python is required to run scripts/check_secrets.py"
+exit 1
+

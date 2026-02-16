@@ -8,7 +8,8 @@ import traceback # For detailed error logging
 # Import utility functions from the project
 from src.utils.pdf_utils import extract_line_item_details, extract_full_pdf_text, identify_machines_from_items
 from src.utils.template_utils import extract_placeholder_context_hierarchical # If needed for profile confirmation display
-from src.utils.llm_handler import configure_gemini_client, answer_pdf_question # For client profile extraction, chat features
+from src.llm import configure_gemini_client, answer_pdf_question # For client profile extraction, chat features
+from src.llm.client import get_generative_model, genai
 from src.utils.db import (
     save_client_info,
     save_priced_items,
@@ -92,14 +93,15 @@ def extract_client_profile(pdf_path):
             
         client_info = {}
         try:
-            # Use the LLM to extract client info
-            from src.utils.llm_handler import GENERATIVE_MODEL, genai # Directly use the configured model
+            model = get_generative_model()
+            if model is None:
+                raise RuntimeError("Gemini model is not configured.")
             generation_config = genai.types.GenerationConfig(
                 temperature=0.2, # Lower temperature for more focused output
                 top_p=0.95,
                 max_output_tokens=2048
             )
-            response = GENERATIVE_MODEL.generate_content(
+            response = model.generate_content(
                 prompt,
                 generation_config=generation_config
             )
@@ -414,9 +416,17 @@ def confirm_client_profile(extracted_profile):
                     machine_type = determine_machine_type(machine_name_for_type)
                     template_type = "client_profile" # A generic template type for client-level fields
 
+                    # Quick rejection set for placeholder values
+                    _QUICK_REJECT = {
+                        "n/a", "na", "none", "null", "unknown", "not found",
+                        "not specified", "not provided", "not available",
+                        "not mentioned", "see quote", "pending", "tbd",
+                        "-", "--", "---", "...", "???", "placeholder",
+                    }
+
                     # Iterate through client_record and standard_fields to save examples
                     for field_name, field_value in client_record.items():
-                        if field_value: # Only save if a value was extracted
+                        if field_value and str(field_value).strip().lower() not in _QUICK_REJECT:
                             save_successful_extraction_as_example(
                                 field_name=field_name,
                                 field_value=field_value,
@@ -428,9 +438,7 @@ def confirm_client_profile(extracted_profile):
                                 confidence_score=1.0 # User confirmed, so high confidence
                             )
                     for field_name, field_value in standard_fields.items():
-                        if field_value: # Only save if a value was extracted
-                            # Map original standard field names to a consistent format if needed
-                            # For now, use them as is
+                        if field_value and str(field_value).strip().lower() not in _QUICK_REJECT:
                             save_successful_extraction_as_example(
                                 field_name=field_name,
                                 field_value=field_value,

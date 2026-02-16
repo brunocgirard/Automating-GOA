@@ -15,10 +15,10 @@ import os
 import sys
 
 
-# Mocking setup - we'll mock google.generativeai before importing client
+# Mocking setup - we'll mock the client module's genai compatibility namespace.
 @pytest.fixture
 def mock_genai():
-    """Fixture to provide a mocked google.generativeai module."""
+    """Fixture to provide a mocked genai compatibility namespace."""
     mock_module = MagicMock()
     mock_module.GenerativeModel = MagicMock()
     mock_module.configure = MagicMock()
@@ -50,6 +50,7 @@ class TestConfigureGeminiClient:
         mock_getenv.return_value = "test_api_key_12345"
         mock_model_instance = MagicMock()
         mock_genai.GenerativeModel.return_value = mock_model_instance
+        expected_model_name = client.get_configured_model_name()
 
         result = client.configure_gemini_client()
 
@@ -57,7 +58,7 @@ class TestConfigureGeminiClient:
         mock_load_dotenv.assert_called_once()
         mock_getenv.assert_called_with("GOOGLE_API_KEY")
         mock_genai.configure.assert_called_with(api_key="test_api_key_12345")
-        mock_genai.GenerativeModel.assert_called_with('gemini-2.5-flash-lite')
+        mock_genai.GenerativeModel.assert_called_with(expected_model_name)
         assert client.GENERATIVE_MODEL is not None
 
     @patch('src.llm.client.load_dotenv')
@@ -143,11 +144,12 @@ class TestConfigureGeminiClient:
         mock_getenv.return_value = "test_api_key"
         mock_model_instance = MagicMock()
         mock_genai.GenerativeModel.return_value = mock_model_instance
+        expected_model_name = client.get_configured_model_name()
 
         client.configure_gemini_client()
 
-        # Verify the model name is exactly 'gemini-2.5-flash-lite'
-        mock_genai.GenerativeModel.assert_called_with('gemini-2.5-flash-lite')
+        # Verify model name comes from locked configuration.
+        mock_genai.GenerativeModel.assert_called_with(expected_model_name)
 
 
 class TestCheckModelUsage:
@@ -407,6 +409,20 @@ class TestClientErrorRecovery:
 
 class TestEnvironmentVariableHandling:
     """Test environment variable handling."""
+
+    def test_model_name_defaults_when_env_missing(self, monkeypatch):
+        """Model name should fall back to the pinned default when unset."""
+        from src.llm import client
+
+        monkeypatch.delenv("GOA_LLM_MODEL", raising=False)
+        assert client.get_configured_model_name() == client.DEFAULT_GEMINI_MODEL
+
+    def test_model_name_uses_env_override(self, monkeypatch):
+        """Model name should respect explicit GOA_LLM_MODEL overrides."""
+        from src.llm import client
+
+        monkeypatch.setenv("GOA_LLM_MODEL", "gemini-2.0-flash")
+        assert client.get_configured_model_name() == "gemini-2.0-flash"
 
     @patch('src.llm.client.load_dotenv')
     @patch('src.llm.client.os.getenv')

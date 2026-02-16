@@ -9,7 +9,11 @@ This module tests:
 """
 
 import pytest
-from src.llm.validation import validate_field_dependencies, validate_llm_response
+from src.llm.validation import (
+    sanitize_extracted_fields,
+    validate_field_dependencies,
+    validate_llm_response,
+)
 
 
 class TestVoltagFrequencyDependency:
@@ -327,6 +331,75 @@ class TestValidateLLMResponse:
         errors = validate_llm_response(response_data, expected_schema)
         # None is not a string
         assert "machine" in errors
+
+
+class TestSanitizeExtractedFields:
+    """Test schema sanitization/coercion for extracted template payloads."""
+
+    def test_sanitizes_missing_extra_and_numeric_values(self):
+        extracted = {
+            "machine": 123,
+            "plc_siemens_check": "true",
+            "unexpected": "value",
+        }
+        schema = {
+            "machine": {"type": "string"},
+            "plc_siemens_check": {"type": "boolean"},
+            "plc_allen_bradley_check": {"type": "boolean"},
+        }
+
+        sanitized, notes = sanitize_extracted_fields(extracted, schema)
+
+        assert sanitized == {
+            "machine": "123",
+            "plc_siemens_check": "YES",
+            "plc_allen_bradley_check": "NO",
+        }
+        assert "machine" in notes
+        assert "plc_allen_bradley_check" in notes
+        assert "unexpected" in notes
+
+    def test_invalid_boolean_defaults_to_no(self):
+        extracted = {"checkbox_field": "maybe"}
+        schema = {"checkbox_field": {"type": "boolean"}}
+
+        sanitized, notes = sanitize_extracted_fields(extracted, schema)
+
+        assert sanitized["checkbox_field"] == "NO"
+        assert "checkbox_field" in notes
+        assert any("Invalid boolean value" in note for note in notes["checkbox_field"])
+
+    def test_legacy_non_dict_schema_uses_check_suffix(self):
+        extracted = {
+            "legacy_check": True,
+            "legacy_text": None,
+        }
+        schema = {
+            "legacy_check": "Legacy checkbox field",
+            "legacy_text": "Legacy text field",
+        }
+
+        sanitized, notes = sanitize_extracted_fields(extracted, schema)
+
+        assert sanitized["legacy_check"] == "YES"
+        assert sanitized["legacy_text"] == ""
+        assert "legacy_text" not in notes
+
+    def test_empty_schema_keeps_fields_with_basic_normalization(self):
+        extracted = {
+            "legacy_check": "on",
+            "legacy_text": 42,
+            "none_text": None,
+        }
+
+        sanitized, notes = sanitize_extracted_fields(extracted, {})
+
+        assert sanitized == {
+            "legacy_check": "YES",
+            "legacy_text": "42",
+            "none_text": "",
+        }
+        assert notes == {}
 
 
 class TestFieldDependencyDataUpdates:

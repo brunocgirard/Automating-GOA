@@ -52,8 +52,8 @@ Key Features:
 
 Model Configuration:
     - Provider: Google Gemini
-    - Model: gemini-2.5-flash-lite (default)
-    - Frameworks: google.generativeai + langchain_google_genai
+    - Model: pinned via `GOA_LLM_MODEL` (default: gemini-2.5-flash-lite)
+    - Frameworks: google.genai + langchain_google_genai
     - Output: Structured JSON via PydanticOutputParser
 
 Modification Guidelines:
@@ -73,6 +73,7 @@ See Also:
 from .client import (
     configure_gemini_client,
     check_model_usage,
+    get_configured_model_name,
     get_generative_model,
     GENERATIVE_MODEL,
     genai,
@@ -97,6 +98,7 @@ from .confidence import (
 
 # Validation
 from .validation import (
+    sanitize_extracted_fields,
     validate_field_dependencies,
     validate_llm_response,
 )
@@ -125,6 +127,7 @@ __all__ = [
     # Client configuration and model access
     "configure_gemini_client",
     "check_model_usage",
+    "get_configured_model_name",
     "get_generative_model",
     "GENERATIVE_MODEL",
     "genai",
@@ -143,6 +146,7 @@ __all__ = [
     "estimate_extraction_confidence",
 
     # Validation
+    "sanitize_extracted_fields",
     "validate_field_dependencies",
     "validate_llm_response",
 

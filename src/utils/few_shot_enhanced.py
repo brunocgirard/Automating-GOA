@@ -8,11 +8,13 @@ and semantic similarity for better example selection.
 import os
 import time
 import gc
+import shutil
 import warnings
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 import numpy as np
 from dotenv import load_dotenv
+from google import genai as google_genai
 
 # Silence known LangChain warning on Python 3.14+ (runtime remains functional here).
 warnings.filterwarnings(
@@ -56,6 +58,7 @@ EMBEDDING_MODEL_CANDIDATES = (
     "models/text-embedding-004",
     "models/embedding-001",
 )
+FEW_SHOT_VECTORSTORE_SCHEMA_VERSION = "2026-02-quality-guard-v1"
 
 
 class FewShotManager:
@@ -82,6 +85,7 @@ class FewShotManager:
             self._vectorstore_cache: Dict[str, Any] = {}
             self.persist_directory = os.path.join("src", "cache", "few_shot_embeddings")
             os.makedirs(self.persist_directory, exist_ok=True)
+            self._ensure_vectorstore_schema_version()
             self.embeddings = None
             return
 
@@ -96,6 +100,7 @@ class FewShotManager:
         # Directory for persistent storage
         self.persist_directory = os.path.join("src", "cache", "few_shot_embeddings")
         os.makedirs(self.persist_directory, exist_ok=True)
+        self._ensure_vectorstore_schema_version()
 
     def _disable(self, reason: str) -> None:
         self.enabled = False
@@ -103,6 +108,39 @@ class FewShotManager:
         if not self._disable_logged:
             print(f"[WARN] Semantic few-shot disabled: {reason}")
             self._disable_logged = True
+
+    def _ensure_vectorstore_schema_version(self) -> None:
+        """
+        Ensures on-disk vector stores are rebuilt when retrieval rules change.
+
+        This prevents stale/poisoned caches from previous versions from being reused.
+        """
+        version_file = os.path.join(self.persist_directory, ".schema_version")
+        current_version = ""
+        try:
+            if os.path.exists(version_file):
+                with open(version_file, "r", encoding="utf-8") as file:
+                    current_version = file.read().strip()
+        except OSError:
+            current_version = ""
+
+        if current_version == FEW_SHOT_VECTORSTORE_SCHEMA_VERSION:
+            return
+
+        try:
+            for name in os.listdir(self.persist_directory):
+                if name == ".schema_version":
+                    continue
+                path = os.path.join(self.persist_directory, name)
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+
+            with open(version_file, "w", encoding="utf-8") as file:
+                file.write(FEW_SHOT_VECTORSTORE_SCHEMA_VERSION)
+
+            print("[INFO] Rebuilt semantic few-shot cache with latest quality rules.")
+        except OSError as error:
+            print(f"[WARN] Unable to reset few-shot vector cache safely: {error}")
 
     def _create_embeddings_with_fallback(self) -> Optional[GoogleGenerativeAIEmbeddings]:
         model_candidates: List[str] = []
@@ -120,9 +158,10 @@ class FewShotManager:
                 continue
             tried.add(candidate)
             try:
+                embedding_kwargs = {"google_api_key": self.api_key}
                 embeddings = GoogleGenerativeAIEmbeddings(
                     model=candidate,
-                    google_api_key=self.api_key,
+                    **embedding_kwargs,
                 )
                 # Force a lightweight probe so we fail fast on unsupported models.
                 embeddings.embed_query("few-shot model probe")
@@ -143,13 +182,12 @@ class FewShotManager:
 
     def _discover_embedding_models(self) -> List[str]:
         try:
-            import google.generativeai as genai
-
-            genai.configure(api_key=self.api_key)
+            client = google_genai.Client(api_key=self.api_key)
             discovered: List[str] = []
-            for model in genai.list_models():
-                methods = getattr(model, "supported_generation_methods", None) or []
-                if "embedContent" not in methods:
+            for model in client.models.list():
+                actions = getattr(model, "supported_actions", None) or []
+                action_values = {str(action).lower() for action in actions}
+                if not any("embed" in action for action in action_values):
                     continue
                 model_name = self._normalize_model_name(getattr(model, "name", ""))
                 if model_name:
@@ -162,6 +200,8 @@ class FewShotManager:
     def _normalize_model_name(model_name: str) -> str:
         if not model_name:
             return ""
+        if "/models/" in model_name:
+            model_name = model_name.split("/models/", 1)[1]
         if model_name.startswith("models/"):
             return model_name
         return f"models/{model_name}"

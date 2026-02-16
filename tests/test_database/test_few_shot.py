@@ -750,3 +750,83 @@ class TestFewShotEdgeCases:
 
         assert len(examples) >= 1
         assert "日本語" in examples[0]["expected_output"]
+
+    def test_save_example_rejects_placeholder_text_output(self, temp_db_path):
+        """Text-field examples with placeholder outputs should be rejected."""
+        result = save_few_shot_example(
+            "machine",
+            "template",
+            "production_speed",
+            "The line handles 120 bottles per minute with servo control.",
+            "N/A",
+            db_path=str(temp_db_path),
+        )
+        assert result is False
+
+    def test_save_checkbox_example_normalizes_true_false(self, temp_db_path):
+        """Checkbox examples should normalize truthy/falsey outputs to YES/NO."""
+        result_true = save_few_shot_example(
+            "machine",
+            "template",
+            "barcode_scanner_check",
+            "Including barcode scanner for verification.",
+            "true",
+            db_path=str(temp_db_path),
+        )
+        result_false = save_few_shot_example(
+            "machine",
+            "template",
+            "barcode_scanner_check",
+            "Barcode scanner excluded in this build.",
+            "false",
+            db_path=str(temp_db_path),
+        )
+        assert result_true is True
+        assert result_false is True
+
+        examples = get_few_shot_examples(
+            "machine",
+            "template",
+            "barcode_scanner_check",
+            limit=10,
+            db_path=str(temp_db_path),
+        )
+        outputs = {example["expected_output"] for example in examples}
+        assert "YES" in outputs
+        assert "NO" in outputs
+
+    def test_get_examples_filters_poisoned_rows_inserted_directly(self, temp_db_path):
+        """Retrieval should filter poisoned examples even if they exist in DB."""
+        conn = sqlite3.connect(str(temp_db_path))
+        cursor = conn.cursor()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            """
+            INSERT INTO few_shot_examples
+            (machine_type, template_type, field_name, input_context, expected_output,
+             confidence_score, usage_count, success_count, created_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("filling", "default", "production_speed", "context with real details", "60 bottles/min", 0.9, 0, 0, now),
+        )
+        cursor.execute(
+            """
+            INSERT INTO few_shot_examples
+            (machine_type, template_type, field_name, input_context, expected_output,
+             confidence_score, usage_count, success_count, created_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("filling", "default", "production_speed", "context with real details", "Not specified", 1.0, 0, 0, now),
+        )
+        conn.commit()
+        conn.close()
+
+        examples = get_few_shot_examples(
+            "filling",
+            "default",
+            "production_speed",
+            limit=5,
+            db_path=str(temp_db_path),
+        )
+        assert len(examples) == 1
+        assert examples[0]["expected_output"] == "60 bottles/min"

@@ -27,7 +27,8 @@ from src.utils.db import (
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.form_generator import OUTPUT_HTML_PATH, extract_schema_from_excel, generate_goa_form
 from src.utils.html_doc_filler import fill_and_generate_html
-from src.utils.llm_handler import configure_gemini_client, get_machine_specific_fields_with_confidence
+from src.llm import configure_gemini_client, get_machine_specific_fields_with_confidence
+from src.utils.machine_type import is_sortstar_machine
 from src.utils.pdf_utils import extract_full_pdf_text, extract_line_item_details, identify_machines_from_items
 
 DEFAULT_TEMPLATE_FILE = os.path.join("templates", "template.docx")
@@ -48,8 +49,7 @@ SORTSTAR_TEMPLATE_FILE = _resolve_existing_template_path(SORTSTAR_TEMPLATE_CANDI
 
 
 def _template_config(machine_name: str) -> dict[str, Any]:
-    machine_name_lower = (machine_name or "").lower()
-    is_sortstar = bool(re.search(r"\b(sortstar|unscrambler|bottle unscrambler)\b", machine_name_lower))
+    is_sortstar = is_sortstar_machine(machine_name)
     if is_sortstar:
         return {
             "template_file": SORTSTAR_TEMPLATE_FILE,

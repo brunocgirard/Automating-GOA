@@ -128,7 +128,7 @@ def test_step3_llm_setup() -> tuple:
     print_section("STEP 3: LLM EXTRACTION SETUP")
 
     try:
-        from utils.llm_handler import configure_gemini_client
+        from src.llm import configure_gemini_client
         from dotenv import load_dotenv
         print_step("Imports successful", "OK")
 
@@ -178,7 +178,7 @@ def test_step4_llm_extraction(machines_data: Dict, items: List, pdf_path: Path) 
     print_section("STEP 4: LLM FIELD EXTRACTION")
 
     try:
-        from utils.llm_handler import get_machine_specific_fields_via_llm
+        from src.llm import get_machine_specific_fields_via_llm
         import sys
         sys.path.insert(0, str(Path(__file__).parent))
         from app import get_contexts_for_machine

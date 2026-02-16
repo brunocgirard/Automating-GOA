@@ -552,12 +552,12 @@ def test_something(test_db_connection):
 **Solution**: Patch at the use site:
 ```python
 # Wrong
-@patch("google.generativeai.ChatGoogleGenerativeAI")
+@patch("langchain_google_genai.ChatGoogleGenerativeAI")
 def test_something(mock_client):
     pass
 
 # Right - patch where it's used
-@patch("src.llm.client.ChatGoogleGenerativeAI")
+@patch("src.llm.extraction.ChatGoogleGenerativeAI")
 def test_something(mock_client):
     pass
 ```

@@ -145,6 +145,38 @@ class TestEstimateFieldConfidenceCheckboxYES:
         )
         assert confidence < 0.5
 
+    def test_yes_with_fuzzy_evidence_variation(self):
+        """Hyphen/plural variants should still count as evidence."""
+        confidence = estimate_field_confidence(
+            field_key="photo_eye_sensor_check",
+            field_value="YES",
+            template_contexts={
+                "photo_eye_sensor_check": {
+                    "positive_indicators": ["photo eye sensor"],
+                    "synonyms": []
+                }
+            },
+            full_pdf_text="Includes dual photo-eye sensors on the infeed conveyor.",
+            selected_descriptions=[]
+        )
+        assert confidence >= 0.7
+
+    def test_yes_with_negated_evidence_remains_low(self):
+        """Negated mentions should not inflate YES confidence."""
+        confidence = estimate_field_confidence(
+            field_key="rare_feature_check",
+            field_value="YES",
+            template_contexts={
+                "rare_feature_check": {
+                    "positive_indicators": ["rare feature"],
+                    "synonyms": []
+                }
+            },
+            full_pdf_text="Base build without the rare feature package.",
+            selected_descriptions=[]
+        )
+        assert confidence < 0.5
+
 
 class TestEstimateFieldConfidenceCheckboxNO:
     """Test confidence estimation for checkbox NO values."""
@@ -207,6 +239,17 @@ class TestEstimateFieldConfidenceTextFields:
             selected_descriptions=[]
         )
         assert confidence >= 0.7
+
+    def test_text_match_with_punctuation_spacing_variation(self):
+        """Normalized fuzzy matching should handle punctuation/spacing drift."""
+        confidence = estimate_field_confidence(
+            field_key="machine_model",
+            field_value="Model X-100/R2",
+            template_contexts={},
+            full_pdf_text="The system includes Model X 100 R2 with servo upgrades.",
+            selected_descriptions=[]
+        )
+        assert confidence >= 0.8
 
     def test_suspicious_placeholder_values(self):
         """Test that suspicious placeholder values get very low confidence."""

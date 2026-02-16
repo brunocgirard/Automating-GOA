@@ -16,12 +16,138 @@ Global State:
 
 import os
 import traceback
-import google.generativeai as genai
+from typing import Any
+
+from google import genai as _google_genai
 from dotenv import load_dotenv
+
+
+def _prepare_generation_config(
+    generation_config: Any = None,
+    safety_settings: Any = None,
+) -> Any:
+    """
+    Convert legacy generation/safety arguments into google.genai config format.
+
+    We keep this adapter so older call sites using `generation_config=` and
+    `safety_settings=` continue to work without changing business logic.
+    """
+    if generation_config is None and safety_settings is None:
+        return None
+
+    if generation_config is None:
+        return {"safety_settings": safety_settings}
+
+    if safety_settings is None:
+        return generation_config
+
+    if isinstance(generation_config, dict):
+        merged = dict(generation_config)
+        merged.setdefault("safety_settings", safety_settings)
+        return merged
+
+    # Handle pydantic models from google.genai.types.
+    if hasattr(generation_config, "model_dump"):
+        try:
+            merged = generation_config.model_dump(exclude_none=True)
+            merged["safety_settings"] = safety_settings
+            return merged
+        except Exception:
+            return generation_config
+
+    return generation_config
+
+
+class _CompatGenerativeModel:
+    """Small adapter that mimics old `GenerativeModel` usage on top of `google.genai`."""
+
+    def __init__(self, api_key: str, model_name: str):
+        self._api_key = api_key
+        self._model_name = model_name
+        self._client = _google_genai.Client(api_key=api_key)
+
+    def generate_content(
+        self,
+        contents: Any,
+        generation_config: Any = None,
+        safety_settings: Any = None,
+        **kwargs: Any,
+    ):
+        # New SDK expects a single `config` payload.
+        config = kwargs.get("config")
+        if config is None:
+            config = _prepare_generation_config(generation_config, safety_settings)
+
+        try:
+            return self._client.models.generate_content(
+                model=self._model_name,
+                contents=contents,
+                config=config,
+            )
+        except Exception:
+            # If safety settings shape is incompatible, retry without them.
+            if safety_settings is not None:
+                fallback_config = _prepare_generation_config(generation_config, None)
+                return self._client.models.generate_content(
+                    model=self._model_name,
+                    contents=contents,
+                    config=fallback_config,
+                )
+            raise
+
+
+class _GenAICompatNamespace:
+    """
+    Compatibility namespace with legacy-style methods used by this codebase/tests.
+
+    It exposes:
+    - `configure(api_key=...)`
+    - `GenerativeModel(model_name)`
+    - `list_models()`
+    - `types`
+    """
+
+    types = _google_genai.types
+
+    def __init__(self) -> None:
+        self._api_key: str | None = None
+
+    def configure(self, *, api_key: str) -> None:
+        self._api_key = api_key
+
+    def _get_client(self) -> _google_genai.Client:
+        if not self._api_key:
+            raise RuntimeError("Gemini API key was not configured.")
+        return _google_genai.Client(api_key=self._api_key)
+
+    def GenerativeModel(self, model_name: str) -> _CompatGenerativeModel:
+        if not self._api_key:
+            raise RuntimeError("Gemini API key was not configured.")
+        return _CompatGenerativeModel(self._api_key, model_name)
+
+    def list_models(self):
+        client = self._get_client()
+        return client.models.list()
+
+
+# Exposed for backward compatibility with existing imports and tests.
+genai = _GenAICompatNamespace()
 
 
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
+MODEL_NAME_ENV_VAR = "GOA_LLM_MODEL"
+
+
+def get_configured_model_name() -> str:
+    """
+    Returns the locked Gemini model name from configuration.
+
+    The default stays pinned to a known model ID to avoid silent behavior drift.
+    """
+    configured_name = str(os.environ.get(MODEL_NAME_ENV_VAR, "")).strip()
+    return configured_name or DEFAULT_GEMINI_MODEL
 
 
 def configure_gemini_client():
@@ -40,8 +166,8 @@ def configure_gemini_client():
             print("Error: GOOGLE_API_KEY not found in .env file or environment variables.")
             return False
 
-        # Choose model
-        model_name = 'gemini-2.5-flash-lite'
+        # Choose model (locked/pinned via config default).
+        model_name = get_configured_model_name()
         print(f"Initializing Gemini with model: {model_name}")
 
         genai.configure(api_key=api_key)

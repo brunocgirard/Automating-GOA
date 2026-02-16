@@ -2,7 +2,7 @@
 Simple Template Filling Validation Script
 
 Tests that extracted fields properly fill templates by using the ACTUAL workflow from app.py.
-Uses src.utils.llm_handler (the active module) not src.llm (the new refactored module).
+Uses src.llm (the canonical LLM module).
 
 Author: Claude Code
 Date: 2026-01-16
@@ -23,7 +23,7 @@ load_dotenv()
 from src.utils.pdf_utils import extract_line_item_details, identify_machines_from_items, extract_full_pdf_text
 from src.utils.form_generator import generate_goa_form, extract_schema_from_excel
 from src.utils.html_doc_filler import fill_and_generate_html
-from src.utils.llm_handler import get_machine_specific_fields_via_llm, configure_gemini_client
+from src.llm import get_machine_specific_fields_via_llm, configure_gemini_client
 from app import get_contexts_for_machine
 
 def print_section(title):

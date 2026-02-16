@@ -120,6 +120,48 @@ def test_hide_empty_fields_removes_empty_options_listing() -> None:
     assert soup.find("section", {"id": "section-options"}) is None
 
 
+def test_options_listing_nested_bullets_keep_multiline_structure() -> None:
+    html = fill_html_template(
+        OPTIONS_LISTING_TEMPLATE,
+        {
+            "options_listing": (
+                "Selected Options:\n"
+                "• Main option\n"
+                "  - Nested detail A\n"
+                "  - Nested detail B\n"
+                "• Secondary option"
+            )
+        },
+    )
+    soup = _parse(html)
+
+    nested_items = soup.select(".options-listing > ul > li ul li")
+    assert len(nested_items) == 2
+    assert nested_items[0].get_text(strip=True) == "Nested detail A"
+    assert nested_items[1].get_text(strip=True) == "Nested detail B"
+
+
+def test_options_listing_machine_block_keeps_indented_subbullets() -> None:
+    html = fill_html_template(
+        OPTIONS_LISTING_TEMPLATE,
+        {
+            "options_listing": (
+                "MACHINE: SortStar 18ft3 configuration\n"
+                "  - Left to right orientation\n"
+                "  - Integrated orientor package\n"
+                "• Operator platform"
+            )
+        },
+    )
+    soup = _parse(html)
+
+    machine_sub_items = soup.select(".options-listing div ul li")
+    assert len(machine_sub_items) == 2
+    assert machine_sub_items[0].get_text(strip=True) == "Left to right orientation"
+    assert machine_sub_items[1].get_text(strip=True) == "Integrated orientor package"
+    assert "Operator platform" in soup.get_text(" ", strip=True)
+
+
 def test_label_overrides_rename_section_and_field_labels() -> None:
     html = fill_html_template(
         SAMPLE_TEMPLATE,

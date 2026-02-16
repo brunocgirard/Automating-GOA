@@ -27,6 +27,7 @@ The module integrates with:
 """
 
 import re
+import os
 import json
 import traceback
 from typing import Dict, List, Any, Optional, Tuple
@@ -38,10 +39,14 @@ from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel, Field, create_model
 
 # Internal LLM module imports
-from .client import get_generative_model, configure_gemini_client, genai
+from .client import get_generative_model, configure_gemini_client, get_configured_model_name, genai
 from .constants import FIELD_GROUPS, FieldWithConfidence
 from .confidence import estimate_extraction_confidence
-from .validation import validate_field_dependencies, validate_llm_response
+from .validation import (
+    sanitize_extracted_fields,
+    validate_field_dependencies,
+    validate_llm_response,
+)
 from .post_processing import apply_post_processing_rules
 
 # Few-shot learning imports (basic)
@@ -51,6 +56,7 @@ from src.utils.few_shot_learning import (
     record_user_feedback_on_extraction,
     enhance_prompt_with_few_shot_examples,
 )
+from src.utils.pdf_rag import build_retrieved_pdf_context
 
 # Try to import enhanced few-shot learning, fall back to basic if not available
 try:
@@ -60,13 +66,7 @@ try:
         create_enhanced_few_shot_prompt,
         get_few_shot_manager,
     )
-    # TEMPORARY FIX: Disable few-shot learning to prevent poisoned empty examples from influencing output
-    # ENHANCED_FEW_SHOT_AVAILABLE = True
-    ENHANCED_FEW_SHOT_AVAILABLE = False
-    print("[WARN] Enhanced few-shot learning temporarily disabled to prevent data poisoning loop")
-
-    # Performance optimization: Set to True to completely disable few-shot learning for faster extraction
-    DISABLE_ALL_FEW_SHOT = True  # Disabled for maximum speed
+    ENHANCED_FEW_SHOT_AVAILABLE = True
 except ImportError as e:
     print(f"[WARN] Enhanced few-shot learning not available: {e}")
     print("  Falling back to basic few-shot learning")
@@ -74,8 +74,18 @@ except ImportError as e:
     FewShotManager = None  # type: ignore
     get_few_shot_manager = None  # type: ignore
 
+# Runtime safety switch: keep default enabled, allow emergency disable via env.
+DISABLE_ALL_FEW_SHOT = os.getenv("DISABLE_ALL_FEW_SHOT", "").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+if DISABLE_ALL_FEW_SHOT:
+    print("[WARN] Few-shot learning disabled via DISABLE_ALL_FEW_SHOT environment variable.")
+else:
+    print("[OK] Few-shot learning enabled with quality guards.")
+
 # Template utilities imports (must NOT be moved - imported from template_utils)
 from src.utils.template_utils import add_section_aware_instructions, select_sortstar_basic_system
+from src.utils.quote_library import get_quote_library_context
 
 
 def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
@@ -104,6 +114,27 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
     # Determine if we're using the old format (string context) or new format (schema)
     using_schema_format = isinstance(next(iter(template_placeholder_contexts.values()), ""), dict)
 
+    pdf_query_hints: List[str] = list(selected_pdf_descriptions)
+    for field_key, context in template_placeholder_contexts.items():
+        pdf_query_hints.append(field_key.replace("_", " "))
+        if isinstance(context, dict):
+            for hint_key in ("description", "section", "subsection"):
+                hint_val = context.get(hint_key)
+                if isinstance(hint_val, str) and hint_val.strip():
+                    pdf_query_hints.append(hint_val)
+            for hint_list_key in ("synonyms", "positive_indicators"):
+                hint_values = context.get(hint_list_key, [])
+                if isinstance(hint_values, list):
+                    pdf_query_hints.extend(str(v) for v in hint_values[:8] if v)
+        elif isinstance(context, str) and context.strip():
+            pdf_query_hints.append(context)
+
+    rag_pdf_text, rag_context_note = build_retrieved_pdf_context(
+        full_pdf_text,
+        pdf_query_hints,
+        max_context_chars=50000,
+    )
+
     prompt_parts = [
         "You are an AI assistant tasked with accurately extracting information from a PDF quote to fill a structured Word template.",
         "You will be given:",
@@ -111,10 +142,9 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
         "  2. The 'FULL PDF TEXT' of the entire quote document.",
         "  3. A list of 'TEMPLATE FIELDS' with their descriptions (contexts) from the Word template.",
 
-        "\nFULL PDF TEXT (Use this for general information like customer name, project numbers, machine model, and for details related to selected items. Max 10,000 characters will be shown if very long - prioritize start of document.):",
-        # Truncate very long full_pdf_text to avoid exceeding prompt limits, prioritizing the start.
-        # A more sophisticated chunking and retrieval strategy (like RAG with vector DB) would be better for extremely long docs.
-        (full_pdf_text[:10000] + "... (text truncated)") if len(full_pdf_text) > 10000 else full_pdf_text,
+        "\nFULL PDF TEXT (retrieved relevant chunks from the quote; evidence is not limited to the first page/text block):",
+        rag_context_note,
+        rag_pdf_text,
 
         "\nSELECTED PDF ITEMS (These are primary evidence for options being selected):"
     ]
@@ -363,6 +393,24 @@ def get_llm_chat_update(current_data: Dict[str, str],
             print("LLM client not configured for chat update. Returning current data.")
             return current_data
 
+    pdf_query_hints: List[str] = [user_instruction]
+    pdf_query_hints.extend(selected_pdf_descriptions)
+    for field_key, context in template_placeholder_contexts.items():
+        pdf_query_hints.append(field_key.replace("_", " "))
+        if isinstance(context, dict):
+            for hint_key in ("description", "section", "subsection"):
+                hint_val = context.get(hint_key)
+                if isinstance(hint_val, str) and hint_val.strip():
+                    pdf_query_hints.append(hint_val)
+        elif isinstance(context, str) and context.strip():
+            pdf_query_hints.append(context)
+
+    rag_pdf_text, rag_context_note = build_retrieved_pdf_context(
+        full_pdf_text,
+        pdf_query_hints,
+        max_context_chars=45000,
+    )
+
     prompt_parts = [
         "You are an AI assistant helping to correct a technical equipment order template that was previously filled (partially or fully).",
         "The user will provide an instruction to change one or more field values.",
@@ -379,8 +427,9 @@ def get_llm_chat_update(current_data: Dict[str, str],
         for i, desc in enumerate(selected_pdf_descriptions):
             prompt_parts.append(f"  - PDF Item {i+1}: {desc}")
 
-    prompt_parts.append("\n2. FULL PDF TEXT (for general information and details - showing first 10000 chars if long):")
-    prompt_parts.append((full_pdf_text[:10000] + "... (text truncated)") if len(full_pdf_text) > 10000 else full_pdf_text)
+    prompt_parts.append("\n2. FULL PDF TEXT (retrieved relevant chunks from the quote):")
+    prompt_parts.append(rag_context_note)
+    prompt_parts.append(rag_pdf_text)
 
     prompt_parts.append("\n3. TEMPLATE FIELDS (Placeholder Key: Description from template that the user might refer to):")
     placeholder_list_for_prompt = []
@@ -602,6 +651,8 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
             print("LLM client not configured. Returning empty data.")
             return {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
 
+    configured_model_name = get_configured_model_name()
+
     # 1. Categorize fields into groups
     grouped_contexts = {group: {} for group in FIELD_GROUPS.keys()}
 
@@ -651,6 +702,24 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     add_on_descs = "; ".join([item.get("description", "") for item in machine_data.get("add_ons", [])])
     common_item_descs = "; ".join([item.get("description", "") for item in common_items])
 
+    quote_library_path = None
+    if isinstance(template_metadata, dict):
+        quote_library_path = template_metadata.get("quote_library_path")
+
+    quote_library_context = ""
+    quote_library_matches: List[str] = []
+    try:
+        quote_library_context, quote_library_matches = get_quote_library_context(
+            machine_name=machine_name,
+            main_item_desc=main_item_desc,
+            add_on_descs=add_on_descs,
+            quote_library_path=quote_library_path,
+        )
+        if quote_library_matches:
+            print(f"Matched QUOTE_LIBRARY specs: {', '.join(quote_library_matches)}")
+    except Exception as library_error:
+        print(f"QUOTE_LIBRARY lookup failed: {library_error}")
+
     # 2. Iterate through each group and run extraction (one API call per group, no batching)
     import time
     for group_name, group_contexts in active_groups.items():
@@ -682,7 +751,7 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
 
         # Initialize LLM optimized for speed
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash-lite",
+            model=configured_model_name,
             temperature=0.0,  # Reduced to 0 for faster, more deterministic responses
             timeout=120,  # 2 minute timeout per request
             max_retries=1  # Retry once if timeout/error
@@ -714,11 +783,18 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
           - Guess or infer values not clearly present in the context
           - Fill fields just because they exist in the template - only fill what's actually relevant
 
+        QUOTE_LIBRARY REFERENCE RULES:
+        - Matched machine specs from QUOTE_LIBRARY may be provided as reference context.
+        - Use QUOTE_LIBRARY to interpret machine-standard terms/specs only when it matches the current machine model/family.
+        - If the PDF quote conflicts with QUOTE_LIBRARY, prioritize the PDF quote.
+        - Do not pull values from unrelated machine models in QUOTE_LIBRARY.
+
         CONTEXT:
         - Machine Name: {{{{machine_name}}}}
         - Main Machine Item: {{{{main_item_desc}}}}
         - Machine Add-ons: {{{{add_on_descs}}}}
         - Common/Shared Items: {{{{common_item_descs}}}}
+        - Matched QUOTE_LIBRARY Specs (reference): {{{{quote_library_context}}}}
         - Full PDF Text (for context and details): {{{{full_pdf_text}}}}
 
         Based on the context above, extract ONLY the information that is clearly present and relevant.
@@ -769,19 +845,48 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
 
         prompt = PromptTemplate(
             template=prompt_template,
-            input_variables=["machine_name", "full_pdf_text", "main_item_desc", "add_on_descs", "common_item_descs"],
+            input_variables=["machine_name", "full_pdf_text", "main_item_desc", "add_on_descs", "common_item_descs", "quote_library_context"],
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
 
         chain = prompt | llm | parser
 
+        group_query_hints: List[str] = [
+            machine_name,
+            main_item_desc,
+            add_on_descs,
+            common_item_descs,
+            quote_library_context,
+            group_name,
+        ]
+        for key, context in group_contexts.items():
+            group_query_hints.append(key.replace("_", " "))
+            if isinstance(context, dict):
+                for hint_key in ("description", "section", "subsection"):
+                    hint_val = context.get(hint_key)
+                    if isinstance(hint_val, str) and hint_val.strip():
+                        group_query_hints.append(hint_val)
+                for hint_list_key in ("synonyms", "positive_indicators"):
+                    hint_values = context.get(hint_list_key, [])
+                    if isinstance(hint_values, list):
+                        group_query_hints.extend(str(v) for v in hint_values[:6] if v)
+            elif isinstance(context, str) and context.strip():
+                group_query_hints.append(context)
+
+        rag_group_pdf_text, rag_group_context_note = build_retrieved_pdf_context(
+            full_pdf_text,
+            group_query_hints,
+            max_context_chars=60000,
+        )
+
         # Use balanced context window (speed vs accuracy)
         input_data = {
             "machine_name": machine_name,
-            "full_pdf_text": full_pdf_text[:50000],  # 50k chars - good balance of speed and context
+            "full_pdf_text": f"{rag_group_context_note}\n{rag_group_pdf_text}",
             "main_item_desc": main_item_desc,
             "add_on_descs": add_on_descs,
             "common_item_descs": common_item_descs,
+            "quote_library_context": quote_library_context or "No matching machine specs found in QUOTE_LIBRARY.",
         }
 
         try:
@@ -837,7 +942,12 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     selected_pdf_descriptions.extend([item.get("description", "") for item in machine_data.get("add_ons", []) if item.get("description")])
     selected_pdf_descriptions.extend([item.get("description", "") for item in common_items if item.get("description")])
 
-    final_data = apply_post_processing_rules(all_extracted_data, template_placeholder_contexts, full_pdf_text, selected_pdf_descriptions)
+    final_data = apply_post_processing_rules(
+        all_extracted_data,
+        template_placeholder_contexts,
+        full_pdf_text,
+        selected_pdf_descriptions,
+    )
 
     # If this is a SortStar machine, enforce the basic system selection
     if machine_type == "sortstar":
@@ -845,6 +955,15 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
         basic_system_selection = select_sortstar_basic_system(machine_data, full_pdf_text)
         final_data.update(basic_system_selection)
         print("SortStar basic system selection applied.")
+
+    final_data, schema_notes = sanitize_extracted_fields(
+        extracted_data=final_data,
+        expected_schema=template_placeholder_contexts,
+    )
+    if schema_notes:
+        print("Schema validation adjusted extracted fields:")
+        for field_name, notes in schema_notes.items():
+            print(f"  - {field_name}: {', '.join(notes)}")
 
     # Store confident outputs so future runs benefit from richer few-shot data
     _persist_machine_few_shot_examples(
@@ -948,9 +1067,20 @@ def _persist_machine_few_shot_examples(
             print(f"Unable to initialize FewShotManager cache: {manager_error}")
             manager = None
 
+    # Quick rejection set for common LLM non-answers (checked before DB round-trip)
+    _QUICK_REJECT = {
+        "n/a", "na", "none", "null", "unknown", "not found", "not specified",
+        "not provided", "not available", "not mentioned", "see quote",
+        "pending", "tbd", "-", "--", "---", "...", "???", "placeholder",
+    }
+
     for field_name, raw_value in extracted_fields.items():
         value = raw_value.strip() if isinstance(raw_value, str) else ""
         if not value:
+            continue
+
+        # Fast pre-filter: reject obvious placeholder/non-answer values
+        if value.lower() in _QUICK_REJECT:
             continue
 
         # Only persist checkbox fields when we detected a positive assertion.

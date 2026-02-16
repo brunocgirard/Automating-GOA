@@ -1,10 +1,144 @@
+import re
 import sqlite3
-import os
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-import json
 
 from .base import DB_PATH
+
+
+_PLACEHOLDER_OUTPUTS = {
+    "n/a",
+    "na",
+    "not applicable",
+    "not specified",
+    "not selected",
+    "none selected",
+    "none",
+    "null",
+    "nil",
+    "unknown",
+    "not provided",
+    "not available",
+    "pending",
+    "tbd",
+    "see quote",
+    "not found",
+    "not mentioned",
+    "not listed",
+    "not included",
+    "not stated",
+    "not given",
+    "not defined",
+    "not indicated",
+    "not determined",
+    "no data",
+    "no information",
+    "to be determined",
+    "to be confirmed",
+    "refer to quote",
+    "see pdf",
+    "see document",
+    "placeholder",
+    "default",
+    "empty",
+    "blank",
+    "-",
+    "--",
+    "---",
+    "...",
+    "???",
+}
+
+_PLACEHOLDER_CONTEXTS = {
+    "n/a",
+    "na",
+    "none",
+    "null",
+    "unknown",
+    "tbd",
+}
+
+
+def _to_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _is_checkbox_field(field_name: str) -> bool:
+    return _to_text(field_name).lower().endswith("_check")
+
+
+def _normalize_checkbox_output(value: str) -> str:
+    normalized = _to_text(value).upper()
+    if normalized in {"YES", "TRUE", "1"}:
+        return "YES"
+    if normalized in {"NO", "FALSE", "0"}:
+        return "NO"
+    return normalized
+
+
+def _clamp_confidence(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+    return max(0.0, min(1.0, parsed))
+
+
+def _is_valid_example_payload(
+    machine_type: str,
+    template_type: str,
+    field_name: str,
+    input_context: str,
+    expected_output: str,
+) -> bool:
+    machine_type = _to_text(machine_type)
+    template_type = _to_text(template_type)
+    field_name = _to_text(field_name)
+    input_context = _to_text(input_context)
+    expected_output = _to_text(expected_output)
+
+    if not machine_type or not template_type or not field_name:
+        return False
+    if len(input_context) < 5 or len(expected_output) < 1:
+        return False
+    if input_context.lower() in _PLACEHOLDER_CONTEXTS:
+        return False
+
+    if _is_checkbox_field(field_name):
+        return _normalize_checkbox_output(expected_output) in {"YES", "NO"}
+
+    normalized_output = expected_output.lower()
+    if normalized_output in _PLACEHOLDER_OUTPUTS:
+        return False
+
+    # Reject outputs that look like LLM refusal/uncertainty phrases
+    _LLM_REFUSAL_PATTERNS = (
+        "i cannot", "i could not", "i couldn't", "unable to",
+        "not enough information", "cannot determine", "could not find",
+        "no relevant", "not extractable", "insufficient",
+    )
+    for pattern in _LLM_REFUSAL_PATTERNS:
+        if pattern in normalized_output:
+            return False
+
+    # Reject outputs that are just whitespace or punctuation
+    if re.fullmatch(r'[\s\W]+', expected_output):
+        return False
+
+    return True
+
+
+def _row_is_valid_example(row: sqlite3.Row | Dict[str, Any]) -> bool:
+    row_dict = dict(row)
+    return _is_valid_example_payload(
+        machine_type=str(row_dict.get("machine_type", "unknown")),
+        template_type=str(row_dict.get("template_type", "unknown")),
+        field_name=str(row_dict.get("field_name", "")),
+        input_context=str(row_dict.get("input_context", "")),
+        expected_output=str(row_dict.get("expected_output", "")),
+    )
 
 
 def save_few_shot_example(machine_type: str, template_type: str, field_name: str,
@@ -31,6 +165,25 @@ def save_few_shot_example(machine_type: str, template_type: str, field_name: str
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
+        machine_type_clean = _to_text(machine_type)
+        template_type_clean = _to_text(template_type)
+        field_name_clean = _to_text(field_name)
+        input_context_clean = _to_text(input_context)
+        expected_output_clean = _to_text(expected_output)
+        if _is_checkbox_field(field_name_clean):
+            expected_output_clean = _normalize_checkbox_output(expected_output_clean)
+
+        if not _is_valid_example_payload(
+            machine_type=machine_type_clean,
+            template_type=template_type_clean,
+            field_name=field_name_clean,
+            input_context=input_context_clean,
+            expected_output=expected_output_clean,
+        ):
+            print(f"Skipping low-quality few-shot example for field '{field_name_clean}'.")
+            return False
+
+        confidence_score_clean = _clamp_confidence(confidence_score)
         created_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         cursor.execute("""
@@ -38,8 +191,16 @@ def save_few_shot_example(machine_type: str, template_type: str, field_name: str
         (machine_type, template_type, field_name, input_context, expected_output,
          confidence_score, source_machine_id, created_date)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (machine_type, template_type, field_name, input_context, expected_output,
-              confidence_score, source_machine_id, created_date))
+        """, (
+            machine_type_clean,
+            template_type_clean,
+            field_name_clean,
+            input_context_clean,
+            expected_output_clean,
+            confidence_score_clean,
+            source_machine_id,
+            created_date,
+        ))
 
         conn.commit()
         return True
@@ -67,13 +228,17 @@ def get_few_shot_examples(machine_type: str, template_type: str, field_name: str
     """
     conn = None
     try:
+        if limit <= 0:
+            return []
+
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
         # Query for examples matching the criteria, ordered by quality metrics
         cursor.execute("""
-        SELECT input_context, expected_output, confidence_score,
+        SELECT machine_type, template_type, field_name,
+               input_context, expected_output, confidence_score,
                usage_count, success_count, id
         FROM few_shot_examples
         WHERE machine_type = ? AND template_type = ? AND field_name = ?
@@ -82,9 +247,11 @@ def get_few_shot_examples(machine_type: str, template_type: str, field_name: str
             CASE WHEN usage_count > 0 THEN success_count * 1.0 / usage_count ELSE 0 END DESC,
             usage_count DESC
         LIMIT ?
-        """, (machine_type, template_type, field_name, limit))
+        """, (machine_type, template_type, field_name, max(limit * 20, 100)))
 
-        rows = cursor.fetchall()
+        rows = [row for row in cursor.fetchall() if _row_is_valid_example(row)]
+        if len(rows) > limit:
+            rows = rows[:limit]
 
         # Update usage count for retrieved examples
         if rows:
@@ -301,8 +468,9 @@ def get_field_examples(machine_type: str = None, template_type: str = None,
 
         params.append(limit)
         cursor.execute(query, params)
-
-        return [dict(row) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        filtered_rows = [row for row in rows if _row_is_valid_example(row)]
+        return [dict(row) for row in filtered_rows]
 
     except sqlite3.Error as e:
         print(f"Error getting field examples: {e}")
@@ -520,6 +688,8 @@ def get_similar_examples(input_text: str, machine_type: str, template_type: str,
         examples = []
 
         for row in rows:
+            if not _row_is_valid_example(row):
+                continue
             context_words = set(row['input_context'].lower().split())
             # Calculate simple Jaccard similarity
             intersection = len(input_words.intersection(context_words))

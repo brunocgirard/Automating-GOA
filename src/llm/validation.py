@@ -8,6 +8,7 @@ relationships) and provides suggestions for potential issues.
 Functions:
     - validate_field_dependencies: Validates and adjusts field values based on cross-field rules
     - validate_llm_response: Validates LLM response against expected schema
+    - sanitize_extracted_fields: Coerces extracted data into schema-safe template values
 """
 
 from typing import Dict, List, Any, Tuple
@@ -145,3 +146,120 @@ def validate_llm_response(response_data: Dict[str, Any], expected_schema: Dict[s
             errors[key].append("Unexpected field")
 
     return errors
+
+
+def _resolve_schema_type(field_key: str, field_schema: Any) -> str:
+    """Resolve field type from schema metadata with a safe fallback."""
+    if isinstance(field_schema, dict):
+        schema_type = str(field_schema.get("type", "")).strip().lower()
+        if schema_type in {"boolean", "string"}:
+            return schema_type
+    return "boolean" if field_key.endswith("_check") else "string"
+
+
+def _coerce_checkbox_value(value: Any) -> str | None:
+    """Convert common truthy/falsey forms to YES/NO; return None when invalid."""
+    if isinstance(value, bool):
+        return "YES" if value else "NO"
+
+    if isinstance(value, (int, float)):
+        if value == 1:
+            return "YES"
+        if value == 0:
+            return "NO"
+        return None
+
+    if not isinstance(value, str):
+        return None
+
+    normalized = value.strip().upper()
+    if normalized in {"YES", "TRUE", "1", "CHECKED", "ON", "Y"}:
+        return "YES"
+    if normalized in {"NO", "FALSE", "0", "OFF", "N"}:
+        return "NO"
+    return None
+
+
+def sanitize_extracted_fields(
+    extracted_data: Dict[str, Any],
+    expected_schema: Dict[str, Any],
+) -> Tuple[Dict[str, str], Dict[str, List[str]]]:
+    """
+    Coerces extracted values to a schema-safe payload for template filling.
+
+    Rules:
+    - Include every schema field (missing values default to NO/empty string)
+    - Normalize boolean fields to YES/NO
+    - Keep string fields as strings (numbers are converted to strings)
+    - Drop unexpected fields
+
+    Returns:
+        Tuple of:
+        - Sanitized field dictionary
+        - Field-level notes describing corrections/rejections
+    """
+    sanitized: Dict[str, str] = {}
+    notes: Dict[str, List[str]] = {}
+    input_data = extracted_data or {}
+    schema = expected_schema or {}
+
+    if not schema:
+        for field_key, raw_value in input_data.items():
+            if field_key.endswith("_check"):
+                coerced = _coerce_checkbox_value(raw_value)
+                sanitized[field_key] = coerced if coerced is not None else "NO"
+            elif raw_value is None or isinstance(raw_value, bool):
+                sanitized[field_key] = ""
+            else:
+                sanitized[field_key] = str(raw_value)
+        return sanitized, notes
+
+    for field_key, field_schema in schema.items():
+        field_type = _resolve_schema_type(field_key, field_schema)
+        has_value = field_key in input_data
+        raw_value = input_data.get(field_key)
+
+        if field_type == "boolean":
+            coerced = _coerce_checkbox_value(raw_value) if has_value else None
+            if coerced is None:
+                sanitized[field_key] = "NO"
+                if has_value:
+                    notes.setdefault(field_key, []).append(
+                        f"Invalid boolean value '{raw_value}' defaulted to 'NO'"
+                    )
+                else:
+                    notes.setdefault(field_key, []).append("Missing field defaulted to 'NO'")
+            else:
+                sanitized[field_key] = coerced
+            continue
+
+        # string field
+        if not has_value or raw_value is None:
+            sanitized[field_key] = ""
+            if not has_value:
+                notes.setdefault(field_key, []).append("Missing field defaulted to empty string")
+            continue
+
+        if isinstance(raw_value, str):
+            sanitized[field_key] = raw_value
+        elif isinstance(raw_value, bool):
+            sanitized[field_key] = ""
+            notes.setdefault(field_key, []).append(
+                f"Invalid string value type '{type(raw_value).__name__}' defaulted to empty string"
+            )
+        elif isinstance(raw_value, (int, float)):
+            sanitized[field_key] = str(raw_value)
+            notes.setdefault(field_key, []).append(
+                f"Numeric value coerced to string: {raw_value}"
+            )
+        else:
+            sanitized[field_key] = ""
+            notes.setdefault(field_key, []).append(
+                f"Invalid string value type '{type(raw_value).__name__}' defaulted to empty string"
+            )
+
+    for field_key in input_data:
+        if field_key not in schema:
+            notes.setdefault(field_key, []).append("Unexpected field ignored")
+
+    return sanitized, notes
