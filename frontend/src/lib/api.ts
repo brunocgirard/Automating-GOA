@@ -223,6 +223,32 @@ export interface ExtractionResult {
   filled_data: Record<string, string>;
   confidence_scores: Record<string, number>;
   suggestions: Array<Record<string, unknown>>;
+  metadata?: ExtractionMetadata | null;
+}
+
+export interface ExtractionMetadata {
+  pipeline_version?: string;
+  pass1_model?: string;
+  pass2_model?: string;
+  fields_total?: number;
+  fields_pass1_attempted?: number;
+  fields_pass2_attempted?: number;
+  fields_filled_final?: number;
+  low_confidence_count?: number;
+  timing_ms?: {
+    pass1?: number | null;
+    pass2?: number | null;
+    total?: number | null;
+  } | null;
+  prompt_chars_estimate?: {
+    pass1?: number | null;
+    pass2?: number | null;
+    total?: number | null;
+  } | null;
+  critical_text_forced_pass2_count?: number;
+  critical_text_overrides_applied?: number;
+  critical_text_no_evidence_blanked?: number;
+  critical_text_targets?: string[];
 }
 
 export interface GeneratedDocumentResult {
@@ -302,6 +328,8 @@ export type ShippingDocumentType =
   | "certificate_origin"
   | "all";
 
+export type ShippingOutputFormat = "docx" | "html";
+
 interface ApiShippingEnvelope {
   quote_id: number;
   quote_ref: string;
@@ -314,6 +342,21 @@ interface ApiShippingLoadEnvelope extends ApiShippingEnvelope {
 }
 
 interface ApiShippingSaveEnvelope extends ApiShippingEnvelope {
+  saved_at: string;
+}
+
+interface ApiCorEnvelope {
+  quote_id: number;
+  quote_ref: string;
+  cor_data: Record<string, unknown>;
+}
+
+interface ApiCorLoadEnvelope extends ApiCorEnvelope {
+  created_date?: string | null;
+  modified_date?: string | null;
+}
+
+interface ApiCorSaveEnvelope extends ApiCorEnvelope {
   saved_at: string;
 }
 
@@ -333,6 +376,7 @@ export interface ShippingTruck {
 export interface ShippingMachine {
   id: string;
   machineId: number | null;
+  lineItemOptionId: string | null;
   machineName: string;
   model: string;
   hsCode: string;
@@ -340,6 +384,15 @@ export interface ShippingMachine {
   unitPrice: number;
   truckId: string;
   crates: ShippingCrate[];
+}
+
+export interface ShippingLineItemOption {
+  id: string;
+  lineItemId: number | null;
+  name: string;
+  description: string;
+  quantity: string;
+  unitPrice: number;
 }
 
 export interface ShippingClientInfo {
@@ -382,6 +435,7 @@ export interface ShippingDocumentState {
   quoteRef: string;
   client: ShippingClientInfo;
   machines: ShippingMachine[];
+  lineItemOptions: ShippingLineItemOption[];
   trucks: ShippingTruck[];
   meta: ShippingMeta;
 }
@@ -399,6 +453,47 @@ export interface ShippingSaveResult {
   quoteRef: string;
   savedAt: string;
   shippingData: ShippingDocumentState;
+}
+
+export interface CorLineItem {
+  id: string;
+  qty: string;
+  reqDescription: string;
+  unitCost: string;
+  selectedItems: string;
+}
+
+export interface CorClientInfo {
+  company: string;
+  customerPO: string;
+  orderDate: string;
+  ax: string;
+  ox: string;
+  machine: string;
+}
+
+export interface CorDocumentState {
+  quoteId: number;
+  quoteRef: string;
+  client: CorClientInfo;
+  corNo: string;
+  justificationForChange: string;
+  lineItems: CorLineItem[];
+}
+
+export interface CorLoadResult {
+  quoteId: number;
+  quoteRef: string;
+  createdDate: string | null;
+  modifiedDate: string | null;
+  corData: CorDocumentState;
+}
+
+export interface CorSaveResult {
+  quoteId: number;
+  quoteRef: string;
+  savedAt: string;
+  corData: CorDocumentState;
 }
 
 function createClientId(name: string, fallback: string): string {
@@ -446,6 +541,123 @@ function asNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeShippingDownloadFilename(
+  filename: string,
+  documentType: ShippingDocumentType,
+  contentType: string,
+  outputFormat: ShippingOutputFormat
+): string {
+  const normalizedType = contentType.toLowerCase();
+  const isZipResponse =
+    normalizedType.includes("application/zip") ||
+    normalizedType.includes("application/x-zip-compressed");
+  const isHtmlResponse = normalizedType.includes("text/html");
+
+  let candidate = filename.trim();
+  if (!candidate) {
+    if (documentType === "all" || isZipResponse) {
+      candidate = documentType === "all" ? "shipping-documents.zip" : `${documentType}.zip`;
+    } else if (outputFormat === "html" || isHtmlResponse) {
+      candidate = `${documentType}.html`;
+    } else {
+      candidate = `${documentType}.docx`;
+    }
+  }
+
+  if (isZipResponse && !candidate.toLowerCase().endsWith(".zip")) {
+    candidate = candidate.replace(/\.[a-z0-9]+$/i, "");
+    candidate = `${candidate}.zip`;
+  }
+  if (!isZipResponse && (outputFormat === "html" || isHtmlResponse) && !candidate.toLowerCase().endsWith(".html")) {
+    candidate = candidate.replace(/\.[a-z0-9]+$/i, "");
+    candidate = `${candidate}.html`;
+  }
+  return candidate;
+}
+
+function normalizeCorDownloadFilename(filename: string, contentType: string): string {
+  const normalizedType = contentType.toLowerCase();
+  const isZipResponse =
+    normalizedType.includes("application/zip") ||
+    normalizedType.includes("application/x-zip-compressed");
+  let candidate = filename.trim();
+  if (!candidate) {
+    candidate = isZipResponse ? "cor-documents.zip" : "cor.docx";
+  }
+  if (isZipResponse && !candidate.toLowerCase().endsWith(".zip")) {
+    candidate = candidate.replace(/\.[a-z0-9]+$/i, "");
+    candidate = `${candidate}.zip`;
+  }
+  if (!isZipResponse && !candidate.toLowerCase().endsWith(".docx")) {
+    candidate = candidate.replace(/\.[a-z0-9]+$/i, "");
+    candidate = `${candidate}.docx`;
+  }
+  return candidate;
+}
+
+function normalizeCorState(
+  rawState: unknown,
+  quoteIdFallback: number,
+  quoteRefFallback: string
+): CorDocumentState {
+  const state = asRecord(rawState);
+  const clientRaw = asRecord(state.client);
+  const lineItemsRaw = Array.isArray(state.lineItems) ? state.lineItems : [];
+
+  const lineItems: CorLineItem[] = lineItemsRaw
+    .map((entry, index) => {
+      const row = asRecord(entry);
+      return {
+        id: asString(row.id) || `cor-line-${index + 1}`,
+        qty: asString(row.qty),
+        reqDescription: asString(row.reqDescription),
+        unitCost: asString(row.unitCost),
+        selectedItems: asString(row.selectedItems),
+      };
+    })
+    .filter((row) => row.qty || row.reqDescription || row.unitCost || row.selectedItems);
+
+  return {
+    quoteId:
+      typeof state.quoteId === "number" && Number.isFinite(state.quoteId)
+        ? state.quoteId
+        : quoteIdFallback,
+    quoteRef: asString(state.quoteRef) || quoteRefFallback,
+    client: {
+      company: asString(clientRaw.company),
+      customerPO: asString(clientRaw.customerPO),
+      orderDate: asString(clientRaw.orderDate),
+      ax: asString(clientRaw.ax),
+      ox: asString(clientRaw.ox),
+      machine: asString(clientRaw.machine),
+    },
+    corNo: asString(state.corNo) || "1",
+    justificationForChange: asString(state.justificationForChange),
+    lineItems:
+      lineItems.length > 0
+        ? lineItems
+        : [{ id: "cor-line-1", qty: "", reqDescription: "", unitCost: "", selectedItems: "" }],
+  };
+}
+
+function normalizeLineItemName(rawName: string, description: string): string {
+  const source = (rawName || description || "").split(/\r?\n/)[0] ?? "";
+  let value = source.replace(/\s+/g, " ").trim().replace(/^[\s\-:;,.]+|[\s\-:;,.]+$/g, "");
+  value = value.replace(/([A-Za-z0-9])\s*-\s*([A-Za-z0-9])/g, "$1-$2");
+  if (!value) return "";
+
+  const modelMatch = value.match(/\bmodel\b[:\s-]*(.+)$/i);
+  if (modelMatch?.[1]) {
+    const model = modelMatch[1]
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^[\s\-:;,.]+|[\s\-:;,.]+$/g, "")
+      .replace(/([A-Za-z0-9])\s*-\s*([A-Za-z0-9])/g, "$1-$2");
+    if (model) return model;
+  }
+  return value;
+}
+
 function normalizeShippingState(
   rawState: unknown,
   quoteIdFallback: number,
@@ -454,6 +666,30 @@ function normalizeShippingState(
   const state = asRecord(rawState);
   const clientRaw = asRecord(state.client);
   const metaRaw = asRecord(state.meta);
+  const lineItemOptionsRaw = Array.isArray(state.lineItemOptions)
+    ? state.lineItemOptions
+    : [];
+  const lineItemOptions: ShippingLineItemOption[] = lineItemOptionsRaw
+    .map((entry, index) => {
+      const option = asRecord(entry);
+      const description = asString(option.description);
+      const name = normalizeLineItemName(asString(option.name), description);
+      return {
+        id: asString(option.id) || `line-item-${index + 1}`,
+        lineItemId:
+          typeof option.lineItemId === "number" && Number.isFinite(option.lineItemId)
+            ? option.lineItemId
+            : null,
+        name: name || description,
+        description,
+        quantity: asString(option.quantity),
+        unitPrice: asNumber(option.unitPrice),
+      };
+    })
+    .filter((option) => option.name || option.description);
+  const lineItemNameById = new Map(
+    lineItemOptions.map((option) => [option.id, option.name || option.description] as const)
+  );
 
   const machinesRaw = Array.isArray(state.machines) ? state.machines : [];
   const machines: ShippingMachine[] = machinesRaw
@@ -477,8 +713,13 @@ function normalizeShippingState(
           typeof machine.machineId === "number" && Number.isFinite(machine.machineId)
             ? machine.machineId
             : null,
-        machineName: asString(machine.machineName),
-        model: asString(machine.model),
+        lineItemOptionId: asString(machine.lineItemOptionId) || null,
+        machineName:
+          lineItemNameById.get(asString(machine.lineItemOptionId)) ||
+          asString(machine.machineName),
+        model:
+          lineItemNameById.get(asString(machine.lineItemOptionId)) ||
+          asString(machine.model),
         hsCode: asString(machine.hsCode),
         serialNumber: asString(machine.serialNumber),
         unitPrice: asNumber(machine.unitPrice),
@@ -527,6 +768,7 @@ function normalizeShippingState(
       clientContact: asString(clientRaw.clientContact),
     },
     machines,
+    lineItemOptions,
     trucks: trucks.length > 0 ? trucks : [{ id: "truck-1", name: "Truck 1" }],
     meta: {
       brokerInfo: asString(metaRaw.brokerInfo),
@@ -911,10 +1153,12 @@ export async function generateShippingDocs(
   quoteId: number,
   options?: {
     documentType?: ShippingDocumentType;
+    outputFormat?: ShippingOutputFormat;
     shippingData?: ShippingDocumentState;
   }
 ): Promise<{ blob: Blob; filename: string; contentType: string }> {
   const documentType = options?.documentType ?? "all";
+  const outputFormat = options?.outputFormat ?? "html";
   const response = await fetch(`${API_BASE}/api/shipping/${quoteId}/generate`, {
     method: "POST",
     headers: {
@@ -923,6 +1167,7 @@ export async function generateShippingDocs(
     cache: "no-store",
     body: JSON.stringify({
       document_type: documentType,
+      output_format: outputFormat,
       shipping_data: options?.shippingData,
     }),
   });
@@ -943,11 +1188,109 @@ export async function generateShippingDocs(
   const contentType = response.headers.get("content-type") ?? "application/octet-stream";
   const disposition = response.headers.get("content-disposition") ?? "";
   const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i);
-  const defaultFilename =
-    documentType === "all" ? "shipping-documents.zip" : `${documentType}.docx`;
-  const filename = filenameMatch?.[1]
+  const rawFilename = filenameMatch?.[1]
     ? decodeURIComponent(filenameMatch[1].replace(/\"/g, "").trim())
-    : defaultFilename;
+    : "";
+  const filename = normalizeShippingDownloadFilename(rawFilename, documentType, contentType, outputFormat);
+
+  return {
+    blob: await response.blob(),
+    filename,
+    contentType,
+  };
+}
+
+export async function fetchCorPrefill(
+  quoteId: number
+): Promise<CorDocumentState> {
+  const response = await fetchJson<ApiCorEnvelope>(`/api/cor/${quoteId}/prefill`);
+  if (!response) {
+    throw new Error("COR prefill not available.");
+  }
+  return normalizeCorState(response.cor_data, response.quote_id, response.quote_ref);
+}
+
+export async function loadCorState(
+  quoteId: number
+): Promise<CorLoadResult | null> {
+  const response = await fetchJson<ApiCorLoadEnvelope>(
+    `/api/cor/${quoteId}/load`,
+    undefined,
+    true
+  );
+  if (!response) {
+    return null;
+  }
+  return {
+    quoteId: response.quote_id,
+    quoteRef: response.quote_ref,
+    createdDate: response.created_date ?? null,
+    modifiedDate: response.modified_date ?? null,
+    corData: normalizeCorState(response.cor_data, response.quote_id, response.quote_ref),
+  };
+}
+
+export async function saveCorState(
+  quoteId: number,
+  corData: CorDocumentState
+): Promise<CorSaveResult> {
+  const response = await fetchJson<ApiCorSaveEnvelope>(
+    `/api/cor/${quoteId}/save`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        cor_data: corData,
+      }),
+    }
+  );
+  if (!response) {
+    throw new Error("Failed to save COR state.");
+  }
+  return {
+    quoteId: response.quote_id,
+    quoteRef: response.quote_ref,
+    savedAt: response.saved_at,
+    corData: normalizeCorState(response.cor_data, response.quote_id, response.quote_ref),
+  };
+}
+
+export async function generateCorDoc(
+  quoteId: number,
+  options?: {
+    corData?: CorDocumentState;
+  }
+): Promise<{ blob: Blob; filename: string; contentType: string }> {
+  const response = await fetch(`${API_BASE}/api/cor/${quoteId}/generate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    body: JSON.stringify({
+      cor_data: options?.corData,
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      if (body?.detail) {
+        detail = body.detail;
+      }
+    } catch {
+      // keep default detail
+    }
+    throw new Error(detail);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i);
+  const rawFilename = filenameMatch?.[1]
+    ? decodeURIComponent(filenameMatch[1].replace(/\"/g, "").trim())
+    : "";
+  const filename = normalizeCorDownloadFilename(rawFilename, contentType);
 
   return {
     blob: await response.blob(),

@@ -100,6 +100,44 @@ def _term_in_text_fuzzy(term: str, raw_text: str, normalized_text: str, normaliz
     return False
 
 
+def _resolve_semantic_tag(field_key: str, field_context: Dict[str, Any]) -> str:
+    explicit = str(field_context.get("semantic_tag", "")).strip().lower()
+    if explicit:
+        return explicit
+
+    description = str(field_context.get("description", "")).strip().lower()
+    section = str(field_context.get("section", "")).strip().lower()
+    if "direction" in description and "basic information" in section:
+        return "direction"
+    if "utility specifications" in section:
+        if "voltage" in description:
+            return "voltage"
+        if "hz" in description or "hertz" in description:
+            return "hz"
+        if "phase" in description:
+            return "phases"
+    return ""
+
+
+def _matches_semantic_value(tag: str, value: str) -> bool:
+    value_norm = str(value or "").strip().lower()
+    if not value_norm:
+        return False
+
+    if tag == "direction":
+        return bool(
+            re.search(r"\b(from\s+)?left\s+to\s+right\b", value_norm)
+            or re.search(r"\b(from\s+)?right\s+to\s+left\b", value_norm)
+        )
+    if tag == "voltage":
+        return bool(re.search(r"\b\d{2,4}(?:\s*/\s*\d{2,4})?\s*(?:v|vac|volt|volts)\b", value_norm))
+    if tag == "hz":
+        return bool(re.search(r"\b\d{2,3}(?:\s*/\s*\d{2,3})?\s*(?:hz|hertz)\b", value_norm))
+    if tag == "phases":
+        return bool(re.search(r"\b[123]\s*(?:phase|phases)\b", value_norm))
+    return True
+
+
 def get_confidence_level(confidence: float) -> str:
     """
     Returns the confidence level category based on score.
@@ -240,6 +278,14 @@ def estimate_field_confidence(
             else:
                 # Value not found in text - might be inferred
                 confidence = 0.5
+
+        semantic_tag = _resolve_semantic_tag(field_key, field_context if isinstance(field_context, dict) else {})
+        if semantic_tag:
+            if not _matches_semantic_value(semantic_tag, value_lower):
+                confidence = min(confidence, 0.45)
+            elif _normalize_for_match(value_lower) not in normalized_all_text:
+                # Constrained values that are not found in evidence should not remain high.
+                confidence = min(confidence, 0.65)
 
     return round(confidence, 2)
 

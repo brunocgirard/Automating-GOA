@@ -232,6 +232,18 @@ def init_db(db_path: str = DB_PATH):
         )
         """)
 
+        # Store COR workflow drafts as a full JSON blob keyed by quote.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cor_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_quote_ref TEXT NOT NULL,
+            cor_data_json TEXT NOT NULL,
+            created_date TEXT NOT NULL,
+            modified_date TEXT NOT NULL,
+            FOREIGN KEY (client_quote_ref) REFERENCES clients (quote_ref) ON DELETE CASCADE
+        )
+        """)
+
         _INITIALIZED_DB_PATHS.add(normalized_path)
         print(f"Database '{normalized_path}' initialized with all required tables.")
         conn.commit()

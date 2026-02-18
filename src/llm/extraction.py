@@ -29,14 +29,17 @@ The module integrates with:
 import re
 import os
 import json
+import time
 import traceback
-from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Any, Optional, Tuple, Sequence
 
 # LangChain imports
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, model_validator
 
 # Internal LLM module imports
 from .client import get_generative_model, configure_gemini_client, get_configured_model_name, genai
@@ -56,7 +59,7 @@ from src.utils.few_shot_learning import (
     record_user_feedback_on_extraction,
     enhance_prompt_with_few_shot_examples,
 )
-from src.utils.pdf_rag import build_retrieved_pdf_context
+from src.utils.pdf_rag import build_retrieved_pdf_context, prepare_pdf_rag_chunks
 
 # Try to import enhanced few-shot learning, fall back to basic if not available
 try:
@@ -102,6 +105,252 @@ def _safe_positive_int_env(var_name: str, default: int) -> int:
 MAX_FIELDS_PER_EXTRACTION_GROUP = _safe_positive_int_env("LLM_MAX_FIELDS_PER_GROUP", 180)
 
 
+@dataclass
+class ExtractionPassOptions:
+    """Runtime options for one extraction pass."""
+
+    pass_name: str = "pass"
+    model_name: str | None = None
+    rag_max_chars: int = 40000
+    max_fields_per_group: int = MAX_FIELDS_PER_EXTRACTION_GROUP
+    enable_few_shot: bool = True
+    enable_quote_library: bool = True
+    max_examples_per_field: int = 1
+    max_checkbox_synonyms: int = 3
+    max_checkbox_indicators: int = 2
+    compact_prompt: bool = False
+    concurrency: int = 1
+    use_weighted_rag: bool = True
+    secondary_hint_char_limit: int = 320
+
+
+def _is_checkbox_field(field_key: str, context: Any, using_schema_format: bool) -> bool:
+    return field_key.endswith("_check") or (
+        using_schema_format and isinstance(context, dict) and context.get("type") == "boolean"
+    )
+
+
+def _is_comment_field(field_key: str, context: Any, using_schema_format: bool) -> bool:
+    if field_key.endswith("_check"):
+        return False
+    if using_schema_format and isinstance(context, dict):
+        return "comment" in str(context.get("description", "")).lower()
+    if isinstance(context, str):
+        return "comment" in context.lower()
+    lowered = field_key.lower()
+    return lowered in {"rj_comm", "ci_vcom"} or lowered.endswith("_comm") or lowered.endswith("_comment")
+
+
+def _find_group_for_field(key: str, context: Any = None) -> str:
+    if isinstance(context, dict):
+        section = str(context.get("section", "")).strip().lower()
+        if section and any(
+            x in section for x in ["control", "electrical", "program", "guard", "code", "coding", "inspect"]
+        ):
+            return "Controls & Electrical"
+        if section and any(
+            x in section for x in ["liquid", "fill", "bottle", "handling", "tablet", "cotton", "desiccant", "gas"]
+        ):
+            return "Liquid Filling & Handling"
+        if section and any(
+            x in section for x in ["cap", "label", "induction", "sleeve", "conveyor", "plug", "belt", "shrink", "retorquer"]
+        ):
+            return "Capping, Labeling & Other"
+
+    for group_name, rules in FIELD_GROUPS.items():
+        if key in rules["exact"]:
+            return group_name
+        for prefix in rules["prefixes"]:
+            if key.startswith(prefix):
+                return group_name
+    return "General & Utility"
+
+
+def _group_contexts_for_extraction(
+    template_placeholder_contexts: Dict[str, Any],
+    *,
+    max_fields_per_group: int,
+) -> Dict[str, Dict[str, Any]]:
+    grouped_contexts = {group: {} for group in FIELD_GROUPS.keys()}
+    for key, context in template_placeholder_contexts.items():
+        group = _find_group_for_field(key, context)
+        grouped_contexts[group][key] = context
+
+    active_groups = {k: v for k, v in grouped_contexts.items() if v}
+    largest_group_size = max((len(group) for group in active_groups.values()), default=0)
+    if largest_group_size > max_fields_per_group:
+        active_groups = _rebalance_grouped_contexts(
+            active_groups,
+            max_fields_per_group=max_fields_per_group,
+        )
+    return active_groups
+
+
+def _clean_json_response(raw_text: str) -> str:
+    cleaned = (raw_text or "").strip()
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    return cleaned.strip()
+
+
+def _normalize_group_output(
+    parsed: Dict[str, Any],
+    group_contexts: Dict[str, Any],
+    *,
+    using_schema_format: bool,
+) -> Dict[str, str]:
+    output: Dict[str, str] = {}
+    for key in group_contexts:
+        context = group_contexts[key]
+        is_checkbox = _is_checkbox_field(key, context, using_schema_format)
+        is_comment = _is_comment_field(key, context, using_schema_format)
+        value = parsed.get(key)
+        if is_checkbox:
+            if isinstance(value, bool):
+                output[key] = "YES" if value else "NO"
+            elif isinstance(value, str) and value.strip().upper() in {"YES", "TRUE", "1"}:
+                output[key] = "YES"
+            else:
+                output[key] = "NO"
+        else:
+            output[key] = "" if is_comment else (str(value).strip() if value is not None else "")
+    return output
+
+
+def _build_group_field_lines(
+    group_contexts: Dict[str, Any],
+    *,
+    compact_prompt: bool,
+    max_checkbox_synonyms: int,
+    max_checkbox_indicators: int,
+) -> tuple[list[str], bool]:
+    using_schema_format = isinstance(next(iter(group_contexts.values()), {}), dict)
+    field_lines: list[str] = []
+
+    for key, ctx in group_contexts.items():
+        is_checkbox = _is_checkbox_field(key, ctx, using_schema_format)
+        is_comment = _is_comment_field(key, ctx, using_schema_format)
+        field_type = "C" if is_checkbox else "T"
+
+        if isinstance(ctx, dict):
+            description = str(ctx.get("description") or key).strip()
+            section = str(ctx.get("section") or "").strip()
+            subsection = str(ctx.get("subsection") or "").strip()
+
+            if compact_prompt:
+                label = description
+                if subsection:
+                    label = f"{subsection}: {label}"
+                if section:
+                    label = f"{section} > {label}"
+                suffix = ""
+                if is_checkbox:
+                    synonyms = [str(v).strip() for v in ctx.get("synonyms", []) if str(v).strip()]
+                    indicators = [str(v).strip() for v in ctx.get("positive_indicators", []) if str(v).strip()]
+                    syn_text = ", ".join(synonyms[:max_checkbox_synonyms])
+                    ind_text = ", ".join(indicators[:max_checkbox_indicators])
+                    if syn_text:
+                        suffix += f" | alt={syn_text}"
+                    if ind_text:
+                        suffix += f" | +={ind_text}"
+                elif is_comment:
+                    suffix += " | user_entry=true | return_empty=true"
+                field_lines.append(f"- {key} | {field_type} | {label}{suffix}")
+            else:
+                extras = ""
+                if is_checkbox:
+                    synonyms = ctx.get("synonyms", [])
+                    if synonyms:
+                        extras += f" [Alt: {', '.join(str(v) for v in synonyms[:5])}]"
+                    positive = ctx.get("positive_indicators", [])
+                    if positive and len(group_contexts) <= 80:
+                        extras += f" [+: {', '.join(str(v) for v in positive[:3])}]"
+                    negative = ctx.get("negative_indicators", [])
+                    if negative and len(group_contexts) <= 80:
+                        extras += f" [-: {', '.join(str(v) for v in negative[:3])}]"
+                elif is_comment:
+                    extras += " [User entry field: return empty string]"
+                if subsection:
+                    field_lines.append(f"- {key}: [{subsection}] {description}{extras}")
+                else:
+                    field_lines.append(f"- {key}: {description}{extras}")
+            continue
+
+        context_text = str(ctx).strip() if ctx is not None else key
+        if is_comment:
+            context_text = f"{context_text} [User entry field: return empty string]"
+        field_lines.append(f"- {key} | {field_type} | {context_text}" if compact_prompt else f"- {key}: {context_text}")
+
+    return field_lines, using_schema_format
+
+
+def _build_group_query_hints(
+    group_name: str,
+    group_contexts: Dict[str, Any],
+    *,
+    machine_name: str,
+    main_item_desc: str,
+    add_on_descs: str,
+    common_item_descs: str,
+    quote_library_context: str,
+    compact_prompt: bool,
+    secondary_hint_char_limit: int = 320,
+) -> tuple[List[str], List[str]]:
+    def _trim_hint(text: str, limit: int = 320) -> str:
+        compact = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not compact:
+            return ""
+        if len(compact) <= limit:
+            return compact
+        return compact[: limit - 1].rstrip() + "..."
+
+    primary_hints: List[str] = [group_name]
+    secondary_hints: List[str] = [
+        _trim_hint(machine_name, secondary_hint_char_limit),
+        _trim_hint(main_item_desc, secondary_hint_char_limit),
+        _trim_hint(add_on_descs, secondary_hint_char_limit),
+        _trim_hint(common_item_descs, secondary_hint_char_limit),
+        group_name,
+    ]
+    if quote_library_context and not compact_prompt:
+        secondary_hints.append(_trim_hint(quote_library_context, max(secondary_hint_char_limit, 640)))
+
+    for key, context in group_contexts.items():
+        primary_hints.append(key.replace("_", " "))
+        if isinstance(context, dict):
+            for hint_key in ("description", "section", "subsection"):
+                hint_val = context.get(hint_key)
+                if isinstance(hint_val, str) and hint_val.strip():
+                    primary_hints.append(hint_val)
+            text_indicators = context.get("text_indicators", [])
+            if isinstance(text_indicators, list):
+                limit = 10 if compact_prompt else 15
+                primary_hints.extend(str(v).strip() for v in text_indicators[:limit] if str(v).strip())
+            value_patterns = context.get("value_patterns", [])
+            if isinstance(value_patterns, list):
+                limit = 4 if compact_prompt else 8
+                for pattern in value_patterns[:limit]:
+                    cleaned_pattern = re.sub(r"[^a-z0-9\s/]+", " ", str(pattern).lower()).strip()
+                    if cleaned_pattern:
+                        primary_hints.append(cleaned_pattern)
+
+            for hint_list_key in ("synonyms", "positive_indicators"):
+                hint_values = context.get(hint_list_key, [])
+                if isinstance(hint_values, list):
+                    limit = 2 if compact_prompt else 5
+                    secondary_hints.extend(str(v) for v in hint_values[:limit] if v)
+        elif isinstance(context, str) and context.strip():
+            primary_hints.append(context)
+
+    # Drop empties while preserving order.
+    primary_hints = [hint for hint in primary_hints if str(hint).strip()]
+    secondary_hints = [hint for hint in secondary_hints if str(hint).strip()]
+    return primary_hints, secondary_hints
+
 def _chunk_contexts(
     contexts: Dict[str, Any],
     chunk_size: int,
@@ -123,7 +372,10 @@ def _rebalance_grouped_contexts(
     Primary strategy:
     - Split large groups by section when section metadata is available.
     - Fall back to deterministic chunking by field count.
+    - Merge tiny groups (< min_fields) back together to avoid wasteful
+      API calls that send 40K of context for 1 field.
     """
+    min_fields = max(10, max_fields_per_group // 4)
     rebalanced: Dict[str, Dict[str, Any]] = {}
 
     for group_name, group_contexts in grouped_contexts.items():
@@ -143,20 +395,59 @@ def _rebalance_grouped_contexts(
                 unsectioned[field_key] = field_context
 
         if section_buckets:
+            # Merge small sections together before emitting groups
+            merged_sections: List[tuple] = []  # (label, contexts_dict)
+            pending_label = ""
+            pending_fields: Dict[str, Any] = {}
+
             section_index = 1
             for section_name, section_contexts in section_buckets.items():
                 section_label = re.sub(r"\s+", " ", section_name).strip()[:48] or f"Section {section_index}"
-                chunks = _chunk_contexts(section_contexts, max_fields_per_group)
-                for chunk_index, chunk in enumerate(chunks, start=1):
-                    chunk_suffix = f" #{chunk_index}" if len(chunks) > 1 else ""
-                    rebalanced[f"{group_name} | {section_label}{chunk_suffix}"] = chunk
                 section_index += 1
 
+                # If adding this section still fits in one group, merge it
+                if len(pending_fields) + len(section_contexts) <= max_fields_per_group:
+                    pending_fields.update(section_contexts)
+                    pending_label = pending_label or section_label
+                    if len(pending_fields) < min_fields:
+                        continue  # keep accumulating
+                    # Flush
+                    merged_sections.append((pending_label, dict(pending_fields)))
+                    pending_label = ""
+                    pending_fields = {}
+                else:
+                    # Flush pending first
+                    if pending_fields:
+                        merged_sections.append((pending_label, dict(pending_fields)))
+                        pending_label = ""
+                        pending_fields = {}
+                    # This section alone may need chunking
+                    if len(section_contexts) <= max_fields_per_group:
+                        merged_sections.append((section_label, section_contexts))
+                    else:
+                        chunks = _chunk_contexts(section_contexts, max_fields_per_group)
+                        for ci, chunk in enumerate(chunks, 1):
+                            suffix = f" #{ci}" if len(chunks) > 1 else ""
+                            merged_sections.append((f"{section_label}{suffix}", chunk))
+
+            # Flush remaining pending
+            if pending_fields:
+                merged_sections.append((pending_label, dict(pending_fields)))
+
+            # Add unsectioned fields by merging into last group if it fits
             if unsectioned:
-                chunks = _chunk_contexts(unsectioned, max_fields_per_group)
-                for chunk_index, chunk in enumerate(chunks, start=1):
-                    chunk_suffix = f" #{chunk_index}" if len(chunks) > 1 else ""
-                    rebalanced[f"{group_name} | Unsectioned{chunk_suffix}"] = chunk
+                if merged_sections and len(merged_sections[-1][1]) + len(unsectioned) <= max_fields_per_group:
+                    last_label, last_fields = merged_sections[-1]
+                    last_fields.update(unsectioned)
+                    merged_sections[-1] = (last_label, last_fields)
+                else:
+                    chunks = _chunk_contexts(unsectioned, max_fields_per_group)
+                    for ci, chunk in enumerate(chunks, 1):
+                        suffix = f" #{ci}" if len(chunks) > 1 else ""
+                        merged_sections.append((f"Unsectioned{suffix}", chunk))
+
+            for label, fields_dict in merged_sections:
+                rebalanced[f"{group_name} | {label}"] = fields_dict
             continue
 
         chunks = _chunk_contexts(group_contexts, max_fields_per_group)
@@ -165,6 +456,339 @@ def _rebalance_grouped_contexts(
             rebalanced[f"{group_name}{chunk_suffix}"] = chunk
 
     return rebalanced
+
+
+def _extract_single_group(
+    *,
+    model: Any,
+    group_name: str,
+    group_contexts: Dict[str, Any],
+    machine_name: str,
+    main_item_desc: str,
+    add_on_descs: str,
+    common_item_descs: str,
+    full_pdf_text: str,
+    quote_library_context: str,
+    pass_options: ExtractionPassOptions,
+    precomputed_chunks: Sequence[str] | None = None,
+    machine_data: Optional[Dict[str, Any]] = None,
+    common_items: Optional[List[Dict[str, Any]]] = None,
+) -> tuple[Dict[str, str], int]:
+    field_lines, using_schema_format = _build_group_field_lines(
+        group_contexts,
+        compact_prompt=pass_options.compact_prompt,
+        max_checkbox_synonyms=pass_options.max_checkbox_synonyms,
+        max_checkbox_indicators=pass_options.max_checkbox_indicators,
+    )
+    fields_block = "\n".join(field_lines)
+
+    primary_hints, secondary_hints = _build_group_query_hints(
+        group_name,
+        group_contexts,
+        machine_name=machine_name,
+        main_item_desc=main_item_desc,
+        add_on_descs=add_on_descs,
+        common_item_descs=common_item_descs,
+        quote_library_context=quote_library_context if pass_options.enable_quote_library else "",
+        compact_prompt=pass_options.compact_prompt,
+        secondary_hint_char_limit=max(120, int(pass_options.secondary_hint_char_limit or 320)),
+    )
+
+    if full_pdf_text:
+        pdf_context, rag_note = build_retrieved_pdf_context(
+            full_pdf_text,
+            [*primary_hints, *secondary_hints],
+            max_context_chars=max(2000, pass_options.rag_max_chars),
+            precomputed_chunks=precomputed_chunks,
+            primary_query_hints=primary_hints,
+            secondary_query_hints=secondary_hints,
+            weighted_hints_enabled=pass_options.use_weighted_rag,
+        )
+    else:
+        pdf_context, rag_note = "", "[No PDF text provided.]"
+
+    prompt_parts = [
+        f"You are extracting GOA template values for section '{group_name}' ({pass_options.pass_name}).",
+        "Fill every listed key.",
+        "",
+        "MACHINE CONTEXT:",
+        f"- Machine: {machine_name}",
+        f"- Main item: {main_item_desc}",
+        f"- Add-ons: {add_on_descs}",
+        f"- Common items: {common_item_descs}",
+    ]
+    if pass_options.enable_quote_library and quote_library_context:
+        prompt_parts.append(f"- QUOTE_LIBRARY reference: {quote_library_context}")
+
+    prompt_parts.extend(
+        [
+            "",
+            f"PDF CONTEXT {rag_note}:",
+            pdf_context,
+            "",
+            "FIELDS:",
+            fields_block,
+            "",
+            "RULES:",
+            '- Checkbox fields (type "C"): value must be "YES" or "NO". Default to "NO" if unsupported.',
+            '- Text fields (type "T"): value must be extracted text or empty string "".',
+            '- Comment/comment(s) text fields are user-entered; always return empty string "" for those fields.',
+            "- Never return null.",
+            "- Return JSON object with all listed keys only.",
+            "",
+            "JSON:",
+        ]
+    )
+
+    if pass_options.enable_few_shot and not DISABLE_ALL_FEW_SHOT:
+        try:
+            if ENHANCED_FEW_SHOT_AVAILABLE:
+                prompt_parts = enhance_prompt_with_semantic_examples(
+                    prompt_parts=prompt_parts,
+                    machine_data=machine_data or {},
+                    template_placeholder_contexts=group_contexts,
+                    common_items=common_items or [],
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=max(1, pass_options.max_examples_per_field),
+                )
+            else:
+                prompt_parts = enhance_prompt_with_few_shot_examples(
+                    prompt_parts=prompt_parts,
+                    machine_data=machine_data or {},
+                    template_placeholder_contexts=group_contexts,
+                    common_items=common_items or [],
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=max(1, pass_options.max_examples_per_field),
+                )
+        except Exception as few_shot_error:
+            print(f"[WARN] Few-shot enhancement skipped for {group_name}: {few_shot_error}")
+
+    prompt = "\n".join(prompt_parts)
+    prompt_chars = len(prompt)
+
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    ]
+
+    parsed: Dict[str, Any] = {}
+    for attempt in range(2):
+        try:
+            response = model.generate_content(prompt, safety_settings=safety_settings)
+            cleaned = _clean_json_response(getattr(response, "text", ""))
+            loaded = json.loads(cleaned)
+            if isinstance(loaded, dict):
+                parsed = loaded
+                break
+            print(f"[WARN] Non-dict response for group {group_name}; attempt {attempt + 1}")
+        except Exception as extract_error:
+            print(f"[WARN] Group extraction attempt {attempt + 1} failed for {group_name}: {extract_error}")
+            if attempt == 1:
+                parsed = {}
+            else:
+                # Basic backoff for transient provider throttling.
+                time.sleep(0.7 * (attempt + 1))
+
+    return _normalize_group_output(parsed, group_contexts, using_schema_format=using_schema_format), prompt_chars
+
+
+def extract_machine_fields_with_options(
+    machine_data: Dict[str, Any],
+    common_items: List[Dict[str, Any]],
+    template_placeholder_contexts: Dict[str, Any],
+    full_pdf_text: str,
+    *,
+    pass_options: Optional[ExtractionPassOptions] = None,
+    template_metadata: Optional[Dict[str, Any]] = None,
+) -> tuple[Dict[str, str], Dict[str, Any]]:
+    """
+    Extract fields using configurable per-pass settings.
+
+    Returns:
+        tuple[dict, dict]:
+            - extracted field values
+            - extraction metrics metadata
+    """
+    options = pass_options or ExtractionPassOptions()
+    model = get_generative_model(options.model_name)
+    if model is None and not configure_gemini_client():
+        defaults = {
+            key: ("NO" if key.endswith("_check") else "")
+            for key in template_placeholder_contexts.keys()
+        }
+        return defaults, {
+            "pass_name": options.pass_name,
+            "groups_processed": 0,
+            "fields_attempted": len(template_placeholder_contexts),
+            "prompt_chars_estimate": 0,
+            "duration_ms": 0,
+            "model_name": options.model_name or get_configured_model_name(),
+        }
+    if model is None:
+        model = get_generative_model(options.model_name)
+
+    start = time.time()
+    machine_name = machine_data.get("machine_name", "")
+    main_item_desc = machine_data.get("main_item", {}).get("description", "")
+    add_on_descs = "; ".join(item.get("description", "") for item in machine_data.get("add_ons", []) if item.get("description"))
+    common_item_descs = "; ".join(item.get("description", "") for item in common_items if item.get("description"))
+
+    active_groups = _group_contexts_for_extraction(
+        template_placeholder_contexts,
+        max_fields_per_group=max(1, options.max_fields_per_group),
+    )
+
+    quote_library_context = ""
+    if options.enable_quote_library:
+        quote_library_path = template_metadata.get("quote_library_path") if isinstance(template_metadata, dict) else None
+        try:
+            quote_library_context, quote_library_matches = get_quote_library_context(
+                machine_name=machine_name,
+                main_item_desc=main_item_desc,
+                add_on_descs=add_on_descs,
+                quote_library_path=quote_library_path,
+            )
+            if quote_library_matches:
+                print(f"[{options.pass_name}] Matched QUOTE_LIBRARY specs: {', '.join(quote_library_matches)}")
+        except Exception as quote_library_error:
+            print(f"[{options.pass_name}] QUOTE_LIBRARY lookup failed: {quote_library_error}")
+
+    precomputed_chunks: Sequence[str] | None = None
+    if full_pdf_text and len(full_pdf_text) > max(2000, options.rag_max_chars):
+        precomputed_chunks = prepare_pdf_rag_chunks(full_pdf_text)
+
+    all_extracted_data: Dict[str, str] = {}
+    prompt_chars_estimate = 0
+    groups_processed = 0
+
+    def run_group(group_name: str, group_contexts: Dict[str, Any]) -> tuple[str, Dict[str, str], int]:
+        values, prompt_chars = _extract_single_group(
+            model=model,
+            group_name=group_name,
+            group_contexts=group_contexts,
+            machine_name=machine_name,
+            main_item_desc=main_item_desc,
+            add_on_descs=add_on_descs,
+            common_item_descs=common_item_descs,
+            full_pdf_text=full_pdf_text,
+            quote_library_context=quote_library_context,
+            pass_options=options,
+            precomputed_chunks=precomputed_chunks,
+            machine_data=machine_data,
+            common_items=common_items,
+        )
+        return group_name, values, prompt_chars
+
+    concurrency = max(1, int(options.concurrency or 1))
+    if concurrency > 1 and len(active_groups) > 1:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = [
+                executor.submit(run_group, group_name, group_contexts)
+                for group_name, group_contexts in active_groups.items()
+            ]
+            for future in as_completed(futures):
+                group_name, group_values, prompt_chars = future.result()
+                all_extracted_data.update(group_values)
+                prompt_chars_estimate += prompt_chars
+                groups_processed += 1
+                print(f"[{options.pass_name}] Group completed: {group_name}")
+    else:
+        for group_name, group_contexts in active_groups.items():
+            _, group_values, prompt_chars = run_group(group_name, group_contexts)
+            all_extracted_data.update(group_values)
+            prompt_chars_estimate += prompt_chars
+            groups_processed += 1
+
+    # Ensure full key coverage for this pass scope.
+    for key, context in template_placeholder_contexts.items():
+        if key in all_extracted_data:
+            continue
+        is_checkbox = key.endswith("_check") or (isinstance(context, dict) and context.get("type") == "boolean")
+        all_extracted_data[key] = "NO" if is_checkbox else ""
+
+    duration_ms = int((time.time() - start) * 1000)
+    metrics = {
+        "pass_name": options.pass_name,
+        "groups_processed": groups_processed,
+        "fields_attempted": len(template_placeholder_contexts),
+        "prompt_chars_estimate": prompt_chars_estimate,
+        "duration_ms": duration_ms,
+        "model_name": options.model_name or get_configured_model_name(),
+    }
+    return all_extracted_data, metrics
+
+
+def select_repair_field_contexts(
+    extracted_data: Dict[str, str],
+    confidence_scores: Dict[str, float],
+    template_placeholder_contexts: Dict[str, Any],
+    *,
+    text_confidence_threshold: float = 0.72,
+    checkbox_yes_confidence_threshold: float = 0.80,
+    dependency_suggestions: Optional[List[Dict[str, Any]]] = None,
+    force_critical_text_fields: bool = False,
+    forced_semantic_tags: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Build a focused field subset for repair pass extraction.
+    """
+    selected: Dict[str, Any] = {}
+    suggestions = dependency_suggestions or []
+    semantic_tags = {
+        str(tag).strip().lower()
+        for tag in (forced_semantic_tags or ("direction", "voltage", "hz", "phases"))
+        if str(tag).strip()
+    }
+
+    def _resolve_semantic_tag(field_key: str, field_context: Any) -> str:
+        if isinstance(field_context, dict):
+            explicit = str(field_context.get("semantic_tag", "")).strip().lower()
+            if explicit:
+                return explicit
+            description = str(field_context.get("description", "")).strip().lower()
+            section = str(field_context.get("section", "")).strip().lower()
+            if "direction" in description and "basic information" in section:
+                return "direction"
+            if "utility specifications" in section:
+                if "voltage" in description:
+                    return "voltage"
+                if "hz" in description or "hertz" in description:
+                    return "hz"
+                if "phase" in description:
+                    return "phases"
+        return ""
+
+    for field_key, context in template_placeholder_contexts.items():
+        value = extracted_data.get(field_key, "")
+        confidence = float(confidence_scores.get(field_key, 0.0) or 0.0)
+        is_checkbox = field_key.endswith("_check") or (isinstance(context, dict) and context.get("type") == "boolean")
+
+        if is_checkbox:
+            normalized = str(value or "").strip().upper()
+            if normalized == "YES" and confidence < checkbox_yes_confidence_threshold:
+                selected[field_key] = context
+            elif normalized not in {"YES", "NO"}:
+                selected[field_key] = context
+            continue
+
+        if not str(value or "").strip() or confidence < text_confidence_threshold:
+            selected[field_key] = context
+            continue
+
+        if force_critical_text_fields:
+            semantic_tag = _resolve_semantic_tag(field_key, context)
+            if semantic_tag and semantic_tag in semantic_tags:
+                selected[field_key] = context
+
+    # Include dependency warning fields for auto-repair attempts.
+    for suggestion in suggestions:
+        field_key = suggestion.get("field")
+        if isinstance(field_key, str) and field_key in template_placeholder_contexts:
+            selected[field_key] = template_placeholder_contexts[field_key]
+
+    return selected
 
 
 def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
@@ -354,6 +978,7 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
     prompt_parts.append("If a PDF item is general (e.g., 'Three (X 3) colours status beacon light') and the template has specific sub-features (e.g., 'Status Beacon Light: Red', 'Status Beacon Light: Yellow', 'Status Beacon Light: Green'), mark ALL corresponding specific sub-feature placeholders as YES.")
     prompt_parts.append("Be accurate and conservative. For checkboxes, if unsure, default to \"NO\". If an entire category of options (e.g., 'Street Fighter Tablet Counter') is NOT MENTIONED AT ALL in the PDF text or selected items, all its related checkboxes should be \"NO\".")
     prompt_parts.append("For text fields, if not found, use an empty string.")
+    prompt_parts.append("  - For COMMENT fields (description contains 'Comment' or 'Comments'): these are user-entry fields. Always return empty string (\"\").")
     prompt_parts.append("Respond with a single, valid JSON object. The keys in the JSON MUST be ALL the TEMPLATE PLACEHOLDER KEYS listed above, and the values must be their extracted text or \"YES\"/\"NO\".")
 
     # Add context about General Order Acknowledgement structure to help with understanding
@@ -443,7 +1068,12 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
         traceback.print_exc()
 
     # Apply post-processing rules to improve the data
-    corrected_data = apply_post_processing_rules(llm_response_data, template_placeholder_contexts)
+    corrected_data = apply_post_processing_rules(
+        llm_response_data,
+        template_placeholder_contexts,
+        full_pdf_text,
+        selected_pdf_descriptions,
+    )
     return corrected_data
 
 
@@ -583,7 +1213,12 @@ def get_llm_chat_update(current_data: Dict[str, str],
         traceback.print_exc()
 
     # Apply post-processing rules to improve the data
-    corrected_data = apply_post_processing_rules(updated_data, template_placeholder_contexts)
+    corrected_data = apply_post_processing_rules(
+        updated_data,
+        template_placeholder_contexts,
+        full_pdf_text,
+        selected_pdf_descriptions,
+    )
 
     return corrected_data
 
@@ -818,144 +1453,27 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     except Exception as library_error:
         print(f"QUOTE_LIBRARY lookup failed: {library_error}")
 
-    # 2. Iterate through each group and run extraction (one API call per group, no batching)
+    # 2. Iterate through each group and run extraction via direct generate_content()
+    #    (monolithic prompt style — no LangChain/Pydantic, which causes null defaults)
     import time
+
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    ]
+
     for group_name, group_contexts in active_groups.items():
         print(f"\n--- Processing Group: {group_name} ({len(group_contexts)} fields) ---")
         group_start_time = time.time()
 
-        # --- Dynamic Pydantic Model Creation for this Group ---
         using_schema_format = isinstance(next(iter(group_contexts.values()), {}), dict)
 
-        fields = {}
-        name_mapping = {}
-        for name, context in group_contexts.items():
-            description = ""
-            if using_schema_format and isinstance(context, dict):
-                description = context.get("description", f"Field for {name}")
-            elif isinstance(context, str):
-                description = context
-
-            # Sanitize field name for Pydantic
-            sanitized_name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
-            if sanitized_name != name:
-                name_mapping[sanitized_name] = name
-
-            fields[sanitized_name] = (Optional[str], Field(default=None, description=description))
-
-        # Create unique model name to avoid conflicts
-        model_name = f"DynamicGOADocument_{group_name.replace(' ', '_').replace('&', 'and').replace(',', '')}"
-        DynamicGroupModel = create_model(model_name, **fields)
-
-        # Initialize LLM optimized for speed
-        llm = ChatGoogleGenerativeAI(
-            model=configured_model_name,
-            temperature=0.0,  # Reduced to 0 for faster, more deterministic responses
-            timeout=120,  # 2 minute timeout per request
-            max_retries=1  # Retry once if timeout/error
-        )
-        parser = PydanticOutputParser(pydantic_object=DynamicGroupModel)
-
-        base_prompt_template = f"""
-        You are an AI assistant specializing in extracting information from packaging machinery quotes.
-        Your task is to populate a structured data model for the '{group_name}' section based on the provided context.
-
-        CRITICAL INSTRUCTIONS - BE CONSERVATIVE:
-        - ONLY fill fields that are directly relevant to the selected machine items (Main Machine Item, Machine Add-ons, Common/Shared Items listed above).
-        - If a field is not clearly related to what was actually selected/quoted, leave it null/empty.
-        - Better to leave a field empty than to guess or infer information not clearly present.
-
-        For checkbox fields (ending in '_check'):
-          - Output "YES" ONLY if you find direct evidence in the selected items or their descriptions.
-          - The 'positive indicators' in field descriptions are REQUIRED keywords. If none are present in the selected items, output "NO".
-          - If 'negative indicators' are present, you MUST output "NO" (negative indicators override positive ones).
-          - Default to "NO" when uncertain - do not assume features are included.
-
-        For text fields:
-          - Extract information ONLY if clearly stated in the context.
-          - If not found or not clearly related to selected items, leave it null (do not use placeholder text like "N/A", "Not specified", "TBD", etc.).
-          - For specifications (voltage, speed, dimensions, etc.), only extract if explicitly mentioned for THIS specific machine.
-
-        DO NOT:
-          - Use generic placeholder text like "N/A", "Not applicable", "Not specified", "TBD", "See quote"
-          - Guess or infer values not clearly present in the context
-          - Fill fields just because they exist in the template - only fill what's actually relevant
-
-        QUOTE_LIBRARY REFERENCE RULES:
-        - Matched machine specs from QUOTE_LIBRARY may be provided as reference context.
-        - Use QUOTE_LIBRARY to interpret machine-standard terms/specs only when it matches the current machine model/family.
-        - If the PDF quote conflicts with QUOTE_LIBRARY, prioritize the PDF quote.
-        - Do not pull values from unrelated machine models in QUOTE_LIBRARY.
-
-        CONTEXT:
-        - Machine Name: {{{{machine_name}}}}
-        - Main Machine Item: {{{{main_item_desc}}}}
-        - Machine Add-ons: {{{{add_on_descs}}}}
-        - Common/Shared Items: {{{{common_item_descs}}}}
-        - Matched QUOTE_LIBRARY Specs (reference): {{{{quote_library_context}}}}
-        - Full PDF Text (for context and details): {{{{full_pdf_text}}}}
-
-        Based on the context above, extract ONLY the information that is clearly present and relevant.
-        Pay close attention to the descriptions and positive indicators for each field.
-
-        {{{{format_instructions}}}}
-        """
-
-        # Enhance prompt with few-shot examples specific to this group/fields if possible
-        prompt_build_start = time.time()
-
-        if DISABLE_ALL_FEW_SHOT:
-            # Skip few-shot enhancement entirely for maximum speed
-            print(f"  Building prompt (few-shot disabled for speed)...")
-            enhanced_prompt_parts = [base_prompt_template]
-        elif ENHANCED_FEW_SHOT_AVAILABLE:
-            try:
-                enhanced_prompt_parts = enhance_prompt_with_semantic_examples(
-                    prompt_parts=[base_prompt_template],
-                    machine_data=machine_data,
-                    template_placeholder_contexts=group_contexts, # Pass only group contexts
-                    common_items=common_items,
-                    full_pdf_text=full_pdf_text,
-                    max_examples_per_field=1  # Reduced from 3 to 1 for faster API responses
-                )
-            except Exception as semantic_error:
-                print(f"Semantic few-shot enhancement failed for {group_name}: {semantic_error}")
-                enhanced_prompt_parts = [base_prompt_template]
-        else:
-            # Fallback to basic few-shot examples
-            try:
-                enhanced_prompt_parts = enhance_prompt_with_few_shot_examples(
-                    prompt_parts=[base_prompt_template],
-                    machine_data=machine_data,
-                    template_placeholder_contexts=group_contexts,
-                    common_items=common_items,
-                    full_pdf_text=full_pdf_text,
-                    max_examples_per_field=1  # Reduced from 3 to 1 for faster API responses
-                )
-            except Exception as basic_error:
-                print(f"Basic few-shot enhancement failed for {group_name}: {basic_error}")
-                enhanced_prompt_parts = [base_prompt_template]
-
-        prompt_template = "\n".join(enhanced_prompt_parts)
-        prompt_build_time = time.time() - prompt_build_start
-        if not DISABLE_ALL_FEW_SHOT:
-            print(f"  Prompt built in {prompt_build_time:.1f}s")
-
-        prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=["machine_name", "full_pdf_text", "main_item_desc", "add_on_descs", "common_item_descs", "quote_library_context"],
-            partial_variables={"format_instructions": parser.get_format_instructions()},
-        )
-
-        chain = prompt | llm | parser
-
+        # --- Build RAG hints for this group ---
         group_query_hints: List[str] = [
-            machine_name,
-            main_item_desc,
-            add_on_descs,
-            common_item_descs,
-            quote_library_context,
-            group_name,
+            machine_name, main_item_desc, add_on_descs,
+            common_item_descs, quote_library_context, group_name,
         ]
         for key, context in group_contexts.items():
             group_query_hints.append(key.replace("_", " "))
@@ -971,64 +1489,249 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
             elif isinstance(context, str) and context.strip():
                 group_query_hints.append(context)
 
-        rag_group_pdf_text, rag_group_context_note = build_retrieved_pdf_context(
-            full_pdf_text,
-            group_query_hints,
-            max_context_chars=60000,
-        )
+        # --- RAG: trim PDF per group ---
+        _rag_max = _safe_positive_int_env("LLM_RAG_MAX_CHARS_PER_GROUP", 40000)
+        if full_pdf_text and len(full_pdf_text) > _rag_max:
+            pdf_context, _rag_note = build_retrieved_pdf_context(
+                full_pdf_text, group_query_hints, max_context_chars=_rag_max,
+            )
+            print(f"  [RAG] Trimmed PDF from {len(full_pdf_text)} to {len(pdf_context)} chars")
+        else:
+            pdf_context = full_pdf_text or ""
 
-        # Use balanced context window (speed vs accuracy)
-        input_data = {
-            "machine_name": machine_name,
-            "full_pdf_text": f"{rag_group_context_note}\n{rag_group_pdf_text}",
-            "main_item_desc": main_item_desc,
-            "add_on_descs": add_on_descs,
-            "common_item_descs": common_item_descs,
-            "quote_library_context": quote_library_context or "No matching machine specs found in QUOTE_LIBRARY.",
-        }
+        # --- Build field listing (monolithic prompt style) ---
+        field_lines: List[str] = []
+        text_fields: List[tuple] = []
+        checkbox_fields: List[tuple] = []
+        for key, ctx in group_contexts.items():
+            is_checkbox = key.endswith("_check") or (
+                using_schema_format and isinstance(ctx, dict) and ctx.get("type") == "boolean"
+            )
+            if is_checkbox:
+                checkbox_fields.append((key, ctx))
+            else:
+                text_fields.append((key, ctx))
 
+        if text_fields:
+            field_lines.append("TEXT FIELDS (value should be the extracted text, or empty string \"\" if not found):")
+            for key, ctx in text_fields:
+                if isinstance(ctx, dict):
+                    desc = ctx.get("description", key)
+                    subsection = ctx.get("subsection", "")
+                    if subsection:
+                        field_lines.append(f"  - '{key}': [{subsection}] {desc}")
+                    else:
+                        field_lines.append(f"  - '{key}': {desc}")
+                else:
+                    field_lines.append(f"  - '{key}': {ctx}")
+
+        if checkbox_fields:
+            field_lines.append("\nCHECKBOX FIELDS (value MUST be \"YES\" or \"NO\"):")
+            for key, ctx in checkbox_fields:
+                if isinstance(ctx, dict):
+                    desc = ctx.get("description", key)
+                    subsection = ctx.get("subsection", "")
+                    synonyms = ctx.get("synonyms", [])
+                    pos_ind = ctx.get("positive_indicators", [])
+                    neg_ind = ctx.get("negative_indicators", [])
+                    extras = ""
+                    if synonyms:
+                        extras += f" [Alt: {', '.join(synonyms[:5])}]"
+                    if pos_ind and len(checkbox_fields) < 80:
+                        extras += f" [+: {', '.join(pos_ind[:3])}]"
+                    if neg_ind and len(checkbox_fields) < 80:
+                        extras += f" [-: {', '.join(neg_ind[:3])}]"
+                    if subsection:
+                        field_lines.append(f"  - '{key}': [{subsection}] {desc}{extras}")
+                    else:
+                        field_lines.append(f"  - '{key}': {desc}{extras}")
+                else:
+                    field_lines.append(f"  - '{key}': {ctx}")
+
+        fields_block = "\n".join(field_lines)
+
+        # --- Build the prompt (monolithic style — no Pydantic format instructions) ---
+        prompt_parts = [
+            f"You are an AI assistant extracting information from a packaging machinery quote PDF to fill the '{group_name}' section of a General Order Acknowledgement (GOA) form.",
+            "",
+            "MACHINE CONTEXT:",
+            f"  Machine Name: {machine_name}",
+            f"  Main Item: {main_item_desc}",
+            f"  Add-ons: {add_on_descs}",
+            f"  Common/Shared Items: {common_item_descs}",
+        ]
+        if quote_library_context:
+            prompt_parts.append(f"  QUOTE_LIBRARY Reference: {quote_library_context}")
+
+        prompt_parts.extend([
+            "",
+            "FULL PDF TEXT (search thoroughly — information may appear in any section):",
+            pdf_context,
+            "",
+            f"TEMPLATE FIELDS TO FILL FOR '{group_name}':",
+            fields_block,
+            "",
+            "EXTRACTION RULES:",
+            "- For CHECKBOX fields: Output \"YES\" if evidence exists in the PDF text, selected items, or add-on descriptions. Default to \"NO\" if not mentioned.",
+            "- For TEXT fields: Extract the value from the PDF. Use empty string \"\" if not found. Do NOT use null, \"N/A\", \"TBD\", or \"Not specified\".",
+            "- For COMMENT fields (field description contains 'Comment' or 'Comments'): these are user-entry fields. Always return empty string \"\".",
+            "- Pay attention to bundled features: if a machine description says 'Including: Feature X, Feature Y', mark those features as YES.",
+            "- If a PDF item is general (e.g., 'Three colours status beacon light') and the template has specific sub-features, mark ALL corresponding sub-features as YES.",
+            "- Search the ENTIRE PDF text — specifications may appear in different sections than expected.",
+            "- QUOTE_LIBRARY specs are reference only; if the PDF conflicts, prioritize the PDF.",
+            "",
+            "RESPONSE FORMAT:",
+            "Respond with a single valid JSON object. The keys MUST be ALL the template field keys listed above.",
+            "- Checkbox values: \"YES\" or \"NO\" (strings, never null)",
+            "- Text values: extracted string or \"\" (never null)",
+            "Do NOT omit any keys. Do NOT add extra keys.",
+            "",
+            "Your JSON Response:",
+        ])
+
+        # --- Enhance with few-shot examples ---
+        prompt_build_start = time.time()
+        if DISABLE_ALL_FEW_SHOT:
+            enhanced_prompt_parts = prompt_parts
+        elif ENHANCED_FEW_SHOT_AVAILABLE:
+            try:
+                enhanced_prompt_parts = enhance_prompt_with_semantic_examples(
+                    prompt_parts=prompt_parts,
+                    machine_data=machine_data,
+                    template_placeholder_contexts=group_contexts,
+                    common_items=common_items,
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=1,
+                )
+            except Exception:
+                enhanced_prompt_parts = prompt_parts
+        else:
+            try:
+                enhanced_prompt_parts = enhance_prompt_with_few_shot_examples(
+                    prompt_parts=prompt_parts,
+                    machine_data=machine_data,
+                    template_placeholder_contexts=group_contexts,
+                    common_items=common_items,
+                    full_pdf_text=full_pdf_text,
+                    max_examples_per_field=1,
+                )
+            except Exception:
+                enhanced_prompt_parts = prompt_parts
+
+        prompt = "\n".join(enhanced_prompt_parts)
+        prompt_build_time = time.time() - prompt_build_start
+        if not DISABLE_ALL_FEW_SHOT:
+            print(f"  Prompt built in {prompt_build_time:.1f}s")
+
+        print(f"  [DEBUG] pdf_context: {len(pdf_context)} chars, fields: {len(group_contexts)}")
+
+        # --- Call Gemini API directly (like the monolithic approach) ---
         try:
-            print(f"  Sending request to Gemini API (this may take 30-180s)...")
+            print(f"  Sending request to Gemini API...")
             api_start_time = time.time()
-            result = chain.invoke(input_data)
+            response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
             api_elapsed = time.time() - api_start_time
+
             if api_elapsed > 60:
                 print(f"  ⚠️  Response received in {api_elapsed:.1f}s (slower than usual)")
             else:
                 print(f"  ✓ Response received in {api_elapsed:.1f}s")
-            result_dict = result.dict()
 
-            # Process results for this group
-            for sanitized_name, value in result_dict.items():
-                original_name = name_mapping.get(sanitized_name, sanitized_name)
+            # --- Parse JSON response (monolithic style) ---
+            cleaned = response.text.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
 
-                is_checkbox = original_name.endswith("_check") or (
-                    using_schema_format and
-                    isinstance(template_placeholder_contexts.get(original_name), dict) and
-                    template_placeholder_contexts[original_name].get('type') == 'boolean'
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, dict):
+                print(f"  ⚠️  Response was not a JSON dict, got: {type(parsed)}")
+                parsed = {}
+
+            # Process results
+            for key, value in parsed.items():
+                if key not in group_contexts:
+                    continue
+                ctx = group_contexts[key]
+                is_checkbox = key.endswith("_check") or (
+                    using_schema_format and isinstance(ctx, dict) and ctx.get("type") == "boolean"
                 )
-
-                if value is None:
-                    all_extracted_data[original_name] = "NO" if is_checkbox else ""
-                elif is_checkbox:
-                    if isinstance(value, str) and value.upper() in ["YES", "TRUE", "1"]:
-                        all_extracted_data[original_name] = "YES"
+                if is_checkbox:
+                    if isinstance(value, str) and value.upper() in ("YES", "TRUE", "1"):
+                        all_extracted_data[key] = "YES"
                     elif isinstance(value, bool) and value:
-                        all_extracted_data[original_name] = "YES"
+                        all_extracted_data[key] = "YES"
                     else:
-                        all_extracted_data[original_name] = "NO"
+                        all_extracted_data[key] = "NO"
                 else:
-                    all_extracted_data[original_name] = str(value)
+                    all_extracted_data[key] = str(value) if value is not None else ""
 
+            # Fill any missing keys with defaults
+            for key in group_contexts:
+                if key not in all_extracted_data:
+                    is_checkbox = key.endswith("_check") or (
+                        using_schema_format and isinstance(group_contexts[key], dict)
+                        and group_contexts[key].get("type") == "boolean"
+                    )
+                    all_extracted_data[key] = "NO" if is_checkbox else ""
+
+            non_empty = sum(1 for k in group_contexts if all_extracted_data.get(k) not in (None, "", "NO"))
             group_total_time = time.time() - group_start_time
-            print(f"  ✓ Group completed in {group_total_time:.1f}s total")
+            print(f"  ✓ Group completed in {group_total_time:.1f}s ({non_empty}/{len(group_contexts)} fields filled)")
 
-        except Exception as e:
-            print(f"Error during extraction for group {group_name}: {e}")
-            # Fill missing fields with defaults for this group
+        except json.JSONDecodeError as e:
+            print(f"  ⚠️  JSON parse error: {e}")
+            print(f"  Response text (first 300 chars): {repr(response.text[:300])}")
+            # Retry once
+            try:
+                print(f"  Retrying group {group_name}...")
+                response = GENERATIVE_MODEL.generate_content(prompt, safety_settings=safety_settings)
+                cleaned = response.text.strip()
+                if cleaned.startswith("```json"):
+                    cleaned = cleaned[7:]
+                if cleaned.startswith("```"):
+                    cleaned = cleaned[3:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                parsed = json.loads(cleaned.strip())
+                if isinstance(parsed, dict):
+                    for key, value in parsed.items():
+                        if key not in group_contexts:
+                            continue
+                        ctx = group_contexts[key]
+                        is_checkbox = key.endswith("_check") or (
+                            using_schema_format and isinstance(ctx, dict) and ctx.get("type") == "boolean"
+                        )
+                        if is_checkbox:
+                            all_extracted_data[key] = "YES" if (isinstance(value, str) and value.upper() in ("YES", "TRUE", "1")) else "NO"
+                        else:
+                            all_extracted_data[key] = str(value) if value is not None else ""
+                    print(f"  ✓ Retry succeeded")
+            except Exception as retry_err:
+                print(f"  ✗ Retry also failed: {retry_err}")
+
+            # Fill missing with defaults
             for key in group_contexts:
                 if key not in all_extracted_data:
                     all_extracted_data[key] = "NO" if key.endswith("_check") else ""
+
+        except Exception as e:
+            print(f"  Error during extraction for group {group_name}: {e}")
+            for key in group_contexts:
+                if key not in all_extracted_data:
+                    all_extracted_data[key] = "NO" if key.endswith("_check") else ""
+
+    # Warn if extraction looks empty
+    total_fields = len(all_extracted_data)
+    filled_fields = sum(1 for v in all_extracted_data.values() if v not in (None, "", "NO"))
+    fill_pct = (filled_fields / total_fields * 100) if total_fields else 0
+    print(f"\n--- Extraction summary: {filled_fields}/{total_fields} fields filled ({fill_pct:.0f}%) ---")
+    if fill_pct < 5:
+        print("  ⚠️  WARNING: Almost no fields were extracted! The LLM may not be processing the PDF content.")
 
     # 3. Apply post-processing rules to the combined data
     print("\nApplying post-processing rules to combined data...")

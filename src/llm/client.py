@@ -2,8 +2,8 @@
 LLM Client Configuration Module
 
 This module handles LLM client initialization and configuration for the QuoteFlow Document Assistant.
-It provides functions to configure the Google Gemini client, check model usage, and access the
-generative model instance.
+It provides functions to configure the Gemini client, check model usage, and access
+the generative model instance.
 
 Key Functions:
 - configure_gemini_client(): Initializes the Gemini API client with API key from .env
@@ -136,6 +136,7 @@ genai = _GenAICompatNamespace()
 
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
+MODEL_CACHE: dict[str, Any] = {}
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
 MODEL_NAME_ENV_VAR = "GOA_LLM_MODEL"
 
@@ -150,6 +151,15 @@ def get_configured_model_name() -> str:
     return configured_name or DEFAULT_GEMINI_MODEL
 
 
+def _create_model(model_name: str) -> Any | None:
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        print("Error: GOOGLE_API_KEY not found in .env file or environment variables.")
+        return None
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(model_name)
+
+
 def configure_gemini_client():
     """
     Loads the API key from .env and configures the Gemini client.
@@ -161,19 +171,13 @@ def configure_gemini_client():
 
     try:
         load_dotenv() # Load environment variables from .env file
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            print("Error: GOOGLE_API_KEY not found in .env file or environment variables.")
-            return False
-
-        # Choose model (locked/pinned via config default).
         model_name = get_configured_model_name()
         print(f"Initializing Gemini with model: {model_name}")
-
-        genai.configure(api_key=api_key)
-        GENERATIVE_MODEL = genai.GenerativeModel(model_name)
-
-        # Print model details to verify
+        model = _create_model(model_name)
+        if model is None:
+            return False
+        GENERATIVE_MODEL = model
+        MODEL_CACHE[model_name] = model
         print(f"Gemini client configured successfully with model: {model_name}")
 
         return True
@@ -215,7 +219,7 @@ def check_model_usage():
         traceback.print_exc()
 
 
-def get_generative_model():
+def get_generative_model(model_name_override: str | None = None):
     """
     Returns the configured generative model instance.
     Initializes the client if not already configured.
@@ -224,7 +228,27 @@ def get_generative_model():
         The configured GenerativeModel instance, or None if configuration fails.
     """
     global GENERATIVE_MODEL
-    if GENERATIVE_MODEL is None:
-        if not configure_gemini_client():
-            return None
-    return GENERATIVE_MODEL
+    requested_model_name = str(model_name_override or "").strip()
+    if not requested_model_name:
+        if GENERATIVE_MODEL is None:
+            if not configure_gemini_client():
+                return None
+        return GENERATIVE_MODEL
+
+    if requested_model_name in MODEL_CACHE:
+        return MODEL_CACHE[requested_model_name]
+
+    if GENERATIVE_MODEL is None and not configure_gemini_client():
+        return None
+
+    load_dotenv()
+    try:
+        model = _create_model(requested_model_name)
+    except Exception as model_error:
+        print(f"Error creating model '{requested_model_name}': {model_error}")
+        return None
+    if model is None:
+        return None
+
+    MODEL_CACHE[requested_model_name] = model
+    return model

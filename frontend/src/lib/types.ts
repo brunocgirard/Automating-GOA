@@ -47,6 +47,30 @@ export interface ExtractionResult {
   filled_data: Record<string, string>;
   confidence_scores: Record<string, number>;
   suggestions: Array<Record<string, unknown>>;
+  metadata?: {
+    pipeline_version?: string;
+    pass1_model?: string;
+    pass2_model?: string;
+    fields_total?: number;
+    fields_pass1_attempted?: number;
+    fields_pass2_attempted?: number;
+    fields_filled_final?: number;
+    low_confidence_count?: number;
+    timing_ms?: {
+      pass1?: number | null;
+      pass2?: number | null;
+      total?: number | null;
+    } | null;
+    prompt_chars_estimate?: {
+      pass1?: number | null;
+      pass2?: number | null;
+      total?: number | null;
+    } | null;
+    critical_text_forced_pass2_count?: number;
+    critical_text_overrides_applied?: number;
+    critical_text_no_evidence_blanked?: number;
+    critical_text_targets?: string[];
+  } | null;
 }
 
 export type ProcessingStep =

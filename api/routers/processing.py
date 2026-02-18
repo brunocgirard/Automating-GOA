@@ -612,6 +612,7 @@ def extract_machine_fields(payload: ExtractionRequest) -> dict:
         "filled_data": result["filled_data"],
         "confidence_scores": result["confidence_scores"],
         "suggestions": result["suggestions"],
+        "metadata": result.get("metadata"),
     }
 
 

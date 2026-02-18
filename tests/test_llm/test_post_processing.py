@@ -1,7 +1,7 @@
 """
 Unit tests for the post-processing module (src/llm/post_processing.py).
 
-This module tests all 11 core correction rules and the zero-evidence check:
+This module tests all 12 core correction rules and the zero-evidence check:
 1. Checkbox value normalization (YES/NO casing)
 2. HMI size mutual exclusivity
 3. PLC type mutual exclusivity
@@ -13,7 +13,8 @@ This module tests all 11 core correction rules and the zero-evidence check:
 9. Cross-field validation (filling system)
 10. Explosion proof consistency
 11. SortStar basic configuration mutual exclusivity
-12. Zero-evidence check for checkbox fields
+12. Comment fields are user-owned (cleared for manual entry)
+13. Zero-evidence check for checkbox fields
 """
 
 import pytest
@@ -343,6 +344,43 @@ class TestSortStarBasicConfigExclusivity:
         assert result["bs_984_check"] == "YES"
         assert result["bs_1230_check"] == "NO"
         assert result["bs_985_check"] == "NO"
+
+
+class TestCommentFieldGovernance:
+    """Test Rule 12: Comment fields should remain user-owned."""
+
+    def test_comment_fields_are_cleared(self):
+        field_data = {
+            "rj_comm": "Include travel costs and payment terms",
+            "ci_vcom": "Use vision camera with 2.5 mm tolerance",
+            "customer_name": "ACME Pharma",
+        }
+        template_schema = {
+            "rj_comm": {"type": "string", "description": "Reject / Inspection System - comments"},
+            "ci_vcom": {"type": "string", "description": "Coding and Inspection System Specifications - Vision - comment"},
+            "customer_name": {"type": "string", "description": "Customer Name"},
+        }
+
+        result = apply_post_processing_rules(field_data, template_schema, "", [])
+
+        assert result["rj_comm"] == ""
+        assert result["ci_vcom"] == ""
+        assert result["customer_name"] == "ACME Pharma"
+
+    def test_startup_commissioning_text_field_is_not_treated_as_comment(self):
+        field_data = {
+            "stpc_yes": "5 working days",
+        }
+        template_schema = {
+            "stpc_yes": {
+                "type": "string",
+                "description": "Warranty & Install & Spares - Start-up commissioning - yes – # of days",
+            },
+        }
+
+        result = apply_post_processing_rules(field_data, template_schema, "", [])
+
+        assert result["stpc_yes"] == "5 working days"
 
 
 class TestZeroEvidenceCheck:

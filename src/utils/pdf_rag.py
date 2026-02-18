@@ -90,6 +90,26 @@ def chunk_text(
     return chunks if chunks else [text[:chunk_size]]
 
 
+def prepare_pdf_rag_chunks(
+    full_pdf_text: str,
+    *,
+    chunk_size: int = 1600,
+    chunk_overlap: int = 220,
+    max_chunks: int = 400,
+) -> list[str]:
+    """
+    Precompute chunks once and reuse them across multiple retrieval calls.
+    """
+    if not full_pdf_text:
+        return []
+    return chunk_text(
+        full_pdf_text,
+        chunk_size=chunk_size,
+        overlap=chunk_overlap,
+        max_chunks=max_chunks,
+    )
+
+
 def build_retrieved_pdf_context(
     full_pdf_text: str,
     query_hints: Sequence[str] | None = None,
@@ -102,6 +122,10 @@ def build_retrieved_pdf_context(
     include_first_chunk: bool = True,
     include_last_chunk: bool = True,
     chunk_separator: str = CHUNK_SEPARATOR,
+    precomputed_chunks: Sequence[str] | None = None,
+    primary_query_hints: Sequence[str] | None = None,
+    secondary_query_hints: Sequence[str] | None = None,
+    weighted_hints_enabled: bool | None = None,
 ) -> tuple[str, str]:
     """
     Retrieve relevant PDF text chunks within a fixed character budget.
@@ -123,7 +147,7 @@ def build_retrieved_pdf_context(
             f"[Full PDF text included ({len(full_pdf_text)} chars).]",
         )
 
-    chunks = chunk_text(
+    chunks = list(precomputed_chunks) if precomputed_chunks is not None else chunk_text(
         full_pdf_text,
         chunk_size=chunk_size,
         overlap=chunk_overlap,
@@ -134,14 +158,10 @@ def build_retrieved_pdf_context(
         return fallback, f"[Fallback context used ({len(fallback)} chars).]"
 
     normalized_hints = _normalize_hints(query_hints or [])
-    terms = _extract_terms(normalized_hints)
-    phrases = _extract_phrases(normalized_hints)
-
-    scored_chunks = [
-        (index, _score_chunk(chunk, terms, phrases, normalized_hints))
-        for index, chunk in enumerate(chunks)
-    ]
-    scored_chunks.sort(key=lambda item: item[1], reverse=True)
+    normalized_primary_hints = _normalize_hints(primary_query_hints or [])
+    normalized_secondary_hints = _normalize_hints(secondary_query_hints or [])
+    if weighted_hints_enabled is None:
+        weighted_hints_enabled = bool(normalized_primary_hints or normalized_secondary_hints)
 
     selected_indexes: list[int] = []
     selected_set: set[int] = set()
@@ -169,12 +189,86 @@ def build_retrieved_pdf_context(
     if include_last_chunk and len(chunks) > 1:
         add_chunk(len(chunks) - 1)
 
-    for index, score in scored_chunks:
-        if len(selected_indexes) >= max_selected_chunks:
-            break
-        if score <= 0 and selected_indexes:
-            continue
-        add_chunk(index)
+    if weighted_hints_enabled:
+        if not normalized_primary_hints and normalized_hints:
+            normalized_primary_hints = list(normalized_hints)
+        if not normalized_secondary_hints:
+            normalized_secondary_hints = list(normalized_hints)
+
+        primary_terms = _extract_terms(normalized_primary_hints)
+        primary_phrases = _extract_phrases(normalized_primary_hints)
+        secondary_terms = _extract_terms(normalized_secondary_hints)
+        secondary_phrases = _extract_phrases(normalized_secondary_hints)
+
+        primary_scored = [
+            (
+                index,
+                _score_chunk(
+                    chunk,
+                    primary_terms,
+                    primary_phrases,
+                    normalized_primary_hints,
+                    term_weight=2.8,
+                    phrase_weight=6.0,
+                    hint_weight=10.0,
+                ),
+            )
+            for index, chunk in enumerate(chunks)
+        ]
+        primary_scored.sort(key=lambda item: item[1], reverse=True)
+
+        secondary_scored = [
+            (
+                index,
+                _score_chunk(
+                    chunk,
+                    secondary_terms,
+                    secondary_phrases,
+                    normalized_secondary_hints,
+                    term_weight=1.6,
+                    phrase_weight=3.5,
+                    hint_weight=4.0,
+                ),
+            )
+            for index, chunk in enumerate(chunks)
+        ]
+        secondary_scored.sort(key=lambda item: item[1], reverse=True)
+
+        primary_budget = max(1200, int(max_context_chars * 0.62))
+        primary_chars = 0
+
+        for index, score in primary_scored:
+            if len(selected_indexes) >= max_selected_chunks:
+                break
+            if score <= 0 and selected_indexes:
+                continue
+            before = total_chars
+            if add_chunk(index):
+                primary_chars += total_chars - before
+                if primary_chars >= primary_budget:
+                    break
+
+        for index, score in secondary_scored:
+            if len(selected_indexes) >= max_selected_chunks:
+                break
+            if score <= 0 and selected_indexes:
+                continue
+            add_chunk(index)
+    else:
+        terms = _extract_terms(normalized_hints)
+        phrases = _extract_phrases(normalized_hints)
+        scored_chunks = [
+            (index, _score_chunk(chunk, terms, phrases, normalized_hints))
+            for index, chunk in enumerate(chunks)
+        ]
+        scored_chunks.sort(key=lambda item: item[1], reverse=True)
+
+        for index, score in scored_chunks:
+            if len(selected_indexes) >= max_selected_chunks:
+                break
+            if score <= 0 and selected_indexes:
+                continue
+            add_chunk(index)
 
     # If scoring didn't pick useful chunks, fill from the start.
     if not selected_indexes:
@@ -191,7 +285,8 @@ def build_retrieved_pdf_context(
 
     note = (
         f"[RAG context: selected {len(selected_indexes)}/{len(chunks)} chunks, "
-        f"{len(context)} chars from {len(full_pdf_text)} total.]"
+        f"{len(context)} chars from {len(full_pdf_text)} total"
+        f"{'; weighted hints' if weighted_hints_enabled else ''}.]"
     )
     return context, note
 
@@ -231,7 +326,16 @@ def _extract_phrases(hints: Sequence[str]) -> list[str]:
     return phrases[:30]
 
 
-def _score_chunk(chunk: str, terms: Sequence[str], phrases: Sequence[str], hints: Sequence[str]) -> float:
+def _score_chunk(
+    chunk: str,
+    terms: Sequence[str],
+    phrases: Sequence[str],
+    hints: Sequence[str],
+    *,
+    term_weight: float = 2.0,
+    phrase_weight: float = 4.0,
+    hint_weight: float = 8.0,
+) -> float:
     if not chunk:
         return 0.0
 
@@ -241,16 +345,16 @@ def _score_chunk(chunk: str, terms: Sequence[str], phrases: Sequence[str], hints
     for term in terms:
         term_count = chunk_lower.count(term)
         if term_count:
-            score += min(term_count, 4) * 2.0
+            score += min(term_count, 4) * term_weight
 
     for phrase in phrases:
         phrase_count = chunk_lower.count(phrase)
         if phrase_count:
-            score += min(phrase_count, 3) * 4.0
+            score += min(phrase_count, 3) * phrase_weight
 
     for hint in hints:
         if len(hint) >= 12 and hint in chunk_lower:
-            score += 8.0
+            score += hint_weight
 
     # Slight preference for denser chunks.
     return score / (1.0 + (len(chunk) / 1000.0))

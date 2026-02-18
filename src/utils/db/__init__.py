@@ -98,6 +98,12 @@ from .shipping import (
     save_shipping_document,
 )
 
+# COR document workflow operations
+from .cor import (
+    load_cor_document,
+    save_cor_document,
+)
+
 # Few-shot learning operations
 from .few_shot import (
     save_few_shot_example,
@@ -161,6 +167,10 @@ __all__ = [
     # Shipping workflow operations
     'load_shipping_document',
     'save_shipping_document',
+
+    # COR workflow operations
+    'load_cor_document',
+    'save_cor_document',
 
     # Few-shot learning operations
     'save_few_shot_example',

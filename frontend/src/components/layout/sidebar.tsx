@@ -25,6 +25,7 @@ const navItems = [
   { href: "/client-info", label: "Client Info", icon: UserRound },
   { href: "/processing", label: "Processing", icon: Cog },
   { href: "/shipping-documents", label: "Shipping Docs", icon: Files },
+  { href: "/cor-documents", label: "COR Docs", icon: Files },
   { href: "/reports", label: "Reports", icon: FileText },
 ];
 

@@ -110,11 +110,19 @@ from .post_processing import (
 
 # Extraction
 from .extraction import (
+    ExtractionPassOptions,
+    extract_machine_fields_with_options,
+    select_repair_field_contexts,
     get_all_fields_via_llm,
     get_llm_chat_update,
     map_crm_to_document_via_llm,
     get_machine_specific_fields_via_llm,
     get_machine_specific_fields_with_confidence,
+)
+
+# Critical text resolver
+from .critical_text_resolver import (
+    resolve_critical_text_fields,
 )
 
 # Question answering
@@ -154,11 +162,15 @@ __all__ = [
     "apply_post_processing_rules",
 
     # Extraction (core functions)
+    "ExtractionPassOptions",
+    "extract_machine_fields_with_options",
+    "select_repair_field_contexts",
     "get_all_fields_via_llm",
     "get_llm_chat_update",
     "map_crm_to_document_via_llm",
     "get_machine_specific_fields_via_llm",
     "get_machine_specific_fields_with_confidence",
+    "resolve_critical_text_fields",
 
     # Question answering
     "answer_pdf_question",

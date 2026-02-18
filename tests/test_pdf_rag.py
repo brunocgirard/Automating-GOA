@@ -49,3 +49,41 @@ def test_chunk_text_obeys_max_chunks() -> None:
     text = "A" * 10000
     chunks = chunk_text(text, chunk_size=1000, overlap=100, max_chunks=3)
     assert len(chunks) == 3
+
+
+def test_weighted_hints_recover_direction_chunk_from_primary_signals() -> None:
+    noisy_chunk = (
+        "Labelling machine model monostar pharma for stable base container "
+        "coming from motorized conveyor with indexing system and change parts. "
+    ) * 70
+    direction_chunk = (
+        "Equipment General Specification. Conveyor and Compress Air details. "
+        "Line Direction is From left to Right. Power 220 Volts, 3 Phases, 60/50 Hz."
+    )
+    text = f"{noisy_chunk}\n\n{noisy_chunk}\n\n{direction_chunk}\n\n{noisy_chunk}"
+
+    # Without weighted primary hints, noise-heavy machine context dominates.
+    unweighted_context, _ = build_retrieved_pdf_context(
+        text,
+        query_hints=["monostar pharma", "stable base container", "motorized conveyor"],
+        max_context_chars=4200,
+        chunk_size=900,
+        chunk_overlap=120,
+        include_last_chunk=False,
+        weighted_hints_enabled=False,
+    )
+
+    weighted_context, _ = build_retrieved_pdf_context(
+        text,
+        query_hints=["monostar pharma", "stable base container", "motorized conveyor"],
+        primary_query_hints=["line direction", "from left to right", "60/50 hz", "220 volts"],
+        secondary_query_hints=["monostar pharma", "stable base container", "motorized conveyor"],
+        max_context_chars=4200,
+        chunk_size=900,
+        chunk_overlap=120,
+        include_last_chunk=False,
+        weighted_hints_enabled=True,
+    )
+
+    assert "from left to right" not in unweighted_context.lower()
+    assert "from left to right" in weighted_context.lower()

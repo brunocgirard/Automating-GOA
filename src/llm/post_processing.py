@@ -12,8 +12,44 @@ The post-processing pipeline runs after LLM extraction to catch common errors
 and enforce business rules that are difficult to capture in prompts alone.
 """
 
-import re
 from typing import Dict, List
+
+
+def _is_comment_field(field_name: str, template_schema: Dict[str, Dict]) -> bool:
+    """Check if a field is a comment/comments field by its schema description."""
+    if field_name.endswith("_check"):
+        return False
+    schema_entry = template_schema.get(field_name)
+    if isinstance(schema_entry, dict):
+        desc = str(schema_entry.get("description", "")).lower()
+        return "comment" in desc
+    if isinstance(schema_entry, str):
+        return "comment" in schema_entry.lower()
+    # Fallback: common comment field name patterns
+    return field_name in ("rj_comm", "ci_vcom") or field_name.endswith("_comm") or field_name.endswith("_comment")
+
+
+def _clear_comment_fields(field_data: Dict[str, str], template_schema: Dict[str, Dict]) -> Dict[str, str]:
+    """
+    Keep comment fields user-owned by clearing LLM-generated content.
+
+    Explicit deterministic logic may set these later in the pipeline, but generic
+    LLM extraction should not prefill comment/comment(s) fields.
+    """
+    sanitized = field_data.copy()
+    cleared_count = 0
+
+    for field_name in field_data:
+        if not _is_comment_field(field_name, template_schema):
+            continue
+        if sanitized.get(field_name) != "":
+            sanitized[field_name] = ""
+            cleared_count += 1
+
+    if cleared_count:
+        print(f"Cleared {cleared_count} comment field(s) for manual user entry.")
+
+    return sanitized
 
 
 def _zero_evidence_check(field_data: Dict[str, str], template_schema: Dict[str, Dict], full_pdf_text: str, selected_pdf_descriptions: List[str]) -> Dict[str, str]:
@@ -54,7 +90,7 @@ def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dic
     """
     Applies domain-specific rules and a zero-evidence check to correct and improve LLM-generated field values.
 
-    This function implements 11 core correction rules:
+    This function implements 12 core correction rules:
     1. Checkbox value normalization (YES/NO casing)
     2. HMI size mutual exclusivity (only one size allowed)
     3. PLC type mutual exclusivity (only one type allowed)
@@ -66,6 +102,7 @@ def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dic
     9. Cross-field validation (filling system implies filling type)
     10. Explosion proof consistency (pneumatic components)
     11. SortStar basic configuration mutual exclusivity
+    12. Comment fields are cleared for manual user entry
 
     After applying these rules, performs a zero-evidence check to verify all
     YES checkboxes have supporting evidence in the source text.
@@ -315,6 +352,9 @@ def apply_post_processing_rules(field_data: Dict[str, str], template_schema: Dic
             # That level of correction would require more context (knowing for sure it's a SortStar and which one).
             # For now, we just ensure there isn't *more than one* YES.
             pass
+
+    # Rule 12: Leave comment fields blank for manual user entry.
+    corrected_data = _clear_comment_fields(corrected_data, template_schema)
 
     # Final step: Perform a zero-evidence check to catch any remaining false positives
     final_verified_data = _zero_evidence_check(corrected_data, template_schema, full_pdf_text, selected_pdf_descriptions)

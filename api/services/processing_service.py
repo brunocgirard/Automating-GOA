@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,18 @@ from src.utils.db import (
 from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.form_generator import OUTPUT_HTML_PATH, extract_schema_from_excel, generate_goa_form
 from src.utils.html_doc_filler import fill_and_generate_html
-from src.llm import configure_gemini_client, get_machine_specific_fields_with_confidence
+from src.llm import (
+    ExtractionPassOptions,
+    apply_post_processing_rules,
+    configure_gemini_client,
+    estimate_extraction_confidence,
+    extract_machine_fields_with_options,
+    get_machine_specific_fields_with_confidence,
+    resolve_critical_text_fields,
+    sanitize_extracted_fields,
+    select_repair_field_contexts,
+    validate_field_dependencies,
+)
 from src.utils.machine_type import is_sortstar_machine
 from src.utils.pdf_utils import extract_full_pdf_text, extract_line_item_details, identify_machines_from_items
 
@@ -46,6 +58,33 @@ def _resolve_existing_template_path(candidates: tuple[str, ...]) -> str:
 
 
 SORTSTAR_TEMPLATE_FILE = _resolve_existing_template_path(SORTSTAR_TEMPLATE_CANDIDATES)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = str(os.getenv(name, "")).strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _env_positive_int(name: str, default: int, *, min_value: int = 1) -> int:
+    raw = str(os.getenv(name, "")).strip()
+    if not raw:
+        return default
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return default
+    return max(min_value, parsed)
+
+
+def _env_csv(name: str, default: list[str]) -> list[str]:
+    raw = str(os.getenv(name, "")).strip()
+    if not raw:
+        return list(default)
+    values = [value.strip() for value in raw.split(",")]
+    cleaned = [value for value in values if value]
+    return cleaned or list(default)
 
 
 def _template_config(machine_name: str) -> dict[str, Any]:
@@ -172,7 +211,28 @@ def run_extraction(
     template_contexts: dict[str, Any] | None,
     full_pdf_text: str,
 ) -> dict[str, Any]:
-    """Run LLM extraction and return structured data without session state."""
+    """Run extraction via V2 two-pass pipeline or legacy fallback."""
+    if _env_flag("EXTRACTION_FULL_PREFILL_V2_ENABLED", default=False):
+        return run_extraction_v2_full_prefill(
+            machine_data=machine_data,
+            common_items=common_items,
+            template_contexts=template_contexts,
+            full_pdf_text=full_pdf_text,
+        )
+    return _run_extraction_legacy(
+        machine_data=machine_data,
+        common_items=common_items,
+        template_contexts=template_contexts,
+        full_pdf_text=full_pdf_text,
+    )
+
+
+def _run_extraction_legacy(
+    machine_data: dict[str, Any],
+    common_items: list[dict[str, Any]],
+    template_contexts: dict[str, Any] | None,
+    full_pdf_text: str,
+) -> dict[str, Any]:
     if not configure_gemini_client():
         raise RuntimeError("Gemini client configuration failed.")
 
@@ -193,6 +253,243 @@ def run_extraction(
         "filled_data": filled_data,
         "confidence_scores": confidence_scores,
         "suggestions": suggestions,
+        "metadata": {
+            "pipeline_version": "legacy_v1",
+            "fields_total": len(contexts),
+            "fields_pass1_attempted": len(contexts),
+            "fields_pass2_attempted": 0,
+            "fields_filled_final": sum(1 for value in filled_data.values() if str(value).strip().upper() not in {"", "NO"}),
+            "low_confidence_count": sum(1 for value in confidence_scores.values() if float(value) < 0.6),
+            "timing_ms": {"pass1": None, "pass2": 0, "total": None},
+            "prompt_chars_estimate": {"pass1": None, "pass2": 0, "total": None},
+            "critical_text_forced_pass2_count": 0,
+            "critical_text_overrides_applied": 0,
+            "critical_text_no_evidence_blanked": 0,
+            "critical_text_targets": [],
+        },
+    }
+
+
+def _build_selected_pdf_descriptions(
+    machine_data: dict[str, Any],
+    common_items: list[dict[str, Any]],
+) -> list[str]:
+    selected_descriptions: list[str] = []
+    main_item_desc = machine_data.get("main_item", {}).get("description", "")
+    if main_item_desc:
+        selected_descriptions.append(main_item_desc)
+    selected_descriptions.extend(
+        item.get("description", "")
+        for item in machine_data.get("add_ons", []) or []
+        if item.get("description")
+    )
+    selected_descriptions.extend(
+        item.get("description", "")
+        for item in common_items
+        if item.get("description")
+    )
+    return selected_descriptions
+
+
+def run_extraction_v2_full_prefill(
+    machine_data: dict[str, Any],
+    common_items: list[dict[str, Any]],
+    template_contexts: dict[str, Any] | None,
+    full_pdf_text: str,
+) -> dict[str, Any]:
+    """Two-pass full-template prefill (fast pass + auto-repair pass)."""
+    if not configure_gemini_client():
+        raise RuntimeError("Gemini client configuration failed.")
+
+    contexts = template_contexts or {}
+    if not contexts:
+        contexts, _, _ = get_contexts_for_machine(machine_data)
+    if not contexts:
+        raise RuntimeError("No template contexts could be loaded for machine extraction.")
+
+    effective_common_items = common_items or machine_data.get("common_items", []) or []
+    total_start = time.time()
+    weighted_hints_enabled = _env_flag("LLM_RAG_WEIGHTED_HINTS_ENABLED", default=True)
+    force_critical_pass2 = _env_flag("LLM_FORCE_PASS2_CRITICAL_TEXT", default=True)
+    critical_text_targets = _env_csv(
+        "LLM_CRITICAL_TEXT_TAGS",
+        ["direction", "voltage", "hz", "phases"],
+    )
+    resolver_enabled = _env_flag("LLM_CRITICAL_TEXT_RESOLVER_ENABLED", default=True)
+
+    pass1_model = os.getenv("GOA_LLM_MODEL_DRAFT", "gemini-2.5-flash-lite")
+    pass2_model = os.getenv("GOA_LLM_MODEL_DEEP", "gemini-2.5-flash")
+    pass1_options = ExtractionPassOptions(
+        pass_name="pass1_fast_prefill",
+        model_name=pass1_model,
+        rag_max_chars=_env_positive_int("LLM_PASS1_RAG_MAX_CHARS", 12000, min_value=4000),
+        max_fields_per_group=_env_positive_int("LLM_PASS1_GROUP_MAX_FIELDS", 60, min_value=20),
+        enable_few_shot=False,
+        enable_quote_library=False,
+        compact_prompt=True,
+        concurrency=_env_positive_int("LLM_EXTRACTION_MAX_CONCURRENCY", 3, min_value=1),
+        max_examples_per_field=0,
+        max_checkbox_synonyms=2,
+        max_checkbox_indicators=1,
+        use_weighted_rag=weighted_hints_enabled,
+    )
+    pass2_options = ExtractionPassOptions(
+        pass_name="pass2_auto_repair",
+        model_name=pass2_model,
+        rag_max_chars=_env_positive_int("LLM_PASS2_RAG_MAX_CHARS", 22000, min_value=6000),
+        max_fields_per_group=_env_positive_int("LLM_PASS2_GROUP_MAX_FIELDS", 35, min_value=10),
+        enable_few_shot=True,
+        enable_quote_library=True,
+        compact_prompt=True,
+        concurrency=_env_positive_int("LLM_EXTRACTION_MAX_CONCURRENCY", 3, min_value=1),
+        max_examples_per_field=1,
+        max_checkbox_synonyms=3,
+        max_checkbox_indicators=2,
+        use_weighted_rag=weighted_hints_enabled,
+    )
+
+    pass1_data, pass1_metrics = extract_machine_fields_with_options(
+        machine_data=machine_data,
+        common_items=effective_common_items,
+        template_placeholder_contexts=contexts,
+        full_pdf_text=full_pdf_text,
+        pass_options=pass1_options,
+    )
+
+    pass1_confidence = estimate_extraction_confidence(
+        extracted_data=pass1_data,
+        template_contexts=contexts,
+        full_pdf_text=full_pdf_text,
+        machine_data=machine_data,
+        common_items=effective_common_items,
+    )
+    _, pass1_conf_validated, dependency_suggestions = validate_field_dependencies(
+        extracted_data=pass1_data,
+        confidence_scores=pass1_confidence,
+    )
+    baseline_repair_contexts = select_repair_field_contexts(
+        extracted_data=pass1_data,
+        confidence_scores=pass1_conf_validated,
+        template_placeholder_contexts=contexts,
+        text_confidence_threshold=0.72,
+        checkbox_yes_confidence_threshold=0.80,
+        dependency_suggestions=dependency_suggestions,
+    )
+    repair_contexts = baseline_repair_contexts
+    if force_critical_pass2:
+        repair_contexts = select_repair_field_contexts(
+            extracted_data=pass1_data,
+            confidence_scores=pass1_conf_validated,
+            template_placeholder_contexts=contexts,
+            text_confidence_threshold=0.72,
+            checkbox_yes_confidence_threshold=0.80,
+            dependency_suggestions=dependency_suggestions,
+            force_critical_text_fields=True,
+            forced_semantic_tags=critical_text_targets,
+        )
+    forced_pass2_fields = set(repair_contexts.keys()) - set(baseline_repair_contexts.keys())
+
+    pass2_data: dict[str, str] = {}
+    pass2_metrics: dict[str, Any] = {
+        "duration_ms": 0,
+        "prompt_chars_estimate": 0,
+        "fields_attempted": 0,
+        "groups_processed": 0,
+        "model_name": pass2_model,
+    }
+    if repair_contexts:
+        pass2_data, pass2_metrics = extract_machine_fields_with_options(
+            machine_data=machine_data,
+            common_items=effective_common_items,
+            template_placeholder_contexts=repair_contexts,
+            full_pdf_text=full_pdf_text,
+            pass_options=pass2_options,
+        )
+
+    merged_data = dict(pass1_data)
+    merged_data.update(pass2_data)
+
+    selected_pdf_descriptions = _build_selected_pdf_descriptions(machine_data, effective_common_items)
+    post_processed_data = apply_post_processing_rules(
+        merged_data,
+        contexts,
+        full_pdf_text,
+        selected_pdf_descriptions,
+    )
+    resolver_metrics: dict[str, Any] = {
+        "critical_text_overrides_applied": 0,
+        "critical_text_no_evidence_blanked": 0,
+    }
+    resolved_data = post_processed_data
+    if resolver_enabled:
+        resolved_data, resolver_metrics = resolve_critical_text_fields(
+            extracted_data=post_processed_data,
+            template_contexts=contexts,
+            full_pdf_text=full_pdf_text,
+            target_tags=critical_text_targets,
+            blank_direction_without_evidence=True,
+        )
+    sanitized_data, schema_notes = sanitize_extracted_fields(
+        extracted_data=resolved_data,
+        expected_schema=contexts,
+    )
+    final_confidence = estimate_extraction_confidence(
+        extracted_data=sanitized_data,
+        template_contexts=contexts,
+        full_pdf_text=full_pdf_text,
+        machine_data=machine_data,
+        common_items=effective_common_items,
+    )
+    final_data, final_confidence, final_suggestions = validate_field_dependencies(
+        extracted_data=sanitized_data,
+        confidence_scores=final_confidence,
+    )
+
+    if schema_notes:
+        for field_name, notes in schema_notes.items():
+            final_suggestions.append(
+                {
+                    "field": field_name,
+                    "reason": "; ".join(notes),
+                    "type": "info",
+                }
+            )
+
+    total_ms = int((time.time() - total_start) * 1000)
+    fields_filled_final = sum(
+        1 for value in final_data.values() if str(value).strip().upper() not in {"", "NO"}
+    )
+    low_confidence_count = sum(1 for value in final_confidence.values() if float(value) < 0.6)
+    metadata = {
+        "pipeline_version": "v2_full_prefill",
+        "pass1_model": pass1_metrics.get("model_name", pass1_model),
+        "pass2_model": pass2_metrics.get("model_name", pass2_model),
+        "fields_total": len(contexts),
+        "fields_pass1_attempted": pass1_metrics.get("fields_attempted", len(contexts)),
+        "fields_pass2_attempted": pass2_metrics.get("fields_attempted", len(repair_contexts)),
+        "fields_filled_final": fields_filled_final,
+        "low_confidence_count": low_confidence_count,
+        "timing_ms": {
+            "pass1": pass1_metrics.get("duration_ms", 0),
+            "pass2": pass2_metrics.get("duration_ms", 0),
+            "total": total_ms,
+        },
+        "prompt_chars_estimate": {
+            "pass1": pass1_metrics.get("prompt_chars_estimate", 0),
+            "pass2": pass2_metrics.get("prompt_chars_estimate", 0),
+            "total": int(pass1_metrics.get("prompt_chars_estimate", 0))
+            + int(pass2_metrics.get("prompt_chars_estimate", 0)),
+        },
+        "critical_text_forced_pass2_count": len(forced_pass2_fields),
+        "critical_text_overrides_applied": int(resolver_metrics.get("critical_text_overrides_applied", 0)),
+        "critical_text_no_evidence_blanked": int(resolver_metrics.get("critical_text_no_evidence_blanked", 0)),
+        "critical_text_targets": critical_text_targets,
+    }
+    return {
+        "filled_data": final_data,
+        "confidence_scores": final_confidence,
+        "suggestions": final_suggestions,
+        "metadata": metadata,
     }
 
 
@@ -348,9 +645,12 @@ def load_quote_artifacts(quote_ref: str) -> dict[str, Any]:
     """Load full text, items, and machine data for a quote."""
     document = load_document_content(quote_ref) or {}
     machines = load_machines_for_quote(quote_ref)
-    items = _items_from_machine_payloads(machines)
+    # Preserve original quote line-item order for regrouping screens.
+    # Reconstructing from machine payloads can reorder items (main/add-ons/common),
+    # which breaks index-based assignment of add-ons between selected machines.
+    items = _items_from_priced_rows(load_priced_items_for_quote(quote_ref))
     if not items:
-        items = _items_from_priced_rows(load_priced_items_for_quote(quote_ref))
+        items = _items_from_machine_payloads(machines)
     return {
         "quote_ref": quote_ref,
         "full_pdf_text": document.get("full_pdf_text", ""),

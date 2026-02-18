@@ -682,6 +682,24 @@ class TestExtractSchemaFromExcel:
             assert len(entry["description"]) > 0, \
                 f"Description empty for {placeholder}"
 
+    def test_extract_schema_adds_semantic_metadata_for_critical_text_fields(self):
+        """Direction/utility text fields should include semantic extraction metadata."""
+        schema = extract_schema_from_excel()
+
+        direction = schema.get("f0004", {})
+        assert direction.get("semantic_tag") == "direction"
+        assert isinstance(direction.get("text_indicators"), list)
+        assert "line direction" in [str(v).lower() for v in direction.get("text_indicators", [])]
+        assert isinstance(direction.get("value_patterns"), list)
+        assert len(direction.get("value_patterns", [])) >= 1
+
+        voltage = schema.get("f0015", {})
+        hz = schema.get("f0016", {})
+        phases = schema.get("f0017", {})
+        assert voltage.get("semantic_tag") == "voltage"
+        assert hz.get("semantic_tag") == "hz"
+        assert phases.get("semantic_tag") == "phases"
+
 
 class TestGetAllFieldsFromExcel:
     """Test suite for get_all_fields_from_excel() function."""

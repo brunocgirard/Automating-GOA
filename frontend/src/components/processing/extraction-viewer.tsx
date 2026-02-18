@@ -20,6 +20,7 @@ import {
   listGoaForms,
   saveGoaForm,
   upsertMachineTemplateData,
+  type ExtractionMetadata,
   type GoaFormSchemaField,
   type GoaOutputOptions,
   type GoaFormSchemaResponse,
@@ -73,6 +74,7 @@ export function ExtractionViewer({
   const [goaEditorMode, setGoaEditorMode] = useState<GoaEditorMode>("summary");
   const [confidenceScores, setConfidenceScores] = useState<Record<string, number>>({});
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [extractionMetadata, setExtractionMetadata] = useState<ExtractionMetadata | null>(null);
   const [machineTemplateId, setMachineTemplateId] = useState<number | null>(null);
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -119,6 +121,7 @@ export function ExtractionViewer({
     setGoaEditorMode("summary");
     setConfidenceScores({});
     setSuggestions([]);
+    setExtractionMetadata(null);
     setSavedFilePath(null);
     setStatusMessage(null);
     setError(null);
@@ -243,6 +246,7 @@ export function ExtractionViewer({
 
       setConfidenceScores(extraction.confidence_scores ?? {});
       setSuggestions(extraction.suggestions.map(formatSuggestion));
+      setExtractionMetadata(extraction.metadata ?? null);
 
       if (isSortstarMachine) {
         setSortstarData(filledData);
@@ -256,6 +260,7 @@ export function ExtractionViewer({
       setError(err instanceof Error ? err.message : "Extraction failed.");
       setSortstarData(null);
       setGoaData(null);
+      setExtractionMetadata(null);
     } finally {
       setRunning(false);
     }
@@ -472,6 +477,66 @@ export function ExtractionViewer({
                         Show All Fields
                       </Button>
                     </div>
+
+                    {extractionMetadata && (
+                      <div className="rounded-md border bg-neutral-50 p-3 text-sm">
+                        <p className="font-medium">Pipeline Summary</p>
+                        <p className="text-muted-foreground">
+                          {extractionMetadata.pipeline_version ?? "unknown pipeline"} •{" "}
+                          {extractionMetadata.pass1_model ?? "n/a"}
+                          {extractionMetadata.pass2_model
+                            ? ` -> ${extractionMetadata.pass2_model}`
+                            : ""}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Passes attempted: {extractionMetadata.fields_pass1_attempted ?? "n/a"}
+                          {typeof extractionMetadata.fields_pass2_attempted === "number"
+                            ? ` + ${extractionMetadata.fields_pass2_attempted}`
+                            : ""}
+                          {" "}fields
+                        </p>
+                        <p className="text-muted-foreground">
+                          Timing:{" "}
+                          {typeof extractionMetadata.timing_ms?.pass1 === "number"
+                            ? `${extractionMetadata.timing_ms.pass1}ms`
+                            : "n/a"}
+                          {typeof extractionMetadata.timing_ms?.pass2 === "number"
+                            ? ` + ${extractionMetadata.timing_ms.pass2}ms`
+                            : ""}
+                          {typeof extractionMetadata.timing_ms?.total === "number"
+                            ? ` = ${extractionMetadata.timing_ms.total}ms`
+                            : ""}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Prompt size estimate:{" "}
+                          {typeof extractionMetadata.prompt_chars_estimate?.total === "number"
+                            ? extractionMetadata.prompt_chars_estimate.total.toLocaleString()
+                            : "n/a"}{" "}
+                          chars
+                        </p>
+                        <p className="text-muted-foreground">
+                          Critical text repair: forced pass2{" "}
+                          {typeof extractionMetadata.critical_text_forced_pass2_count === "number"
+                            ? extractionMetadata.critical_text_forced_pass2_count
+                            : "n/a"}
+                          , overrides{" "}
+                          {typeof extractionMetadata.critical_text_overrides_applied === "number"
+                            ? extractionMetadata.critical_text_overrides_applied
+                            : "n/a"}
+                          , blanked{" "}
+                          {typeof extractionMetadata.critical_text_no_evidence_blanked === "number"
+                            ? extractionMetadata.critical_text_no_evidence_blanked
+                            : "n/a"}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Critical targets:{" "}
+                          {Array.isArray(extractionMetadata.critical_text_targets) &&
+                          extractionMetadata.critical_text_targets.length > 0
+                            ? extractionMetadata.critical_text_targets.join(", ")
+                            : "n/a"}
+                        </p>
+                      </div>
+                    )}
 
                     {reviewFields.length > 0 ? (
                       <div className="rounded-md border p-3">

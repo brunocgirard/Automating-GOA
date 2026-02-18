@@ -11,6 +11,7 @@ import {
   type QuoteRow,
   type ShippingDocumentState,
   type ShippingDocumentType,
+  type ShippingLineItemOption,
   type ShippingMachine,
 } from "@/lib/api";
 import { useClientFilter } from "@/components/layout/client-filter-context";
@@ -34,6 +35,20 @@ function toAmount(v: string): number {
 
 function fmt(n: number): string {
   return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function lineItemOptionLabel(option: ShippingLineItemOption): string {
+  return option.name || option.description;
+}
+
+function resolveMachineLineItemValue(
+  machine: ShippingMachine,
+  options: ShippingLineItemOption[]
+): string {
+  if (!machine.lineItemOptionId) return "__manual__";
+  return options.some((option) => option.id === machine.lineItemOptionId)
+    ? machine.lineItemOptionId
+    : "__manual__";
 }
 
 function uid(prefix: string): string {
@@ -143,6 +158,7 @@ export default function ShippingDocumentsPageClient() {
     if (!state || state.machines.length === 0) return 0;
     return invoiceTotal / state.machines.length;
   }, [invoiceTotal, state]);
+  const lineItemOptions = useMemo(() => state?.lineItemOptions ?? [], [state]);
 
   async function selectQuote(rawId: string) {
     if (!rawId) return;
@@ -201,7 +217,8 @@ export default function ShippingDocumentsPageClient() {
         {
           id: uid("machine"),
           machineId: null,
-          machineName: `Machine ${prev.machines.length + 1}`,
+          lineItemOptionId: null,
+          machineName: "",
           model: "",
           hsCode: "",
           serialNumber: "",
@@ -210,6 +227,19 @@ export default function ShippingDocumentsPageClient() {
           crates: [{ id: uid("crate"), lengthIn: "", widthIn: "", heightIn: "", weightLbs: "" }],
         },
       ],
+    }));
+  }
+
+  function setMachineFromLineItem(machineId: string, optionId: string) {
+    const option = state?.lineItemOptions.find((entry) => entry.id === optionId);
+    if (!option) return;
+    const machineName = option.name || option.description;
+    setMachine(machineId, (machine) => ({
+      ...machine,
+      lineItemOptionId: option.id,
+      machineName,
+      model: machineName,
+      unitPrice: option.unitPrice > 0 ? option.unitPrice : machine.unitPrice,
     }));
   }
 
@@ -239,7 +269,7 @@ export default function ShippingDocumentsPageClient() {
     setDownloading(documentType);
     setError(null);
     setStatus(null);
-    void generateShippingDocs(state.quoteId, { documentType, shippingData: state })
+    void generateShippingDocs(state.quoteId, { documentType, outputFormat: "html", shippingData: state })
       .then((result) => {
         downloadBlob(result.blob, result.filename);
         setStatus(`Generated ${result.filename}.`);
@@ -353,7 +383,7 @@ export default function ShippingDocumentsPageClient() {
         <Card>
           <CardHeader>
             <CardTitle>Step 2: Configure Machines & Trucks</CardTitle>
-            <CardDescription>Set serial/HS/model, crate dimensions, truck assignment, and shipping metadata.</CardDescription>
+            <CardDescription>Select machines from quote line items, then set serial/HS/model, crate dimensions, truck assignment, and shipping metadata.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
@@ -370,7 +400,29 @@ export default function ShippingDocumentsPageClient() {
                   </Button>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                  <div className="space-y-1"><label className="text-sm font-medium">Machine Name</label><Input value={machine.machineName} onChange={(e) => setMachine(machine.id, (v) => ({ ...v, machineName: e.target.value }))} /></div>
+                  <div className="space-y-1"><label className="text-sm font-medium">Select from Line Items</label>
+                    <Select
+                      value={resolveMachineLineItemValue(machine, lineItemOptions)}
+                      onValueChange={(value) => {
+                        if (value === "__manual__") {
+                          setMachine(machine.id, (v) => ({ ...v, lineItemOptionId: null }));
+                          return;
+                        }
+                        setMachineFromLineItem(machine.id, value);
+                      }}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select line item" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__manual__">Manual entry</SelectItem>
+                        {lineItemOptions.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>
+                            {lineItemOptionLabel(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1"><label className="text-sm font-medium">Machine Name</label><Input value={machine.machineName} onChange={(e) => setMachine(machine.id, (v) => ({ ...v, lineItemOptionId: null, machineName: e.target.value }))} /></div>
                   <div className="space-y-1"><label className="text-sm font-medium">Model</label><Input value={machine.model} onChange={(e) => setMachine(machine.id, (v) => ({ ...v, model: e.target.value }))} /></div>
                   <div className="space-y-1"><label className="text-sm font-medium">Serial Number</label><Input value={machine.serialNumber} onChange={(e) => setMachine(machine.id, (v) => ({ ...v, serialNumber: e.target.value }))} /></div>
                   <div className="space-y-1"><label className="text-sm font-medium">HS Code</label><Input value={machine.hsCode} onChange={(e) => setMachine(machine.id, (v) => ({ ...v, hsCode: e.target.value }))} /></div>

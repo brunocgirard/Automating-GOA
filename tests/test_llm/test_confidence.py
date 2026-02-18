@@ -279,6 +279,42 @@ class TestEstimateFieldConfidenceTextFields:
         )
         assert confidence >= 0.9
 
+    def test_direction_text_without_direction_pattern_is_penalized(self):
+        """Direction values lacking left/right pattern should not stay high confidence."""
+        confidence = estimate_field_confidence(
+            field_key="f0004",
+            field_value="For stable base container coming from a motorized conveyor",
+            template_contexts={
+                "f0004": {
+                    "type": "string",
+                    "section": "Basic Information",
+                    "description": "Basic Information - Direction (text)",
+                    "semantic_tag": "direction",
+                }
+            },
+            full_pdf_text="Line Direction is From left to Right.",
+            selected_descriptions=[],
+        )
+        assert confidence <= 0.45
+
+    def test_utility_voltage_without_unit_pattern_is_penalized(self):
+        """Utility voltage values should include an explicit voltage pattern."""
+        confidence = estimate_field_confidence(
+            field_key="f0015",
+            field_value="220",
+            template_contexts={
+                "f0015": {
+                    "type": "string",
+                    "section": "Utility Specifications",
+                    "description": "Utility Specifications - Voltage (text)",
+                    "semantic_tag": "voltage",
+                }
+            },
+            full_pdf_text="Utility: 220 Volts, 3 Phases, 60/50 Hz.",
+            selected_descriptions=[],
+        )
+        assert confidence <= 0.55
+
 
 class TestEstimateExtractionConfidence:
     """Test overall extraction confidence estimation."""

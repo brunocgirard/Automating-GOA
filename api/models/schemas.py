@@ -128,6 +128,7 @@ class ExtractionResponse(BaseModel):
     filled_data: dict[str, str]
     confidence_scores: dict[str, float]
     suggestions: list[dict[str, Any]]
+    metadata: dict[str, Any] | None = None
 
 
 class GenerateDocumentRequest(BaseModel):
@@ -276,7 +277,37 @@ class ShippingLoadResponse(BaseModel):
 
 class ShippingGenerateRequest(BaseModel):
     document_type: Literal["packing_slip", "commercial_invoice", "certificate_origin", "all"] = "all"
+    output_format: Literal["docx", "html"] = "docx"
     shipping_data: dict[str, Any] | None = None
+
+
+class CorPrefillResponse(BaseModel):
+    quote_id: int
+    quote_ref: str
+    cor_data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CorSaveRequest(BaseModel):
+    cor_data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CorSaveResponse(BaseModel):
+    quote_id: int
+    quote_ref: str
+    saved_at: str
+    cor_data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CorLoadResponse(BaseModel):
+    quote_id: int
+    quote_ref: str
+    created_date: str | None = None
+    modified_date: str | None = None
+    cor_data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CorGenerateRequest(BaseModel):
+    cor_data: dict[str, Any] | None = None
 
 
 class TemplateUpdateRequest(BaseModel):

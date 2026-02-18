@@ -1,7 +1,9 @@
 import html
 import re
 import os
+import copy
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -1691,43 +1693,123 @@ def extract_schema_from_excel(excel_path: Path = EXCEL_PATH) -> Dict[str, Dict]:
     }
     """
     try:
-        rows = load_rows(excel_path)
-        schema = {}
-        
-        # We need to import helper functions for synonyms if we want to reuse them
-        # or implement simplified versions here.
-        # Let's define simple helpers here to avoid circular imports if possible,
-        # or duplicate the logic from template_utils.py slightly modified.
-        
-        from src.utils.template_utils import generate_synonyms_for_checkbox, generate_positive_indicators
-        
-        for row in rows:
-            ph_key = row["placeholder"]
-            ftype = "boolean" if row["type"] == "checkbox" else "string"
-            
-            # Construct a rich description
-            parts = [row["section"], row["subsection"], row["subsub"], row["field"]]
-            description = " - ".join(filter(None, parts))
-            
-            schema[ph_key] = {
-                "type": ftype,
-                "section": row["section"],
-                "subsection": row["subsection"],
-                "description": description,
-                "location": "form"
-            }
-            
-            if ftype == "boolean":
-                # Generate synonyms and indicators
-                synonyms = generate_synonyms_for_checkbox(ph_key, description)
-                schema[ph_key]["synonyms"] = synonyms
-                schema[ph_key]["positive_indicators"] = generate_positive_indicators(ph_key, description, synonyms)
-                
-        return schema
-        
+        resolved_path = Path(excel_path)
+        if not resolved_path.exists():
+            raise FileNotFoundError(f"Excel template not found at {resolved_path}")
+        stat = resolved_path.stat()
+        cached_schema = _extract_schema_from_excel_cached(str(resolved_path.resolve()), stat.st_mtime_ns)
+        # Return a copy so callers can safely mutate without polluting cache.
+        return copy.deepcopy(cached_schema)
     except Exception as e:
         print(f"Error extracting schema from Excel: {e}")
         return {}
+
+
+@lru_cache(maxsize=4)
+def _extract_schema_from_excel_cached(excel_path_str: str, excel_mtime_ns: int) -> Dict[str, Dict]:
+    """
+    Cached schema extraction keyed by absolute path + file mtime.
+
+    mtime is part of the key so template edits invalidate the cache naturally.
+    """
+    del excel_mtime_ns
+    rows = load_rows(Path(excel_path_str))
+    schema: Dict[str, Dict] = {}
+
+    from src.utils.template_utils import generate_synonyms_for_checkbox, generate_positive_indicators
+
+    def _build_text_semantics(section: str, description: str) -> Dict[str, Any]:
+        section_norm = str(section or "").strip().lower()
+        desc_norm = str(description or "").strip().lower()
+
+        semantic_tag = None
+        text_indicators: list[str] = []
+        value_patterns: list[str] = []
+
+        if section_norm == "basic information" and "direction" in desc_norm:
+            semantic_tag = "direction"
+            text_indicators = [
+                "line direction",
+                "from left to right",
+                "from right to left",
+                "left to right",
+                "right to left",
+            ]
+            value_patterns = [
+                r"\bfrom\s+left\s+to\s+right\b",
+                r"\bfrom\s+right\s+to\s+left\b",
+                r"\bleft\s+to\s+right\b",
+                r"\bright\s+to\s+left\b",
+            ]
+        elif "utility specifications" in section_norm and "voltage" in desc_norm:
+            semantic_tag = "voltage"
+            text_indicators = [
+                "line voltage",
+                "voltage",
+                "volts",
+                "vac",
+            ]
+            value_patterns = [
+                r"\b\d{2,4}(?:\s*/\s*\d{2,4})?\s*(?:v|volt|volts|vac)\b",
+            ]
+        elif "utility specifications" in section_norm and "hz" in desc_norm:
+            semantic_tag = "hz"
+            text_indicators = [
+                "frequency",
+                "hz",
+                "hertz",
+                "line frequency",
+            ]
+            value_patterns = [
+                r"\b\d{2,3}(?:\s*/\s*\d{2,3})?\s*(?:hz|hertz)\b",
+            ]
+        elif "utility specifications" in section_norm and "phase" in desc_norm:
+            semantic_tag = "phases"
+            text_indicators = [
+                "phase",
+                "phases",
+                "single phase",
+                "three phase",
+            ]
+            value_patterns = [
+                r"\b[123]\s*(?:phase|phases)\b",
+            ]
+
+        if not semantic_tag:
+            return {}
+
+        return {
+            "semantic_tag": semantic_tag,
+            "text_indicators": text_indicators,
+            "value_patterns": value_patterns,
+        }
+
+    for row in rows:
+        ph_key = row["placeholder"]
+        ftype = "boolean" if row["type"] == "checkbox" else "string"
+
+        # Keep section hierarchy in description for better LLM guidance.
+        parts = [row["section"], row["subsection"], row["subsub"], row["field"]]
+        description = " - ".join(filter(None, parts))
+
+        schema[ph_key] = {
+            "type": ftype,
+            "section": row["section"],
+            "subsection": row["subsection"],
+            "description": description,
+            "location": "form",
+        }
+
+        if ftype == "boolean":
+            synonyms = generate_synonyms_for_checkbox(ph_key, description)
+            schema[ph_key]["synonyms"] = synonyms
+            schema[ph_key]["positive_indicators"] = generate_positive_indicators(ph_key, description, synonyms)
+        else:
+            text_semantics = _build_text_semantics(row["section"], description)
+            if text_semantics:
+                schema[ph_key].update(text_semantics)
+
+    return schema
 
 def get_all_fields_from_excel(excel_path: Path = EXCEL_PATH) -> Dict[str, str]:
     """

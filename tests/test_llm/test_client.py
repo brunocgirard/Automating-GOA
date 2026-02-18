@@ -31,10 +31,16 @@ def reset_client_state():
     # Import and reset
     from src.llm import client
     original_model = client.GENERATIVE_MODEL
+    original_cache = dict(getattr(client, "MODEL_CACHE", {}))
     client.GENERATIVE_MODEL = None
+    if hasattr(client, "MODEL_CACHE"):
+        client.MODEL_CACHE.clear()
     yield
     # Cleanup
     client.GENERATIVE_MODEL = original_model
+    if hasattr(client, "MODEL_CACHE"):
+        client.MODEL_CACHE.clear()
+        client.MODEL_CACHE.update(original_cache)
 
 
 class TestConfigureGeminiClient:

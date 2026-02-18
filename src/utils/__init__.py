@@ -13,8 +13,11 @@ warnings.filterwarnings(
 
 from . import crm_utils
 from . import doc_filler
-from . import llm_handler
 from . import pdf_utils
 from . import schemas
 from . import template_utils
 from . import few_shot_learning
+
+# NOTE:
+# Do not eagerly import llm_handler here. It forwards to src.llm and can
+# create circular imports when src.llm is imported before src.utils.
