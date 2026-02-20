@@ -104,6 +104,220 @@ def _template_config(machine_name: str) -> dict[str, Any]:
     }
 
 
+_CONTACT_TITLE_KEYWORDS = (
+    "engineer",
+    "manager",
+    "coordinator",
+    "president",
+    "specialist",
+    "director",
+    "buyer",
+    "purchasing",
+    "project",
+    "operations",
+)
+
+
+def _clean_profile_line(value: str) -> str:
+    cleaned = re.sub(r"^[\s:•\-\uf02d]+", "", value or "").strip()
+    return re.sub(r"\s+", " ", cleaned)
+
+
+def _is_title_line(value: str) -> bool:
+    lowered = value.lower()
+    return any(keyword in lowered for keyword in _CONTACT_TITLE_KEYWORDS)
+
+
+def _is_phone_line(value: str) -> bool:
+    return bool(re.search(r"\+?\s*\d[\d()\s.\-]{6,}\d", value))
+
+
+def _extract_phone(value: str) -> str:
+    match = re.search(r"(\+?\s*\d[\d()\s.\-]{6,}\d)", value)
+    if not match:
+        return ""
+    return re.sub(r"\s+", " ", match.group(1)).strip()
+
+
+def _extract_email(value: str) -> str:
+    match = re.search(r"([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})", value, flags=re.IGNORECASE)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def _is_contact_candidate(section_lines: list[str], index: int) -> bool:
+    line = section_lines[index]
+    if not line or _is_phone_line(line) or "@" in line or any(char.isdigit() for char in line):
+        return False
+
+    words = re.findall(r"[A-Za-z][A-Za-z'`.\-]*", line)
+    if len(words) < 2 or len(words) > 4:
+        return False
+
+    next_line = section_lines[index + 1].lower() if index + 1 < len(section_lines) else ""
+    if not next_line:
+        return False
+    if _is_title_line(next_line):
+        return True
+    if _is_phone_line(next_line) or "@" in next_line:
+        return True
+    return False
+
+
+def _normalize_company_name(raw: str) -> str:
+    text = _clean_profile_line(raw)
+    if not text:
+        return ""
+
+    text = text.split("|", 1)[0].split("/", 1)[0].strip()
+    base = text.split(",", 1)[0].strip()
+    tokens = base.split()
+    if not tokens:
+        return text
+
+    suffixes = {
+        "inc",
+        "inc.",
+        "ltd",
+        "ltd.",
+        "llc",
+        "corp",
+        "corp.",
+        "corporation",
+        "co",
+        "co.",
+        "company",
+        "laboratories",
+        "laboratory",
+        "labs",
+    }
+    kept: list[str] = []
+    for token in tokens:
+        normalized = token.lower().strip(".")
+        if kept and normalized in suffixes:
+            break
+        kept.append(token)
+
+    normalized_name = " ".join(kept) if kept else tokens[0]
+    return normalized_name.title() if normalized_name.isupper() else normalized_name
+
+
+def _extract_quote_profile_fields(full_text: str, fallback_quote_ref: str) -> dict[str, str]:
+    if not full_text:
+        return {
+            "quote_ref": fallback_quote_ref,
+            "company": "",
+            "customer_name": "",
+            "sold_to_address": "",
+            "telephone": "",
+            "order_date": "",
+            "customer_contact_person": "",
+        }
+
+    quote_ref = fallback_quote_ref
+    quote_patterns = (
+        r"\bQuotation#\s*([^\n\r]+)",
+        r"\bQuote Reference:\s*([^\n\r]+)",
+    )
+    for pattern in quote_patterns:
+        match = re.search(pattern, full_text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        candidate = _clean_profile_line(match.group(1))
+        candidate = re.sub(r"\.(docx?|pdf)$", "", candidate, flags=re.IGNORECASE).strip()
+        if candidate:
+            quote_ref = candidate
+            break
+
+    order_date = ""
+    order_date_match = re.search(r"\bDate:\s*([^\n\r]+)", full_text, flags=re.IGNORECASE)
+    if order_date_match:
+        order_date = _clean_profile_line(order_date_match.group(1))
+
+    lines_raw = full_text.splitlines()[:260]
+    lines = [_clean_profile_line(line) for line in lines_raw if _clean_profile_line(line)]
+    presented_index = next(
+        (idx for idx, line in enumerate(lines) if line.lower().startswith("presented to")),
+        None,
+    )
+    section_lines = lines[presented_index + 1 : presented_index + 26] if presented_index is not None else []
+
+    customer_name = ""
+    company = ""
+    sold_to_address = ""
+    telephone = ""
+    contact_person = ""
+    client_contact_email = ""
+
+    if section_lines:
+        company_idx = None
+        for idx, line in enumerate(section_lines):
+            lowered = line.lower()
+            if _is_phone_line(line) or "@" in line or lowered.startswith("www."):
+                continue
+            customer_name = _normalize_company_name(line)
+            company_idx = idx
+            break
+
+        start_idx = (company_idx + 1) if company_idx is not None else 0
+        address_lines: list[str] = []
+        for idx in range(start_idx, len(section_lines)):
+            line = section_lines[idx]
+            lowered = line.lower()
+            if _is_phone_line(line):
+                if not telephone:
+                    telephone = _extract_phone(line)
+                continue
+            if "@" in line:
+                if not client_contact_email:
+                    client_contact_email = _extract_email(line)
+                continue
+            if lowered.startswith("www.") or lowered.endswith(".com"):
+                continue
+            if not contact_person and _is_contact_candidate(section_lines, idx):
+                contact_person = line
+                continue
+            if contact_person:
+                continue
+            if _is_title_line(line):
+                continue
+            address_lines.append(line)
+
+        sold_to_address = "\n".join(address_lines).strip()
+
+        if not contact_person:
+            for idx in range(start_idx, len(section_lines)):
+                if _is_contact_candidate(section_lines, idx):
+                    contact_person = section_lines[idx]
+                    break
+        if not telephone:
+            for line in section_lines:
+                phone = _extract_phone(line)
+                if phone:
+                    telephone = phone
+                    break
+        if not client_contact_email:
+            for line in section_lines:
+                email = _extract_email(line)
+                if email:
+                    client_contact_email = email
+                    break
+
+    contact_person = _clean_profile_line(contact_person)
+    company = contact_person
+
+    return {
+        "quote_ref": quote_ref,
+        "company": company,
+        "customer_name": customer_name,
+        "sold_to_address": sold_to_address,
+        "telephone": telephone,
+        "order_date": order_date,
+        "customer_contact_person": client_contact_email,
+    }
+
+
 def extract_and_catalog(
     pdf_bytes: bytes, filename: str, existing_client_id: int | None = None
 ) -> dict[str, Any]:
@@ -124,17 +338,20 @@ def extract_and_catalog(
         identified = identify_machines_from_items(items)
         if identified.get("machines"):
             machine_model_guess = identified["machines"][0].get("machine_name", "")
+        extracted_profile = _extract_quote_profile_fields(full_text, quote_ref)
 
         client_info: dict[str, Any] = {
-            "quote_ref": quote_ref,
-            "customer_name": "",
+            "quote_ref": extracted_profile.get("quote_ref") or quote_ref,
+            "customer_name": extracted_profile.get("customer_name", ""),
             "machine_model": machine_model_guess,
             "country_destination": "",
-            "sold_to_address": "",
+            "sold_to_address": extracted_profile.get("sold_to_address", ""),
             "ship_to_address": "",
-            "telephone": "",
-            "customer_contact_person": "",
+            "telephone": extracted_profile.get("telephone", ""),
+            "customer_contact_person": extracted_profile.get("customer_contact_person", ""),
             "customer_po": "",
+            "order_date": extracted_profile.get("order_date", ""),
+            "company": extracted_profile.get("company", ""),
         }
 
         linked_existing_client_id: int | None = None

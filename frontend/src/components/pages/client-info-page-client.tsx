@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  fetchQuoteWorkflowStatus,
   fetchQuotes,
   getQuoteDetail,
   updateQuoteClientInfo,
   type QuoteDetail,
+  type QuoteWorkflowStatus,
   type QuoteRow,
 } from "@/lib/api";
 import { useClientFilter } from "@/components/layout/client-filter-context";
@@ -78,9 +80,31 @@ function buildClientOptions(quotes: QuoteSummary[]): ClientOption[] {
   return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function formatStatusTimestamp(value: string | null): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
+function workflowQuoteBadgeConfig(
+  status: QuoteWorkflowStatus["quoteStatus"] | null | undefined
+): { label: string; className: string } {
+  if (status === "ready") {
+    return { label: "Ready", className: "bg-green-100 text-green-800" };
+  }
+  if (status === "processed") {
+    return { label: "Processed", className: "bg-yellow-100 text-yellow-800" };
+  }
+  return { label: "Draft", className: "bg-neutral-200 text-neutral-700" };
+}
+
 function QuoteEditor({ quoteId }: { quoteId: number }) {
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
   const [clientInfo, setClientInfo] = useState<QuoteDetail["clientInfo"] | null>(null);
+  const [workflowStatus, setWorkflowStatus] = useState<QuoteWorkflowStatus | null>(null);
+  const [workflowLoading, setWorkflowLoading] = useState(true);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +127,30 @@ function QuoteEditor({ quoteId }: { quoteId: number }) {
       })
       .finally(() => {
         if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [quoteId]);
+
+  useEffect(() => {
+    let active = true;
+    setWorkflowLoading(true);
+    setWorkflowError(null);
+
+    void fetchQuoteWorkflowStatus(quoteId)
+      .then((response) => {
+        if (!active) return;
+        setWorkflowStatus(response);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setWorkflowStatus(null);
+        setWorkflowError(err instanceof Error ? err.message : "Failed to load workflow status.");
+      })
+      .finally(() => {
+        if (active) setWorkflowLoading(false);
       });
 
     return () => {
@@ -160,6 +208,7 @@ function QuoteEditor({ quoteId }: { quoteId: number }) {
     ready: { label: "Ready", className: "bg-green-100 text-green-800" },
   } as const;
   const cfg = statusConfig[detail.status];
+  const quoteWorkflowBadge = workflowQuoteBadgeConfig(workflowStatus?.quoteStatus);
 
   return (
     <div className="space-y-6">
@@ -189,6 +238,79 @@ function QuoteEditor({ quoteId }: { quoteId: number }) {
           {statusMessage}
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Workflow Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {workflowLoading ? (
+            <div className="rounded-md border bg-white p-4 text-sm text-muted-foreground">
+              Loading workflow status...
+            </div>
+          ) : workflowError ? (
+            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              Failed to load workflow status: {workflowError}
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-md border bg-white p-4">
+                <p className="text-xs font-medium text-muted-foreground">Quote Processing</p>
+                <div className="mt-2">
+                  <Badge
+                    className={quoteWorkflowBadge.className}
+                    variant="secondary"
+                  >
+                    {quoteWorkflowBadge.label}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="rounded-md border bg-white p-4">
+                <p className="text-xs font-medium text-muted-foreground">Shipping Documents</p>
+                <div className="mt-2">
+                  <Badge
+                    className={
+                      workflowStatus?.shippingSaved
+                        ? "bg-green-100 text-green-800"
+                        : "bg-neutral-200 text-neutral-700"
+                    }
+                    variant="secondary"
+                  >
+                    {workflowStatus?.shippingSaved ? "Saved" : "Not started"}
+                  </Badge>
+                </div>
+                {workflowStatus?.shippingSaved && workflowStatus.shippingModifiedDate ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Last update: {formatStatusTimestamp(workflowStatus.shippingModifiedDate)}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="rounded-md border bg-white p-4">
+                <p className="text-xs font-medium text-muted-foreground">COR</p>
+                <div className="mt-2">
+                  <Badge
+                    className={
+                      workflowStatus?.corSaved
+                        ? "bg-green-100 text-green-800"
+                        : "bg-neutral-200 text-neutral-700"
+                    }
+                    variant="secondary"
+                  >
+                    {workflowStatus?.corSaved ? "Saved" : "Not started"}
+                  </Badge>
+                </div>
+                {workflowStatus?.corSaved && workflowStatus.corModifiedDate ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Last update: {formatStatusTimestamp(workflowStatus.corModifiedDate)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -287,13 +287,34 @@ class CorPrefillResponse(BaseModel):
     cor_data: dict[str, Any] = Field(default_factory=dict)
 
 
+class CorRevisionSummaryResponse(BaseModel):
+    cor_document_id: int
+    cor_no: str = ""
+    description: str = ""
+    created_date: str | None = None
+    modified_date: str | None = None
+
+
+class CorRevisionListResponse(BaseModel):
+    quote_id: int
+    quote_ref: str
+    revisions: list[CorRevisionSummaryResponse] = Field(default_factory=list)
+
+
 class CorSaveRequest(BaseModel):
     cor_data: dict[str, Any] = Field(default_factory=dict)
+    cor_document_id: int | None = None
+    create_new: bool = False
+    cor_no: str | None = None
+    description: str | None = None
 
 
 class CorSaveResponse(BaseModel):
     quote_id: int
     quote_ref: str
+    cor_document_id: int
+    cor_no: str = ""
+    description: str = ""
     saved_at: str
     cor_data: dict[str, Any] = Field(default_factory=dict)
 
@@ -301,6 +322,9 @@ class CorSaveResponse(BaseModel):
 class CorLoadResponse(BaseModel):
     quote_id: int
     quote_ref: str
+    cor_document_id: int
+    cor_no: str = ""
+    description: str = ""
     created_date: str | None = None
     modified_date: str | None = None
     cor_data: dict[str, Any] = Field(default_factory=dict)
@@ -308,6 +332,7 @@ class CorLoadResponse(BaseModel):
 
 class CorGenerateRequest(BaseModel):
     cor_data: dict[str, Any] | None = None
+    cor_document_id: int | None = None
 
 
 class TemplateUpdateRequest(BaseModel):

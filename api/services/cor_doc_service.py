@@ -10,10 +10,17 @@ from pathlib import Path
 from typing import Any
 
 from docx import Document
+from docx.shared import Pt
 
 OUTPUT_ROOT = Path("data/generated/cor")
 TEMPLATE_PATH = Path("Mail_merge/Customer_Oxxxx_COR.docx")
 TOKEN_PATTERN = re.compile(r"\u00ab[^\u00bb]+\u00bb")
+DOUBLE_BRACE_TOKEN_PATTERN = re.compile(r"\{\{\s*[^{}]+\s*\}\}")
+TEMPLATE_PATH_CANDIDATES = (
+    Path("Mail_merge/Customer_Oxxxx_COR1.docx"),
+    Path("Mail_merge/Customer_Oxxxx_COR.docx"),
+)
+INSERTED_TEXT_FONT_SIZE_PT = 8
 
 
 @dataclass
@@ -45,7 +52,7 @@ def build_cor_prefill_data(
         "quoteId": int(quote.get("id") or 0),
         "quoteRef": _to_text(quote.get("quote_ref")),
         "client": {
-            "company": _to_text(quote.get("company")) or _to_text(quote.get("customer_name")),
+            "company": _to_text(quote.get("customer_name")) or _to_text(quote.get("company")),
             "customerPO": _to_text(quote.get("customer_po")),
             "orderDate": _to_text(quote.get("order_date")),
             "ax": _to_text(quote.get("ax")),
@@ -53,15 +60,29 @@ def build_cor_prefill_data(
             "machine": _to_text(quote.get("machine_model")),
         },
         "corNo": "1",
+        "revisionDescription": "",
+        "corStatus": "",
+        "capmaticPM": "",
+        "initiatorOfChange": "contact_person",
+        "salesRep": "",
+        "contactPerson": _to_text(quote.get("company")),
+        "impactDeliverables": "",
+        "impactDeliveryDate": "",
+        "paymentTerms": "",
+        "currency": "",
+        "approvalDate": _current_date(),
         "justificationForChange": "",
+        "comments": "",
         "lineItems": line_items,
     }
 
 
 def generate_cor_document(cor_data: dict[str, Any], quote_ref: str) -> GeneratedCorArtifact:
     """Generate COR DOCX document from COR state."""
-    if not TEMPLATE_PATH.exists():
-        raise FileNotFoundError(f"Template not found: {TEMPLATE_PATH}")
+    template_path = _resolve_template_path()
+    if not template_path.exists():
+        candidates = ", ".join(str(path) for path in TEMPLATE_PATH_CANDIDATES)
+        raise FileNotFoundError(f"Template not found. Checked: {candidates}")
 
     safe_quote_ref = _slugify(quote_ref) or "quote"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -69,7 +90,7 @@ def generate_cor_document(cor_data: dict[str, Any], quote_ref: str) -> Generated
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{safe_quote_ref}_cor.docx"
 
-    document = Document(str(TEMPLATE_PATH))
+    document = Document(str(template_path))
     _replace_core_tokens(document, cor_data)
     _fill_cor_template_tables(document, cor_data)
     document.save(str(output_path))
@@ -81,23 +102,75 @@ def generate_cor_document(cor_data: dict[str, Any], quote_ref: str) -> Generated
     )
 
 
+def _resolve_template_path() -> Path:
+    for candidate in TEMPLATE_PATH_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    return TEMPLATE_PATH
+
+
 def _replace_core_tokens(document: Document, cor_data: dict[str, Any]) -> None:
     client = cor_data.get("client") if isinstance(cor_data.get("client"), dict) else {}
+    cor_no = _to_text(cor_data.get("corNo"))
+    comments = _to_text(cor_data.get("comments"))
+    cor_status = _to_text(cor_data.get("corStatus"))
+    capmatic_pm = _to_text(cor_data.get("capmaticPM"))
+    initiator_of_change = _to_text(cor_data.get("initiatorOfChange"))
+    sales_rep = _to_text(cor_data.get("salesRep"))
+    contact_person = _to_text(cor_data.get("contactPerson"))
+    initiator_value = _resolve_initiator_value(contact_person, capmatic_pm, initiator_of_change)
+    order_date = _to_text(client.get("orderDate"))
+    payment_terms = _to_text(cor_data.get("paymentTerms"))
+    currency = _to_text(cor_data.get("currency"))
+    approval_date = _current_date()
+    justification = _to_text(cor_data.get("justificationForChange"))
+    cor_no_label = _format_cor_no_label(cor_no)
     replacements = {
+        "Customer": _to_text(client.get("company")),
         "Company": _to_text(client.get("company")),
         "Customer_PO": _to_text(client.get("customerPO")),
         "Ax": _to_text(client.get("ax")),
         "Ox": _to_text(client.get("ox")),
         "Machine": _to_text(client.get("machine")),
+        "Order_date": order_date,
+        "Contact_Person": contact_person,
+        "Date": approval_date,
+        "Justification_of_Change": justification,
+        # Keep both spellings because template currently uses the "Satus" token.
+        "COR_Satus": cor_status,
+        "COR_Status": cor_status,
+        "Cor_Status": cor_status,
+        "COR NO. #": cor_no_label,
+        "Capmatic_PM": capmatic_pm,
+        "Sales_Rep": sales_rep,
+        "Payment_Terms": payment_terms,
+        "Currency": currency,
+        "Comments": comments,
+        "Comment": comments,
     }
 
-    for paragraph in document.paragraphs:
-        _replace_tokens_in_paragraph(paragraph, replacements)
-    for table in document.tables:
+    _replace_tokens_in_container(document, replacements, initiator_value)
+    for section in document.sections:
+        containers = (
+            section.header,
+            section.first_page_header,
+            section.even_page_header,
+            section.footer,
+            section.first_page_footer,
+            section.even_page_footer,
+        )
+        for container in containers:
+            _replace_tokens_in_container(container, replacements, initiator_value)
+
+
+def _replace_tokens_in_container(container: Any, replacements: dict[str, str], initiator_value: str) -> None:
+    for paragraph in container.paragraphs:
+        _replace_tokens_in_paragraph(paragraph, replacements, initiator_value)
+    for table in container.tables:
         for row in table.rows:
             for cell in row.cells:
                 for paragraph in cell.paragraphs:
-                    _replace_tokens_in_paragraph(paragraph, replacements)
+                    _replace_tokens_in_paragraph(paragraph, replacements, initiator_value)
 
 
 def _fill_cor_template_tables(document: Document, cor_data: dict[str, Any]) -> None:
@@ -107,23 +180,59 @@ def _fill_cor_template_tables(document: Document, cor_data: dict[str, Any]) -> N
 
     client = cor_data.get("client") if isinstance(cor_data.get("client"), dict) else {}
     cor_no = _to_text(cor_data.get("corNo"))
+    cor_no_label = _format_cor_no_label(cor_no)
     order_date = _to_text(client.get("orderDate"))
+    cor_status = _to_text(cor_data.get("corStatus"))
+    capmatic_pm = _to_text(cor_data.get("capmaticPM"))
+    initiator_of_change = _to_text(cor_data.get("initiatorOfChange"))
+    sales_rep = _to_text(cor_data.get("salesRep"))
+    contact_person = _to_text(cor_data.get("contactPerson"))
+    initiator_text = _resolve_initiator_value(contact_person, capmatic_pm, initiator_of_change)
+    impact_deliverables = _to_text(cor_data.get("impactDeliverables"))
+    impact_delivery_date = _to_text(cor_data.get("impactDeliveryDate"))
+    payment_terms = _to_text(cor_data.get("paymentTerms"))
+    currency = _to_text(cor_data.get("currency"))
+    approval_date = _current_date()
     justification = _to_text(cor_data.get("justificationForChange"))
+    comments = _to_text(cor_data.get("comments"))
     line_items = [entry for entry in cor_data.get("lineItems", []) if isinstance(entry, dict)]
 
     # Table 0 has COR no cell.
     table0 = tables[0]
+    if len(table0.rows) > 3 and len(table0.rows[3].cells) > 0:
+        _set_cell_text(table0.rows[3].cells[0], cor_status)
     if len(table0.rows) > 4 and len(table0.rows[4].cells) > 1:
-        _set_cell_text(table0.rows[4].cells[1], cor_no)
+        current_cell_text = _to_text(table0.rows[4].cells[1].text)
+        cor_no_value = cor_no_label if "COR" in current_cell_text.upper() else cor_no
+        _set_cell_text(table0.rows[4].cells[1], cor_no_value)
 
     # Table 1 has order date.
     table1 = tables[1]
     if len(table1.rows) > 1 and len(table1.rows[1].cells) > 1:
         _set_cell_text(table1.rows[1].cells[1], order_date)
+    if len(table1.rows) > 1 and len(table1.rows[1].cells) > 3:
+        _set_cell_text(table1.rows[1].cells[3], capmatic_pm)
+    if len(table1.rows) > 2 and len(table1.rows[2].cells) > 1:
+        _set_cell_text(table1.rows[2].cells[1], sales_rep)
+    if len(table1.rows) > 3:
+        for idx in range(1, min(len(table1.rows[3].cells), 4)):
+            _set_cell_text(table1.rows[3].cells[idx], initiator_text)
 
     table2 = tables[2]
     _fill_justification_rows(table2, justification)
+    _fill_impact_rows(table2, impact_deliverables, impact_delivery_date)
+    _fill_payment_terms_row(table2, payment_terms)
     _fill_line_item_rows(table2, line_items)
+    _fill_currency_cell(table2, currency)
+
+    if len(tables) > 3:
+        table3 = tables[3]
+        if len(table3.rows) > 1 and len(table3.rows[1].cells) > 1:
+            _set_cell_text(table3.rows[1].cells[1], capmatic_pm)
+        if len(table3.rows) > 1 and len(table3.rows[1].cells) > 3:
+            _set_cell_text(table3.rows[1].cells[3], approval_date)
+
+    _fill_comments_rows(document, comments)
 
 
 def _fill_justification_rows(table: Any, justification: str) -> None:
@@ -142,6 +251,41 @@ def _fill_justification_rows(table: Any, justification: str) -> None:
             continue
         text = lines[slot] if slot < len(lines) else ""
         _set_cell_text(row.cells[0], text)
+
+
+def _fill_impact_rows(table: Any, impact_deliverables: str, impact_delivery_date: str) -> None:
+    deliverables_value = _normalize_yes_no(impact_deliverables)
+    delivery_value = _normalize_yes_no(impact_delivery_date)
+
+    deliverables_idx = _find_row_index_containing(table, "IMPACT OF CHANGE TO DELIVERABLES")
+    if deliverables_idx is not None:
+        row = table.rows[deliverables_idx]
+        for idx in range(3, len(row.cells)):
+            _set_cell_text(row.cells[idx], deliverables_value)
+
+    delivery_idx = _find_row_index_containing(table, "IMPACT ON DELIVERY DATE")
+    if delivery_idx is not None:
+        row = table.rows[delivery_idx]
+        for idx in range(2, len(row.cells)):
+            _set_cell_text(row.cells[idx], delivery_value)
+
+
+def _fill_payment_terms_row(table: Any, payment_terms: str) -> None:
+    payment_idx = _find_row_index_containing(table, "PAYMENT TERMS")
+    if payment_idx is None:
+        return
+    row = table.rows[payment_idx]
+    for idx in range(2, len(row.cells)):
+        _set_cell_text(row.cells[idx], payment_terms)
+
+
+def _fill_currency_cell(table: Any, currency: str) -> None:
+    total_idx = _find_row_index_containing(table, "Total (Excluding Taxes)")
+    if total_idx is None:
+        return
+    row = table.rows[total_idx]
+    if len(row.cells) > 6:
+        _set_cell_text(row.cells[6], currency)
 
 
 def _fill_line_item_rows(table: Any, line_items: list[dict[str, Any]]) -> None:
@@ -216,17 +360,20 @@ def _find_row_index_containing(table: Any, needle: str) -> int | None:
     return None
 
 
-def _replace_tokens_in_paragraph(paragraph: Any, replacements: dict[str, str]) -> None:
+def _replace_tokens_in_paragraph(paragraph: Any, replacements: dict[str, str], initiator_value: str) -> None:
     raw_text = "".join(run.text for run in paragraph.runs)
     if not raw_text:
         raw_text = paragraph.text or ""
     if not raw_text:
         return
 
-    updated = raw_text
+    updated = _replace_initiator_pair(raw_text, initiator_value)
     for token, value in replacements.items():
         updated = updated.replace(f"\u00ab{token}\u00bb", value)
+        updated = re.sub(r"\{\{\s*" + re.escape(token) + r"\s*\}\}", value, updated)
     updated = TOKEN_PATTERN.sub("", updated)
+    updated = DOUBLE_BRACE_TOKEN_PATTERN.sub("", updated)
+    updated = _cleanup_or_phrase(updated)
 
     if updated == raw_text:
         return
@@ -238,14 +385,43 @@ def _replace_tokens_in_paragraph(paragraph: Any, replacements: dict[str, str]) -
         paragraph.text = updated
 
 
+def _fill_comments_rows(document: Document, comments: str) -> None:
+    for table in document.tables:
+        comments_idx = _find_row_index_containing(table, "COMMENTS:")
+        if comments_idx is None:
+            continue
+        target_idx = comments_idx + 1 if comments_idx + 1 < len(table.rows) else comments_idx
+        row = table.rows[target_idx]
+        if not row.cells:
+            continue
+        _set_cell_text(row.cells[0], comments)
+        for cell in row.cells[1:]:
+            cell_text = cell.text or ""
+            if "\u00abComments\u00bb" in cell_text or re.search(r"\{\{\s*Comments\s*\}\}", cell_text):
+                _set_cell_text(cell, comments)
+
+
 def _set_cell_text(cell: Any, value: str) -> None:
     text = _to_text(value)
     if cell.paragraphs:
-        cell.paragraphs[0].text = text
+        _set_paragraph_text_with_font_size(cell.paragraphs[0], text)
         for paragraph in cell.paragraphs[1:]:
             paragraph.text = ""
     else:
         cell.text = text
+        if cell.paragraphs:
+            _set_paragraph_text_with_font_size(cell.paragraphs[0], text)
+
+
+def _set_paragraph_text_with_font_size(paragraph: Any, text: str) -> None:
+    if paragraph.runs:
+        paragraph.runs[0].text = text
+        paragraph.runs[0].font.size = Pt(INSERTED_TEXT_FONT_SIZE_PT)
+        for run in paragraph.runs[1:]:
+            run.text = ""
+        return
+    run = paragraph.add_run(text)
+    run.font.size = Pt(INSERTED_TEXT_FONT_SIZE_PT)
 
 
 def _format_amount(value: float) -> str:
@@ -272,6 +448,56 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
+def _current_date() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
 def _slugify(value: str) -> str:
     normalized = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip()).strip("-")
     return normalized.lower()
+
+
+def _cleanup_or_phrase(value: str) -> str:
+    text = _to_text(value)
+    if not text:
+        return ""
+    text = re.sub(r"^\s*or\b\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\bor\b\s*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
+
+
+def _resolve_initiator_value(contact_person: str, capmatic_pm: str, source: str) -> str:
+    normalized_source = _to_text(source).lower()
+    if normalized_source == "capmatic_pm":
+        return _to_text(capmatic_pm)
+    return _to_text(contact_person)
+
+
+def _replace_initiator_pair(value: str, initiator_value: str) -> str:
+    text = value
+    replacement = _to_text(initiator_value)
+    brace_pattern = r"\{\{\s*Contact_Person\s*\}\}\s*or\s*\{\{\s*Capmatic_PM\s*\}\}"
+    angle_pattern = r"\u00ab\s*Contact_Person\s*\u00bb\s*or\s*\u00ab\s*Capmatic_PM\s*\u00bb"
+    text = re.sub(brace_pattern, replacement, text, flags=re.IGNORECASE)
+    text = re.sub(angle_pattern, replacement, text, flags=re.IGNORECASE)
+    return text
+
+
+def _normalize_yes_no(value: str) -> str:
+    text = _to_text(value).lower()
+    if text in {"yes", "y", "true", "1"}:
+        return "Yes"
+    if text in {"no", "n", "false", "0"}:
+        return "No"
+    return ""
+
+
+def _format_cor_no_label(cor_no: str) -> str:
+    value = _to_text(cor_no)
+    if not value:
+        return "COR"
+    if re.match(r"^cor\b", value, flags=re.IGNORECASE):
+        normalized = re.sub(r"^cor\b\.?\s*", "", value, flags=re.IGNORECASE)
+        return f"COR {normalized}".strip()
+    return f"COR {value}"

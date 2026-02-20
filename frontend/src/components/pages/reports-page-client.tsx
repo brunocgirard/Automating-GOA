@@ -96,12 +96,37 @@ export default function ReportsPage() {
     printWindow.print();
   }
 
+  function handleSaveHtml() {
+    if (!reportHtml) return;
+
+    const parts = [selectedQuoteData?.quoteRef, selectedQuoteData?.machineName]
+      .filter(Boolean)
+      .map((part) =>
+        String(part)
+          .trim()
+          .replace(/[^a-zA-Z0-9._-]+/g, "_")
+          .replace(/^_+|_+$/g, "")
+      )
+      .filter((part) => part.length > 0);
+
+    const filename = `${parts.join("_") || "machine_report"}.html`;
+    const blob = new Blob([reportHtml], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Reports</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          View and print machine build reports.
+          View, save as HTML, or print machine build reports.
         </p>
       </div>
 
@@ -164,11 +189,11 @@ export default function ReportsPage() {
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                 <Button variant="outline" size="sm" onClick={handlePrint}>
                   <Printer className="mr-2 h-4 w-4" />
-                  Print
+                  Print / Save PDF
                 </Button>
-                <Button variant="outline" size="sm" onClick={handlePrint}>
+                <Button variant="outline" size="sm" onClick={handleSaveHtml}>
                   <Download className="mr-2 h-4 w-4" />
-                  Download PDF
+                  Save HTML
                 </Button>
               </div>
             )}

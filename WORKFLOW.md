@@ -312,6 +312,26 @@ Return: FileResponse (DOCX or ZIP)
 }
 ```
 
+### Mail Merge DOCX to HTML Conversion
+
+Use the batch conversion script when you need HTML fragments from the Word templates in `Mail_merge`.
+
+```bash
+python scripts/convert_mail_merge_docx_to_html.py
+```
+
+Default output location:
+- `Mail_merge/html_fragments/*.html` (one fragment per DOCX)
+- `Mail_merge/html_fragments/mail-merge-content.css` (external tag-based stylesheet)
+
+Conversion guarantees:
+- Uses `pandoc` with `--embed-resources` and `--wrap=none`
+- Removes all HTML `class` attributes from converted fragments
+- Preserves inline styles for layout fidelity
+- Preserves merge placeholders (for example `\u00abCustomer_PO\u00bb`)
+- Wraps output in `<article data-source-docx="...">...</article>`
+- Stylesheet enforces content width with `max-width: 795px`
+
 ---
 
 ## Frontend Architecture

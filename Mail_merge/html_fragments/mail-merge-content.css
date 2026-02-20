@@ -1,0 +1,104 @@
+article {
+  max-width: 795px;
+  margin: 0 auto;
+  padding: 0;
+  color: #111111;
+  background: #ffffff;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+article * {
+  box-sizing: border-box;
+}
+
+article h1,
+article h2,
+article h3,
+article h4,
+article h5,
+article h6 {
+  margin: 1.1rem 0 0.55rem;
+  line-height: 1.25;
+}
+
+article h1 {
+  font-size: 2rem;
+}
+
+article h2 {
+  font-size: 1.6rem;
+}
+
+article h3 {
+  font-size: 1.35rem;
+}
+
+article h4 {
+  font-size: 1.2rem;
+}
+
+article h5,
+article h6 {
+  font-size: 1rem;
+}
+
+article p {
+  margin: 0 0 0.8rem;
+}
+
+article ul,
+article ol {
+  margin: 0 0 1rem 1.5rem;
+  padding: 0;
+}
+
+article li {
+  margin-bottom: 0.3rem;
+}
+
+article a {
+  color: #0b4a8b;
+  text-decoration: underline;
+}
+
+article blockquote {
+  margin: 0.8rem 0;
+  padding: 0.2rem 0.8rem;
+  border-left: 3px solid #c9c9c9;
+  color: #333333;
+}
+
+article table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+}
+
+article th,
+article td {
+  border: 1px solid #bdbdbd;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+article hr {
+  border: 0;
+  border-top: 1px solid #cdcdcd;
+  margin: 1rem 0;
+}
+
+article img,
+article svg {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 840px) {
+  article {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}

@@ -15,9 +15,8 @@ const fields: Array<{
 }> = [
   { key: "quoteNo", label: "Quote No", readOnly: true },
   { key: "ax", label: "Ax" },
-  { key: "customerName", label: "Customer" },
-  { key: "company", label: "Company" },
-  { key: "machine", label: "Machine" },
+  { key: "customerName", label: "Customer (Company Name)" },
+  { key: "company", label: "Contact Person (company)" },
   { key: "serialNumber", label: "Serial Number" },
   { key: "soldToAddress1", label: "Sold to/Address 1" },
   { key: "soldToAddress2", label: "Sold to/Address 2" },
@@ -34,7 +33,7 @@ const fields: Array<{
   { key: "taxId", label: "Tax ID" },
   { key: "hsCode", label: "H.S" },
   { key: "customerNumber", label: "Customer Number" },
-  { key: "clientContact", label: "Client Contact" },
+  { key: "clientContact", label: "Email (customer_contact_person)" },
 ];
 
 export function QuoteClientInfo({ clientInfo, onChange }: QuoteDetailsProps) {

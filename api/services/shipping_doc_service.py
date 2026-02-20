@@ -18,6 +18,21 @@ from docx import Document
 HS_CODE_FILE = Path("src/data/hs_codes.json")
 OUTPUT_ROOT = Path("data/generated/shipping")
 
+PACKING_SLIP_TEMPLATE_CANDIDATES = (
+    Path("Mail_merge/Paking Slip1.docx"),
+    Path("Mail_merge/Paking Slip.docx"),
+)
+
+COMMERCIAL_INVOICE_TEMPLATE_CANDIDATES = (
+    Path("Mail_merge/Commercial Invoice1.docx"),
+    Path("Mail_merge/Commercial Invoice.docx"),
+)
+
+CERTIFICATE_ORIGIN_TEMPLATE_CANDIDATES = (
+    Path("Mail_merge/CERTIFICATION OF ORIGIN_NAFTA1.docx"),
+    Path("Mail_merge/CERTIFICATION OF ORIGIN_NAFTA.docx"),
+)
+
 TEMPLATE_PATHS = {
     "packing_slip": Path("Mail_merge/Paking Slip.docx"),
     "commercial_invoice": Path("Mail_merge/Commercial Invoice.docx"),
@@ -25,6 +40,7 @@ TEMPLATE_PATHS = {
 }
 
 TOKEN_PATTERN = re.compile(r"\u00ab[^\u00bb]+\u00bb")
+DOUBLE_BRACE_TOKEN_PATTERN = re.compile(r"\{\{\s*[^{}]+\s*\}\}")
 
 DEFAULT_META: dict[str, str] = {
     "brokerInfo": "",
@@ -166,8 +182,8 @@ def build_shipping_prefill_data(
         "quoteRef": _to_text(quote.get("quote_ref")),
         "client": {
             "quoteRef": _to_text(quote.get("quote_ref")),
-            "company": _to_text(quote.get("company")) or _to_text(quote.get("customer_name")),
-            "customerName": _to_text(quote.get("customer_name")),
+            "company": _to_text(quote.get("company")),
+            "customerName": _to_text(quote.get("customer_name")) or _to_text(quote.get("company")),
             "soldToAddress1": sold_to[0],
             "soldToAddress2": sold_to[1],
             "soldToAddress3": sold_to[2],
@@ -262,7 +278,7 @@ def generate_shipping_documents(
 
 
 def _generate_single_docx(document_type: str, shipping_data: dict[str, Any], output_path: Path) -> None:
-    template_path = TEMPLATE_PATHS[document_type]
+    template_path = _resolve_template_path(document_type)
     if not template_path.exists():
         raise FileNotFoundError(f"Template not found: {template_path}")
 
@@ -276,6 +292,22 @@ def _generate_single_docx(document_type: str, shipping_data: dict[str, Any], out
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     document.save(str(output_path))
+
+
+def _resolve_template_path(document_type: str) -> Path:
+    if document_type == "packing_slip":
+        for candidate in PACKING_SLIP_TEMPLATE_CANDIDATES:
+            if candidate.exists():
+                return candidate
+    if document_type == "commercial_invoice":
+        for candidate in COMMERCIAL_INVOICE_TEMPLATE_CANDIDATES:
+            if candidate.exists():
+                return candidate
+    if document_type == "certificate_origin":
+        for candidate in CERTIFICATE_ORIGIN_TEMPLATE_CANDIDATES:
+            if candidate.exists():
+                return candidate
+    return TEMPLATE_PATHS[document_type]
 
 
 def _generate_single_html(document_type: str, shipping_data: dict[str, Any], output_path: Path) -> None:
@@ -338,14 +370,14 @@ def _render_packing_slip_html(shipping_data: dict[str, Any]) -> str:
     <div class="grid two">
       <div class="panel">
         <h3>Sold To</h3>
-        <p>{escape(_line(_to_text(client.get("company")) or _to_text(client.get("customerName"))))}</p>
+        <p>{escape(_line(_to_text(client.get("customerName")) or _to_text(client.get("company"))))}</p>
         <p>{escape(_line(_to_text(client.get("soldToAddress1"))))}</p>
         <p>{escape(_line(_to_text(client.get("soldToAddress2"))))}</p>
         <p>{_html_lines(_to_text(client.get("soldToAddress3")))}</p>
       </div>
       <div class="panel">
         <h3>Ship To</h3>
-        <p>{escape(_line(_to_text(client.get("company")) or _to_text(client.get("customerName"))))}</p>
+        <p>{escape(_line(_to_text(client.get("customerName")) or _to_text(client.get("company"))))}</p>
         <p>{escape(_line(_to_text(client.get("shipToAddress1"))))}</p>
         <p>{escape(_line(_to_text(client.get("shipToAddress2"))))}</p>
         <p>{_html_lines(_to_text(client.get("shipToAddress3")))}</p>
@@ -401,7 +433,7 @@ def _render_commercial_invoice_html(shipping_data: dict[str, Any]) -> str:
     <div class="grid two">
       <div class="panel">
         <h3>Sold To</h3>
-        <p>{escape(_line(_to_text(client.get("company")) or _to_text(client.get("customerName"))))}</p>
+        <p>{escape(_line(_to_text(client.get("customerName")) or _to_text(client.get("company"))))}</p>
         <p>{escape(_line(_to_text(client.get("soldToAddress1"))))}</p>
         <p>{escape(_line(_to_text(client.get("soldToAddress2"))))}</p>
         <p>{_html_lines(_to_text(client.get("soldToAddress3")))}</p>
@@ -409,7 +441,7 @@ def _render_commercial_invoice_html(shipping_data: dict[str, Any]) -> str:
       </div>
       <div class="panel">
         <h3>Ship To</h3>
-        <p>{escape(_line(_to_text(client.get("company")) or _to_text(client.get("customerName"))))}</p>
+        <p>{escape(_line(_to_text(client.get("customerName")) or _to_text(client.get("company"))))}</p>
         <p>{escape(_line(_to_text(client.get("shipToAddress1"))))}</p>
         <p>{escape(_line(_to_text(client.get("shipToAddress2"))))}</p>
         <p>{_html_lines(_to_text(client.get("shipToAddress3")))}</p>
@@ -469,7 +501,7 @@ def _render_certificate_origin_html(shipping_data: dict[str, Any]) -> str:
       </div>
       <div class="panel">
         <h3>Importer</h3>
-        <p>{escape(_line(_to_text(client.get("company")) or _to_text(client.get("customerName"))))}</p>
+        <p>{escape(_line(_to_text(client.get("customerName")) or _to_text(client.get("company"))))}</p>
         <p>{escape(_line(_to_text(client.get("soldToAddress1"))))}</p>
         <p>{escape(_line(_to_text(client.get("soldToAddress2"))))}</p>
         <p>{_html_lines(_to_text(client.get("soldToAddress3")))}</p>
@@ -606,11 +638,23 @@ def _machine_rows(shipping_data: dict[str, Any]) -> list[dict[str, str]]:
         if not isinstance(machine, dict):
             continue
         machine_name = _to_text(machine.get("model")) or _to_text(machine.get("machineName"))
+        machine_type = _to_text(machine.get("machineType") or machine.get("type"))
+        quantity = _to_text(machine.get("qty") or machine.get("quantity") or "1")
+        quantity_value = _to_float(quantity) if quantity else 1.0
+        if quantity_value <= 0:
+            quantity_value = 1.0
+        unit_price = _to_float(machine.get("unitPrice"))
+        line_total = unit_price * quantity_value
         rows.append(
             {
                 "Machine": machine_name,
                 "Serial_Number": _to_text(machine.get("serialNumber")),
                 "HS": _to_text(machine.get("hsCode")),
+                "TYPE": machine_type,
+                "type": machine_type,
+                "Qty": quantity,
+                "Price": _usd(unit_price),
+                "Total_Price": _usd(line_total),
                 "Next Record": "",
             }
         )
@@ -618,17 +662,25 @@ def _machine_rows(shipping_data: dict[str, Any]) -> list[dict[str, str]]:
     if rows:
         return rows
 
-    return [{"Machine": "", "Serial_Number": "", "HS": "", "Next Record": ""}]
+    return [
+        {
+            "Machine": "",
+            "Serial_Number": "",
+            "HS": "",
+            "TYPE": "",
+            "type": "",
+            "Qty": "",
+            "Price": "",
+            "Total_Price": "",
+            "Next Record": "",
+        }
+    ]
 
 
 def _fill_repeating_machine_rows(document: Document, machine_rows: list[dict[str, str]]) -> None:
     required_count = max(1, len(machine_rows))
     for table in document.tables:
-        row_indices = [
-            index
-            for index, row in enumerate(table.rows)
-            if "\u00abNext Record\u00bb" in _table_row_text(row)
-        ]
+        row_indices = _find_repeating_row_indices(table)
         if not row_indices:
             continue
 
@@ -642,19 +694,44 @@ def _fill_repeating_machine_rows(document: Document, machine_rows: list[dict[str
                 else:
                     insert_before.addprevious(cloned)
 
-            row_indices = [
-                index
-                for index, row in enumerate(table.rows)
-                if "\u00abNext Record\u00bb" in _table_row_text(row)
-            ]
+            row_indices = _find_repeating_row_indices(table)
 
         for slot, row_index in enumerate(row_indices):
             row = table.rows[row_index]
             replacement = machine_rows[slot] if slot < len(machine_rows) else machine_rows[-1]
             if slot >= len(machine_rows):
-                replacement = {"Machine": "", "Serial_Number": "", "HS": "", "Next Record": ""}
+                replacement = {
+                    "Machine": "",
+                    "Serial_Number": "",
+                    "HS": "",
+                    "TYPE": "",
+                    "type": "",
+                    "Qty": "",
+                    "Price": "",
+                    "Total_Price": "",
+                    "Next Record": "",
+                }
             for cell in row.cells:
                 _replace_tokens_in_cell(cell, replacement, {})
+
+
+def _find_repeating_row_indices(table: Any) -> list[int]:
+    explicit_marker_rows = [
+        index
+        for index, row in enumerate(table.rows)
+        if _row_contains_token(_table_row_text(row), "Next Record")
+    ]
+    if explicit_marker_rows:
+        return explicit_marker_rows
+
+    # Fallback for templates that omit Next Record but have machine placeholders.
+    machine_template_tokens = ("Machine", "Serial_Number", "HS", "Qty", "TYPE", "type")
+    fallback_rows: list[int] = []
+    for index, row in enumerate(table.rows):
+        row_text = _table_row_text(row)
+        if any(_row_contains_token(row_text, token) for token in machine_template_tokens):
+            fallback_rows.append(index)
+    return fallback_rows
 
 
 def _replace_tokens_in_document(
@@ -662,10 +739,30 @@ def _replace_tokens_in_document(
     token_replacements: dict[str, str],
     literal_replacements: dict[str, str],
 ) -> None:
-    for paragraph in document.paragraphs:
+    _replace_tokens_in_container(document, token_replacements, literal_replacements)
+
+    for section in document.sections:
+        containers = (
+            section.header,
+            section.first_page_header,
+            section.even_page_header,
+            section.footer,
+            section.first_page_footer,
+            section.even_page_footer,
+        )
+        for container in containers:
+            _replace_tokens_in_container(container, token_replacements, literal_replacements)
+
+
+def _replace_tokens_in_container(
+    container: Any,
+    token_replacements: dict[str, str],
+    literal_replacements: dict[str, str],
+) -> None:
+    for paragraph in container.paragraphs:
         _replace_tokens_in_paragraph(paragraph, token_replacements, literal_replacements)
 
-    for table in document.tables:
+    for table in container.tables:
         for row in table.rows:
             for cell in row.cells:
                 _replace_tokens_in_cell(cell, token_replacements, literal_replacements)
@@ -698,12 +795,14 @@ def _replace_tokens_in_paragraph(
     updated_text = raw_text
     for token, value in token_replacements.items():
         updated_text = updated_text.replace(f"\u00ab{token}\u00bb", value)
+        updated_text = re.sub(r"\{\{\s*" + re.escape(token) + r"\s*\}\}", value, updated_text)
 
     for source, target in literal_replacements.items():
         if source:
             updated_text = updated_text.replace(source, target)
 
     updated_text = TOKEN_PATTERN.sub("", updated_text)
+    updated_text = DOUBLE_BRACE_TOKEN_PATTERN.sub("", updated_text)
     updated_text = re.sub(r"\s+\n", "\n", updated_text)
 
     if updated_text == raw_text:
@@ -723,10 +822,24 @@ def _build_global_token_replacements(
 ) -> dict[str, str]:
     client = shipping_data.get("client") if isinstance(shipping_data.get("client"), dict) else {}
     meta = shipping_data.get("meta") if isinstance(shipping_data.get("meta"), dict) else {}
+    machines = [machine for machine in shipping_data.get("machines", []) if isinstance(machine, dict)]
     first_machine = machine_rows[0] if machine_rows else {"Machine": "", "Serial_Number": "", "HS": ""}
+    display_name = _to_text(client.get("customerName")) or _to_text(client.get("company"))
+    now = datetime.now()
+    document_date = now.strftime("%Y-%m-%d")
+    document_year = str(now.year)
+    try:
+        next_year_date = now.replace(year=now.year + 1).strftime("%Y-%m-%d")
+    except ValueError:
+        # Handle leap-day rollover gracefully for non-leap following years.
+        next_year_date = now.replace(month=2, day=28, year=now.year + 1).strftime("%Y-%m-%d")
+    manual_total = _to_float(meta.get("totalInvoiceAmount"))
+    computed_total = sum(_to_float(machine.get("unitPrice")) for machine in machines)
+    total_price = manual_total if manual_total > 0 else computed_total
 
     replacements = {
-        "Company": _to_text(client.get("company")) or _to_text(client.get("customerName")),
+        "Company": display_name,
+        "Customer": display_name,
         "Sold_toAddress_1": _to_text(client.get("soldToAddress1")),
         "Sold_toAddress_2": _to_text(client.get("soldToAddress2")),
         "Sold_toAddress_3": _to_text(client.get("soldToAddress3")),
@@ -735,6 +848,9 @@ def _build_global_token_replacements(
         "Ship_toAddress_3": _to_text(client.get("shipToAddress3")),
         "Customer_PO": _to_text(client.get("customerPO")),
         "Order_date": _to_text(client.get("orderDate")),
+        "Date": document_date,
+        "Year": document_year,
+        "Next_Year_Date": next_year_date,
         "Ox": _to_text(client.get("ox")),
         "Incoterm": _to_text(client.get("incoterm")),
         "Customer_Number": _to_text(client.get("customerNumber")),
@@ -744,6 +860,11 @@ def _build_global_token_replacements(
         "Machine": _to_text(first_machine.get("Machine")),
         "Serial_Number": _to_text(first_machine.get("Serial_Number")),
         "HS": _to_text(first_machine.get("HS")),
+        "Qty": _to_text(first_machine.get("Qty")),
+        "TYPE": _to_text(first_machine.get("TYPE")),
+        "type": _to_text(first_machine.get("type")),
+        "Price": _to_text(first_machine.get("Price")),
+        "Total_Price": _usd(total_price),
         "Origin_Criterion": _to_text(meta.get("originCriterion") or "B"),
         "Country_of_origin": _to_text(meta.get("countryOfOrigin") or "Canada"),
         "Certifier_Name": _to_text(meta.get("certifierName")),
@@ -919,6 +1040,14 @@ def _split_address_lines(raw_value: Any) -> tuple[str, str, str]:
 
 def _table_row_text(row: Any) -> str:
     return " | ".join(cell.text for cell in row.cells)
+
+
+def _row_contains_token(text: str, token_name: str) -> bool:
+    if not text or not token_name:
+        return False
+    if f"\u00ab{token_name}\u00bb" in text:
+        return True
+    return bool(re.search(r"\{\{\s*" + re.escape(token_name) + r"\s*\}\}", text))
 
 
 def _to_text(value: Any) -> str:

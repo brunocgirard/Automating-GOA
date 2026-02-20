@@ -100,6 +100,7 @@ from .shipping import (
 
 # COR document workflow operations
 from .cor import (
+    list_cor_documents,
     load_cor_document,
     save_cor_document,
 )
@@ -169,6 +170,7 @@ __all__ = [
     'save_shipping_document',
 
     # COR workflow operations
+    'list_cor_documents',
     'load_cor_document',
     'save_cor_document',
 

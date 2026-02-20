@@ -237,12 +237,25 @@ def init_db(db_path: str = DB_PATH):
         CREATE TABLE IF NOT EXISTS cor_documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_quote_ref TEXT NOT NULL,
+            cor_no TEXT,
+            description TEXT,
             cor_data_json TEXT NOT NULL,
             created_date TEXT NOT NULL,
             modified_date TEXT NOT NULL,
             FOREIGN KEY (client_quote_ref) REFERENCES clients (quote_ref) ON DELETE CASCADE
         )
         """)
+
+        cursor.execute("PRAGMA table_info(cor_documents)")
+        cor_columns = [row[1] for row in cursor.fetchall()]
+        cor_new_columns = {
+            "cor_no": "TEXT",
+            "description": "TEXT",
+        }
+        for col_name, col_type in cor_new_columns.items():
+            if col_name not in cor_columns:
+                cursor.execute(f"ALTER TABLE cor_documents ADD COLUMN {col_name} {col_type}")
+                print(f"Added column '{col_name}' to 'cor_documents' table.")
 
         _INITIALIZED_DB_PATHS.add(normalized_path)
         print(f"Database '{normalized_path}' initialized with all required tables.")

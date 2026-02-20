@@ -351,12 +351,32 @@ interface ApiCorEnvelope {
   cor_data: Record<string, unknown>;
 }
 
+interface ApiCorRevisionSummary {
+  cor_document_id: number;
+  cor_no?: string | null;
+  description?: string | null;
+  created_date?: string | null;
+  modified_date?: string | null;
+}
+
+interface ApiCorRevisionListEnvelope {
+  quote_id: number;
+  quote_ref: string;
+  revisions: ApiCorRevisionSummary[];
+}
+
 interface ApiCorLoadEnvelope extends ApiCorEnvelope {
+  cor_document_id: number;
+  cor_no?: string | null;
+  description?: string | null;
   created_date?: string | null;
   modified_date?: string | null;
 }
 
 interface ApiCorSaveEnvelope extends ApiCorEnvelope {
+  cor_document_id: number;
+  cor_no?: string | null;
+  description?: string | null;
   saved_at: string;
 }
 
@@ -477,13 +497,42 @@ export interface CorDocumentState {
   quoteRef: string;
   client: CorClientInfo;
   corNo: string;
+  revisionDescription: string;
+  corStatus: string;
+  capmaticPM: string;
+  initiatorOfChange: string;
+  salesRep: string;
+  contactPerson: string;
+  impactDeliverables: string;
+  impactDeliveryDate: string;
+  paymentTerms: string;
+  currency: string;
+  approvalDate: string;
   justificationForChange: string;
+  comments: string;
   lineItems: CorLineItem[];
+}
+
+export interface CorRevisionSummary {
+  corDocumentId: number;
+  corNo: string;
+  description: string;
+  createdDate: string | null;
+  modifiedDate: string | null;
+}
+
+export interface CorRevisionListResult {
+  quoteId: number;
+  quoteRef: string;
+  revisions: CorRevisionSummary[];
 }
 
 export interface CorLoadResult {
   quoteId: number;
   quoteRef: string;
+  corDocumentId: number;
+  corNo: string;
+  description: string;
   createdDate: string | null;
   modifiedDate: string | null;
   corData: CorDocumentState;
@@ -492,8 +541,22 @@ export interface CorLoadResult {
 export interface CorSaveResult {
   quoteId: number;
   quoteRef: string;
+  corDocumentId: number;
+  corNo: string;
+  description: string;
   savedAt: string;
   corData: CorDocumentState;
+}
+
+export interface QuoteWorkflowStatus {
+  quoteId: number;
+  quoteRef: string;
+  quoteStatus: Status;
+  quoteProcessed: boolean;
+  shippingSaved: boolean;
+  shippingModifiedDate: string | null;
+  corSaved: boolean;
+  corModifiedDate: string | null;
 }
 
 function createClientId(name: string, fallback: string): string {
@@ -632,7 +695,19 @@ function normalizeCorState(
       machine: asString(clientRaw.machine),
     },
     corNo: asString(state.corNo) || "1",
+    revisionDescription: asString(state.revisionDescription),
+    corStatus: asString(state.corStatus),
+    capmaticPM: asString(state.capmaticPM),
+    initiatorOfChange: asString(state.initiatorOfChange) || "contact_person",
+    salesRep: asString(state.salesRep),
+    contactPerson: asString(state.contactPerson),
+    impactDeliverables: asString(state.impactDeliverables),
+    impactDeliveryDate: asString(state.impactDeliveryDate),
+    paymentTerms: asString(state.paymentTerms),
+    currency: asString(state.currency),
+    approvalDate: asString(state.approvalDate),
     justificationForChange: asString(state.justificationForChange),
+    comments: asString(state.comments),
     lineItems:
       lineItems.length > 0
         ? lineItems
@@ -788,6 +863,16 @@ function normalizeShippingState(
 function toTimestamp(value: string): number {
   const n = Date.parse(value);
   return Number.isNaN(n) ? 0 : n;
+}
+
+function aggregateQuoteStatus(machineRows: ApiMachine[]): Status {
+  if (machineRows.some((row) => row.status === "ready")) {
+    return "ready";
+  }
+  if (machineRows.some((row) => row.status === "processed")) {
+    return "processed";
+  }
+  return "draft";
 }
 
 async function fetchJson<T>(
@@ -1087,6 +1172,47 @@ export async function fetchQuoteClientInfo(quoteId: number): Promise<QuoteClient
   };
 }
 
+export async function fetchQuoteWorkflowStatus(
+  quoteId: number
+): Promise<QuoteWorkflowStatus> {
+  if (!Number.isFinite(quoteId)) {
+    throw new Error("Invalid quote id.");
+  }
+
+  const [quote, machines, shippingState, corState] = await Promise.all([
+    fetchJson<ApiQuote>(`/api/quotes/${quoteId}`),
+    fetchJson<ApiMachine[]>(
+      `/api/quotes/${quoteId}/machines?main_only=true`,
+      undefined,
+      true
+    ),
+    fetchJson<ApiShippingLoadEnvelope>(
+      `/api/shipping/${quoteId}/load`,
+      undefined,
+      true
+    ),
+    fetchJson<ApiCorLoadEnvelope>(`/api/cor/${quoteId}/load`, undefined, true),
+  ]);
+
+  if (!quote) {
+    throw new Error("Quote not found.");
+  }
+
+  const machineRows = machines ?? [];
+  const quoteStatus = aggregateQuoteStatus(machineRows);
+
+  return {
+    quoteId: quote.id,
+    quoteRef: quote.quote_ref,
+    quoteStatus,
+    quoteProcessed: quoteStatus !== "draft",
+    shippingSaved: Boolean(shippingState),
+    shippingModifiedDate: shippingState?.modified_date ?? null,
+    corSaved: Boolean(corState),
+    corModifiedDate: corState?.modified_date ?? null,
+  };
+}
+
 export async function fetchShippingPrefill(
   quoteId: number
 ): Promise<ShippingDocumentState> {
@@ -1210,29 +1336,72 @@ export async function fetchCorPrefill(
   return normalizeCorState(response.cor_data, response.quote_id, response.quote_ref);
 }
 
-export async function loadCorState(
+export async function fetchCorRevisions(
   quoteId: number
+): Promise<CorRevisionListResult> {
+  const response = await fetchJson<ApiCorRevisionListEnvelope>(`/api/cor/${quoteId}/revisions`);
+  if (!response) {
+    throw new Error("Failed to load COR revisions.");
+  }
+  return {
+    quoteId: response.quote_id,
+    quoteRef: response.quote_ref,
+    revisions: (response.revisions ?? [])
+      .map((entry) => ({
+        corDocumentId:
+          typeof entry.cor_document_id === "number" && Number.isFinite(entry.cor_document_id)
+            ? entry.cor_document_id
+            : 0,
+        corNo: asString(entry.cor_no),
+        description: asString(entry.description),
+        createdDate: entry.created_date ?? null,
+        modifiedDate: entry.modified_date ?? null,
+      }))
+      .filter((entry) => entry.corDocumentId > 0),
+  };
+}
+
+export async function loadCorState(
+  quoteId: number,
+  corDocumentId?: number | null
 ): Promise<CorLoadResult | null> {
+  const query = typeof corDocumentId === "number" && Number.isFinite(corDocumentId)
+    ? `?cor_document_id=${encodeURIComponent(String(corDocumentId))}`
+    : "";
   const response = await fetchJson<ApiCorLoadEnvelope>(
-    `/api/cor/${quoteId}/load`,
+    `/api/cor/${quoteId}/load${query}`,
     undefined,
     true
   );
   if (!response) {
     return null;
   }
+  const normalized = normalizeCorState(response.cor_data, response.quote_id, response.quote_ref);
+  const corNo = asString(response.cor_no) || normalized.corNo;
+  const description = asString(response.description) || normalized.revisionDescription;
   return {
     quoteId: response.quote_id,
     quoteRef: response.quote_ref,
+    corDocumentId: response.cor_document_id,
+    corNo,
+    description,
     createdDate: response.created_date ?? null,
     modifiedDate: response.modified_date ?? null,
-    corData: normalizeCorState(response.cor_data, response.quote_id, response.quote_ref),
+    corData: {
+      ...normalized,
+      corNo,
+      revisionDescription: description,
+    },
   };
 }
 
 export async function saveCorState(
   quoteId: number,
-  corData: CorDocumentState
+  corData: CorDocumentState,
+  options?: {
+    corDocumentId?: number | null;
+    createNew?: boolean;
+  }
 ): Promise<CorSaveResult> {
   const response = await fetchJson<ApiCorSaveEnvelope>(
     `/api/cor/${quoteId}/save`,
@@ -1240,17 +1409,34 @@ export async function saveCorState(
       method: "POST",
       body: JSON.stringify({
         cor_data: corData,
+        cor_document_id:
+          typeof options?.corDocumentId === "number" && Number.isFinite(options.corDocumentId)
+            ? options.corDocumentId
+            : null,
+        create_new: Boolean(options?.createNew),
+        cor_no: corData.corNo,
+        description: corData.revisionDescription,
       }),
     }
   );
   if (!response) {
     throw new Error("Failed to save COR state.");
   }
+  const normalized = normalizeCorState(response.cor_data, response.quote_id, response.quote_ref);
+  const corNo = asString(response.cor_no) || normalized.corNo;
+  const description = asString(response.description) || normalized.revisionDescription;
   return {
     quoteId: response.quote_id,
     quoteRef: response.quote_ref,
+    corDocumentId: response.cor_document_id,
+    corNo,
+    description,
     savedAt: response.saved_at,
-    corData: normalizeCorState(response.cor_data, response.quote_id, response.quote_ref),
+    corData: {
+      ...normalized,
+      corNo,
+      revisionDescription: description,
+    },
   };
 }
 
@@ -1258,6 +1444,7 @@ export async function generateCorDoc(
   quoteId: number,
   options?: {
     corData?: CorDocumentState;
+    corDocumentId?: number | null;
   }
 ): Promise<{ blob: Blob; filename: string; contentType: string }> {
   const response = await fetch(`${API_BASE}/api/cor/${quoteId}/generate`, {
@@ -1268,6 +1455,10 @@ export async function generateCorDoc(
     cache: "no-store",
     body: JSON.stringify({
       cor_data: options?.corData,
+      cor_document_id:
+        typeof options?.corDocumentId === "number" && Number.isFinite(options.corDocumentId)
+          ? options.corDocumentId
+          : null,
     }),
   });
 

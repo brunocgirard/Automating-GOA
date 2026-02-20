@@ -269,7 +269,7 @@ export default function ShippingDocumentsPageClient() {
     setDownloading(documentType);
     setError(null);
     setStatus(null);
-    void generateShippingDocs(state.quoteId, { documentType, outputFormat: "html", shippingData: state })
+    void generateShippingDocs(state.quoteId, { documentType, outputFormat: "docx", shippingData: state })
       .then((result) => {
         downloadBlob(result.blob, result.filename);
         setStatus(`Generated ${result.filename}.`);
@@ -347,8 +347,8 @@ export default function ShippingDocumentsPageClient() {
           {state ? (
             <>
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1"><label className="text-sm font-medium">Company</label><Input value={state.client.company} onChange={(e) => setClientField("company", e.target.value)} /></div>
-                <div className="space-y-1"><label className="text-sm font-medium">Customer Name</label><Input value={state.client.customerName} onChange={(e) => setClientField("customerName", e.target.value)} /></div>
+                <div className="space-y-1"><label className="text-sm font-medium">Contact Person (company)</label><Input value={state.client.company} onChange={(e) => setClientField("company", e.target.value)} /></div>
+                <div className="space-y-1"><label className="text-sm font-medium">Customer (Company Name)</label><Input value={state.client.customerName} onChange={(e) => setClientField("customerName", e.target.value)} /></div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2 rounded-md border p-3">

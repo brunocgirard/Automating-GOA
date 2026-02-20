@@ -34,7 +34,7 @@ export function CommercialInvoicePreview({ state }: CommercialInvoicePreviewProp
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border p-3">
           <p className="mb-1 text-xs font-semibold uppercase text-neutral-500">Sold To</p>
-          <p className="text-sm">{line(client.company || client.customerName)}</p>
+          <p className="text-sm">{line(client.customerName || client.company)}</p>
           <p className="text-sm">{line(client.soldToAddress1)}</p>
           <p className="text-sm">{line(client.soldToAddress2)}</p>
           <p className="text-sm whitespace-pre-line">{line(client.soldToAddress3)}</p>
@@ -42,7 +42,7 @@ export function CommercialInvoicePreview({ state }: CommercialInvoicePreviewProp
         </div>
         <div className="rounded-md border p-3">
           <p className="mb-1 text-xs font-semibold uppercase text-neutral-500">Ship To</p>
-          <p className="text-sm">{line(client.company || client.customerName)}</p>
+          <p className="text-sm">{line(client.customerName || client.company)}</p>
           <p className="text-sm">{line(client.shipToAddress1)}</p>
           <p className="text-sm">{line(client.shipToAddress2)}</p>
           <p className="text-sm whitespace-pre-line">{line(client.shipToAddress3)}</p>
