@@ -77,3 +77,92 @@ export type ProcessingStep =
   | "load-quote"
   | "select-machine"
   | "process-machine";
+
+export type ProjectPhase =
+  | "sales_onboarding"
+  | "engineering_prep"
+  | "design_approval"
+  | "production"
+  | "delivery";
+
+export type TaskStatus = "pending" | "in_progress" | "done" | "skipped";
+export type RiskLevel = "on_track" | "at_risk" | "overdue";
+
+export interface ProjectTask {
+  id: number;
+  project_id: number;
+  task_name: string;
+  task_order: number;
+  phase: ProjectPhase;
+  status: TaskStatus;
+  planned_date: string | null;
+  actual_date: string | null;
+  notes: string | null;
+  modified_date: string | null;
+}
+
+export interface ProjectListItem {
+  id: number;
+  project_name: string;
+  customer_name: string;
+  quote_ref: string | null;
+  machine_summary: string | null;
+  status: string;
+  risk_level: RiskLevel;
+  current_phase: ProjectPhase | null;
+  current_task: string | null;
+  days_in_phase: number | null;
+  progress_pct: number;
+  start_date: string | null;
+  target_end_date: string | null;
+  actual_end_date: string | null;
+  created_date: string | null;
+  modified_date: string | null;
+}
+
+export interface ProjectDetail extends ProjectListItem {
+  tasks: ProjectTask[];
+  gantt_data: Record<string, unknown> | null;
+}
+
+export interface ProjectCreateRequest {
+  project_name: string;
+  customer_name: string;
+  quote_ref?: string | null;
+  machine_summary?: string | null;
+  start_date?: string | null;
+  target_end_date?: string | null;
+}
+
+export interface AtRiskSummary {
+  count: number;
+  projects: Array<{
+    project_id?: number | null;
+    name: string;
+    task: string;
+    phase: string;
+    days_stalled: number;
+  }>;
+}
+
+export interface StallAlert {
+  project_id: number;
+  project_name: string;
+  task_id: number;
+  task_name: string;
+  phase: string;
+  days_stalled: number;
+}
+
+export interface ProjectInsight {
+  project_id: number | null;
+  project_name: string | null;
+  task_id: number | null;
+  task_name: string | null;
+  type: string;
+  severity: "critical" | "warning" | "info";
+  title: string;
+  message: string;
+  phase: string | null;
+  days_stalled: number | null;
+}

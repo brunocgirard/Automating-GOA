@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, SlidersHorizontal } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   extractMachineFields,
   fetchGoaForm,
@@ -20,8 +19,6 @@ import {
   listGoaForms,
   saveGoaForm,
   upsertMachineTemplateData,
-  type ExtractionMetadata,
-  type GoaFormSchemaField,
   type GoaOutputOptions,
   type GoaFormSchemaResponse,
 } from "@/lib/api";
@@ -36,31 +33,17 @@ interface ExtractionViewerProps {
   quoteId?: number;
 }
 
-type GoaEditorMode = "summary" | "needs-review" | "all";
+type GoaEditorMode = "needs-review" | "all";
 
 const REVIEW_THRESHOLD = 0.6;
 const HIGH_CONFIDENCE_THRESHOLD = 0.8;
-
-function formatSuggestion(suggestion: Record<string, unknown>): string {
-  const reason = suggestion.reason;
-  const field = suggestion.field;
-  if (typeof field === "string" && typeof reason === "string") {
-    return `${field}: ${reason}`;
-  }
-  if (typeof reason === "string") return reason;
-  return JSON.stringify(suggestion);
-}
 
 function hasTextValue(value: string | undefined): boolean {
   return (value ?? "").trim().length > 0;
 }
 
-export function ExtractionViewer({
-  machines,
-  commonItems,
-  fullPdfText,
-  quoteId,
-}: ExtractionViewerProps) {
+export function ExtractionViewer(props: ExtractionViewerProps) {
+  const { machines, commonItems, fullPdfText } = props;
   const [selectedMachineName, setSelectedMachineName] = useState(
     machines[0]?.machine_name ?? ""
   );
@@ -71,10 +54,8 @@ export function ExtractionViewer({
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [goaData, setGoaData] = useState<Record<string, string> | null>(null);
   const [sortstarData, setSortstarData] = useState<Record<string, string> | null>(null);
-  const [goaEditorMode, setGoaEditorMode] = useState<GoaEditorMode>("summary");
+  const [goaEditorMode, setGoaEditorMode] = useState<GoaEditorMode>("needs-review");
   const [confidenceScores, setConfidenceScores] = useState<Record<string, number>>({});
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [extractionMetadata, setExtractionMetadata] = useState<ExtractionMetadata | null>(null);
   const [machineTemplateId, setMachineTemplateId] = useState<number | null>(null);
   const [savedFilePath, setSavedFilePath] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -118,10 +99,8 @@ export function ExtractionViewer({
   useEffect(() => {
     setGoaData(null);
     setSortstarData(null);
-    setGoaEditorMode("summary");
+    setGoaEditorMode("needs-review");
     setConfidenceScores({});
-    setSuggestions([]);
-    setExtractionMetadata(null);
     setSavedFilePath(null);
     setStatusMessage(null);
     setError(null);
@@ -163,19 +142,6 @@ export function ExtractionViewer({
     };
   }, [selectedMachine?.id]);
 
-  const fieldMetaByKey = useMemo(() => {
-    const map = new Map<string, GoaFormSchemaField>();
-    if (!goaSchema) return map;
-    for (const section of goaSchema.sections) {
-      for (const group of section.groups) {
-        for (const field of group.fields) {
-          map.set(field.key, field);
-        }
-      }
-    }
-    return map;
-  }, [goaSchema]);
-
   const goaFieldKeys = useMemo(() => {
     if (goaSchema) {
       const keys: string[] = [];
@@ -191,22 +157,15 @@ export function ExtractionViewer({
     return Object.keys(goaData ?? {}).sort((a, b) => a.localeCompare(b));
   }, [goaData, goaSchema]);
 
-  const reviewFields = useMemo(() => {
+  const reviewFieldKeys = useMemo(() => {
     if (!goaData) return [];
     return goaFieldKeys
       .filter((key) => {
         const score = confidenceScores[key];
         return typeof score === "number" && score < REVIEW_THRESHOLD;
       })
-      .map((key) => ({
-        key,
-        label: fieldMetaByKey.get(key)?.label ?? key,
-        value: goaData[key] ?? "",
-        confidence: confidenceScores[key] ?? null,
-      }));
-  }, [confidenceScores, fieldMetaByKey, goaData, goaFieldKeys]);
-
-  const reviewFieldKeys = useMemo(() => reviewFields.map((field) => field.key), [reviewFields]);
+      .sort((a, b) => a.localeCompare(b));
+  }, [confidenceScores, goaData, goaFieldKeys]);
 
   const populatedFieldCount = useMemo(() => {
     if (!goaData) return 0;
@@ -224,6 +183,7 @@ export function ExtractionViewer({
   }, [confidenceScores, goaFieldKeys]);
 
   const totalGoaFields = goaFieldKeys.length;
+  const showingNeedsReviewOnly = goaEditorMode === "needs-review" && reviewFieldKeys.length > 0;
 
   const runExtraction = async () => {
     if (!selectedMachine) return;
@@ -244,9 +204,8 @@ export function ExtractionViewer({
         filledData[key] = value ?? "";
       }
 
-      setConfidenceScores(extraction.confidence_scores ?? {});
-      setSuggestions(extraction.suggestions.map(formatSuggestion));
-      setExtractionMetadata(extraction.metadata ?? null);
+      const nextConfidenceScores = extraction.confidence_scores ?? {};
+      setConfidenceScores(nextConfidenceScores);
 
       if (isSortstarMachine) {
         setSortstarData(filledData);
@@ -254,13 +213,15 @@ export function ExtractionViewer({
       } else {
         setGoaData(filledData);
         setSortstarData(null);
-        setGoaEditorMode("summary");
+        const hasReviewFields = Object.values(nextConfidenceScores).some(
+          (score) => typeof score === "number" && score < REVIEW_THRESHOLD
+        );
+        setGoaEditorMode(hasReviewFields ? "needs-review" : "all");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Extraction failed.");
       setSortstarData(null);
       setGoaData(null);
-      setExtractionMetadata(null);
     } finally {
       setRunning(false);
     }
@@ -430,265 +391,82 @@ export function ExtractionViewer({
                   showFieldKeys={false}
                 />
               </div>
+              <div className="sticky bottom-0 z-10 mt-4 border-t bg-white/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={saveDraft}
+                    disabled={busy}
+                    className="w-fit text-sm font-medium text-[#c00000] underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? "Saving..." : "Save Draft"}
+                  </button>
+                  <Button
+                    onClick={saveAndGenerate}
+                    disabled={busy}
+                    className="bg-[#c00000] hover:bg-[#a00000]"
+                  >
+                    {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save & Generate
+                  </Button>
+                </div>
+              </div>
             </div>
           ) : goaSchema ? (
-            <>
-              {goaEditorMode === "summary" ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      Extraction Complete - {populatedFieldCount}/{totalGoaFields} fields populated
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-col gap-3 rounded-md border bg-neutral-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="mt-0.5 size-4 text-amber-600" />
-                        <div className="text-sm">
-                          <p className="font-medium">
-                            {reviewFields.length} fields need review
-                          </p>
-                          <p className="text-muted-foreground">
-                            Low-confidence fields are highlighted for quick correction.
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          setGoaEditorMode(reviewFields.length > 0 ? "needs-review" : "all")
-                        }
-                      >
-                        {reviewFields.length > 0 ? "Review Now" : "Edit All Fields"}
-                      </Button>
-                    </div>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-2 rounded-md border bg-neutral-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-medium">
+                  {reviewFieldKeys.length} fields need review | {highConfidenceCount} high confidence
+                  {" | "}
+                  {populatedFieldCount}/{totalGoaFields} populated
+                </p>
+                {reviewFieldKeys.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setGoaEditorMode(showingNeedsReviewOnly ? "all" : "needs-review")}
+                    className="w-fit text-sm font-medium text-[#c00000] underline underline-offset-2"
+                  >
+                    {showingNeedsReviewOnly ? "Show all fields" : "Show only needs review"}
+                  </button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Showing all fields.</p>
+                )}
+              </div>
 
-                    <div className="flex flex-col gap-3 rounded-md border bg-neutral-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="mt-0.5 size-4 text-green-600" />
-                        <div className="text-sm">
-                          <p className="font-medium">{highConfidenceCount} fields are high confidence</p>
-                          <p className="text-muted-foreground">
-                            Open the full editor to inspect every GOA field.
-                          </p>
-                        </div>
-                      </div>
-                      <Button variant="outline" onClick={() => setGoaEditorMode("all")}>
-                        Show All Fields
-                      </Button>
-                    </div>
+              <GoaFieldEditor
+                schema={goaSchema}
+                data={goaData ?? {}}
+                onChange={setGoaData}
+                confidenceScores={confidenceScores}
+                visibleFieldKeys={showingNeedsReviewOnly ? reviewFieldKeys : undefined}
+              />
 
-                    {extractionMetadata && (
-                      <div className="rounded-md border bg-neutral-50 p-3 text-sm">
-                        <p className="font-medium">Pipeline Summary</p>
-                        <p className="text-muted-foreground">
-                          {extractionMetadata.pipeline_version ?? "unknown pipeline"} •{" "}
-                          {extractionMetadata.pass1_model ?? "n/a"}
-                          {extractionMetadata.pass2_model
-                            ? ` -> ${extractionMetadata.pass2_model}`
-                            : ""}
-                        </p>
-                        <p className="text-muted-foreground">
-                          Passes attempted: {extractionMetadata.fields_pass1_attempted ?? "n/a"}
-                          {typeof extractionMetadata.fields_pass2_attempted === "number"
-                            ? ` + ${extractionMetadata.fields_pass2_attempted}`
-                            : ""}
-                          {" "}fields
-                        </p>
-                        <p className="text-muted-foreground">
-                          Timing:{" "}
-                          {typeof extractionMetadata.timing_ms?.pass1 === "number"
-                            ? `${extractionMetadata.timing_ms.pass1}ms`
-                            : "n/a"}
-                          {typeof extractionMetadata.timing_ms?.pass2 === "number"
-                            ? ` + ${extractionMetadata.timing_ms.pass2}ms`
-                            : ""}
-                          {typeof extractionMetadata.timing_ms?.total === "number"
-                            ? ` = ${extractionMetadata.timing_ms.total}ms`
-                            : ""}
-                        </p>
-                        <p className="text-muted-foreground">
-                          Prompt size estimate:{" "}
-                          {typeof extractionMetadata.prompt_chars_estimate?.total === "number"
-                            ? extractionMetadata.prompt_chars_estimate.total.toLocaleString()
-                            : "n/a"}{" "}
-                          chars
-                        </p>
-                        <p className="text-muted-foreground">
-                          Critical text repair: forced pass2{" "}
-                          {typeof extractionMetadata.critical_text_forced_pass2_count === "number"
-                            ? extractionMetadata.critical_text_forced_pass2_count
-                            : "n/a"}
-                          , overrides{" "}
-                          {typeof extractionMetadata.critical_text_overrides_applied === "number"
-                            ? extractionMetadata.critical_text_overrides_applied
-                            : "n/a"}
-                          , blanked{" "}
-                          {typeof extractionMetadata.critical_text_no_evidence_blanked === "number"
-                            ? extractionMetadata.critical_text_no_evidence_blanked
-                            : "n/a"}
-                        </p>
-                        <p className="text-muted-foreground">
-                          Critical targets:{" "}
-                          {Array.isArray(extractionMetadata.critical_text_targets) &&
-                          extractionMetadata.critical_text_targets.length > 0
-                            ? extractionMetadata.critical_text_targets.join(", ")
-                            : "n/a"}
-                        </p>
-                      </div>
-                    )}
-
-                    {reviewFields.length > 0 ? (
-                      <div className="rounded-md border p-3">
-                        <p className="mb-2 text-sm font-medium">Needs Review</p>
-                        <div className="space-y-2">
-                          {reviewFields.slice(0, 8).map((field) => (
-                            <div
-                              key={field.key}
-                              className="flex flex-col gap-1 rounded border bg-amber-50/40 p-2 text-sm sm:flex-row sm:items-center sm:justify-between"
-                            >
-                              <div>
-                                <p className="font-medium">{field.label}</p>
-                                <p className="text-xs text-muted-foreground">{field.value || "(empty)"}</p>
-                              </div>
-                              <div className="text-xs text-amber-700">
-                                conf:{" "}
-                                {typeof field.confidence === "number"
-                                  ? field.confidence.toFixed(2)
-                                  : "n/a"}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-md border bg-green-50 p-3 text-sm text-green-700">
-                        No low-confidence fields were flagged in this extraction.
-                      </div>
-                    )}
-
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <Button onClick={saveDraft} disabled={busy} variant="outline">
-                        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Save Draft
-                      </Button>
-                      {machineTemplateId && !isSortstarMachine && (
-                        <Button variant="outline" asChild>
-                          <Link href={`/goa/${machineTemplateId}/builder`}>
-                            <SlidersHorizontal className="mr-2 h-4 w-4" />
-                            Open Document Builder
-                          </Link>
-                        </Button>
-                      )}
-                      <Button
-                        onClick={saveAndGenerate}
-                        disabled={busy}
-                        className="bg-[#c00000] hover:bg-[#a00000]"
-                      >
-                        {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {isSortstarMachine ? "Save & Download DOCX" : "Save & Download HTML"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      {goaEditorMode === "needs-review"
-                        ? "Showing low-confidence fields only."
-                        : "Showing all GOA fields."}
-                    </p>
-                    <Button variant="ghost" onClick={() => setGoaEditorMode("summary")}>
-                      Back to Review Summary
-                    </Button>
-                  </div>
-                  <GoaFieldEditor
-                    schema={goaSchema}
-                    data={goaData ?? {}}
-                    onChange={setGoaData}
-                    confidenceScores={confidenceScores}
-                    visibleFieldKeys={
-                      goaEditorMode === "needs-review" && reviewFieldKeys.length > 0
-                        ? reviewFieldKeys
-                        : undefined
-                    }
-                  />
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <Button onClick={saveDraft} disabled={busy} variant="outline">
-                      {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Save Draft
-                    </Button>
-                    {machineTemplateId && !isSortstarMachine && (
-                      <Button variant="outline" asChild>
-                        <Link href={`/goa/${machineTemplateId}/builder`}>
-                          <SlidersHorizontal className="mr-2 h-4 w-4" />
-                          Open Document Builder
-                        </Link>
-                      </Button>
-                    )}
-                    <Button
-                      onClick={saveAndGenerate}
-                      disabled={busy}
-                      className="bg-[#c00000] hover:bg-[#a00000]"
-                    >
-                      {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {isSortstarMachine ? "Save & Download DOCX" : "Save & Download HTML"}
-                    </Button>
-                  </div>
+              <div className="sticky bottom-0 z-10 border-t bg-white/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={saveDraft}
+                    disabled={busy}
+                    className="w-fit text-sm font-medium text-[#c00000] underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? "Saving..." : "Save Draft"}
+                  </button>
+                  <Button
+                    onClick={saveAndGenerate}
+                    disabled={busy}
+                    className="bg-[#c00000] hover:bg-[#a00000]"
+                  >
+                    {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save & Generate
+                  </Button>
                 </div>
-              )}
-            </>
+              </div>
+            </div>
           ) : (
             <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
               Loading GOA schema...
             </div>
           )}
-
-          {suggestions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Suggestions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-inside list-disc space-y-1 text-sm text-neutral-600">
-                  {suggestions.map((suggestion, index) => (
-                    <li key={`${suggestion}-${index}`}>{suggestion}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            {machineTemplateId && (
-              <>
-                <Link
-                  href={`/goa/${machineTemplateId}`}
-                  className="text-sm font-medium text-[#c00000] underline"
-                >
-                  Open saved form
-                </Link>
-                {!isSortstarMachine && (
-                  <Link
-                    href={`/goa/${machineTemplateId}/builder`}
-                    className="text-sm font-medium text-[#c00000] underline"
-                  >
-                    Open document builder
-                  </Link>
-                )}
-              </>
-            )}
-
-            {quoteId && (
-              <Link
-                href={`/quotes/${quoteId}/preview`}
-                className="text-sm font-medium text-[#c00000] underline"
-              >
-                View quote preview
-              </Link>
-            )}
-          </div>
 
           {savedFilePath && (
             <div className="flex items-center gap-2 text-green-700">

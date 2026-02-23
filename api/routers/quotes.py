@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from api.models.schemas import QuoteResponse, QuoteUpdateRequest, QuoteUploadResponse
 from api.services.processing_service import extract_and_catalog
-from src.utils.db import delete_client_record, get_client_by_id, load_all_clients, update_client_record
+from src.utils.db import (
+    delete_client_record,
+    ensure_project_for_quote,
+    get_client_by_id,
+    load_all_clients,
+    update_client_record,
+)
 
 router = APIRouter(prefix="/api/quotes", tags=["Quotes"])
 
@@ -84,9 +92,27 @@ async def upload_quote_pdf(
             detail=f"Failed to extract and catalog PDF: {exc}",
         ) from exc
 
+    # Optional PM integration: create a linked PM project automatically for new uploads.
+    try:
+        quote_ref = str(result.get("quote_ref") or "").strip()
+        customer_name = str(result.get("customer_name") or "").strip() or quote_ref
+        machine_model = str(result.get("machine_model") or "").strip()
+        if quote_ref:
+            ensure_project_for_quote(
+                quote_ref=quote_ref,
+                customer_name=customer_name,
+                machine_summary=machine_model or None,
+                project_name=f"{customer_name} - {machine_model}" if machine_model else quote_ref,
+                start_date=datetime.now().strftime("%Y-%m-%d"),
+            )
+    except Exception as exc:
+        print(
+            "Warning: quote upload succeeded but PM project auto-create failed "
+            f"for quote_ref='{result.get('quote_ref')}': {exc}"
+        )
+
     return {
         "quote_ref": result["quote_ref"],
         "items_count": result["items_count"],
         "linked_existing_client_id": result.get("linked_existing_client_id"),
     }
-

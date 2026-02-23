@@ -246,6 +246,74 @@ def init_db(db_path: str = DB_PATH):
         )
         """)
 
+        # Store PM projects linked to quote references.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_name TEXT NOT NULL,
+            customer_name TEXT NOT NULL,
+            quote_ref TEXT,
+            machine_summary TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            risk_level TEXT NOT NULL DEFAULT 'on_track',
+            start_date TEXT,
+            target_end_date TEXT,
+            actual_end_date TEXT,
+            gantt_data_json TEXT,
+            created_date TEXT NOT NULL,
+            modified_date TEXT NOT NULL,
+            FOREIGN KEY (quote_ref) REFERENCES clients (quote_ref) ON DELETE SET NULL
+        )
+        """)
+
+        # Independent PM checklist tasks (non-linear execution supported).
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS project_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            task_name TEXT NOT NULL,
+            task_order INTEGER NOT NULL,
+            phase TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            planned_date TEXT,
+            actual_date TEXT,
+            notes TEXT,
+            modified_date TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        )
+        """)
+
+        # Audit trail for task status changes.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS task_transitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_task_id INTEGER NOT NULL,
+            from_status TEXT,
+            to_status TEXT NOT NULL,
+            transitioned_at TEXT NOT NULL,
+            FOREIGN KEY (project_task_id) REFERENCES project_tasks (id) ON DELETE CASCADE
+        )
+        """)
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_project_tasks_project_phase
+            ON project_tasks (project_id, phase, task_order)
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_project_tasks_status
+            ON project_tasks (status)
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_task_transitions_task_time
+            ON task_transitions (project_task_id, transitioned_at)
+            """
+        )
+
         cursor.execute("PRAGMA table_info(cor_documents)")
         cor_columns = [row[1] for row in cursor.fetchall()]
         cor_new_columns = {

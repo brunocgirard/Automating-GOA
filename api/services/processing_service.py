@@ -376,6 +376,8 @@ def extract_and_catalog(
             "items": items,
             "items_count": len(items),
             "linked_existing_client_id": linked_existing_client_id,
+            "customer_name": str(client_info.get("customer_name") or ""),
+            "machine_model": str(client_info.get("machine_model") or ""),
         }
     finally:
         if temp_pdf_path and os.path.exists(temp_pdf_path):

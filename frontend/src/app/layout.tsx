@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GOA Tool",
-  description: "GOA Quote Processing Tool",
+  title: "PM Tool",
+  description: "PM Quote Processing Tool",
 };
 
 export default function RootLayout({

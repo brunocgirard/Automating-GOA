@@ -21,6 +21,7 @@ from src.utils.db import (
     load_machines_for_quote,
     load_priced_items_for_quote,
     load_shipping_document,
+    mark_project_task_done_for_quote,
     save_shipping_document,
 )
 
@@ -145,6 +146,18 @@ def generate_shipping_docs(quote_id: int, payload: ShippingGenerateRequest) -> F
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate shipping document(s): {exc}",
         ) from exc
+
+    try:
+        mark_project_task_done_for_quote(
+            quote_ref,
+            "Crating",
+            notes="Auto-advanced from shipping.generate",
+        )
+    except Exception as exc:
+        print(
+            "Warning: failed to auto-advance PM task 'Crating' "
+            f"for quote_ref='{quote_ref}': {exc}"
+        )
 
     return FileResponse(
         path=str(artifact.path),

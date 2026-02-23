@@ -20,6 +20,7 @@ from api.routers.quotes import router as quotes_router
 from api.routers.reports import router as reports_router
 from api.routers.shipping import router as shipping_router
 from api.routers.cor import router as cor_router
+from api.routers.pm_dashboard import router as pm_dashboard_router
 
 
 def _parse_cors_origins(raw_origins: str | None) -> list[str]:
@@ -68,3 +69,4 @@ app.include_router(processing_direct_router)
 app.include_router(reports_router)
 app.include_router(shipping_router)
 app.include_router(cor_router)
+app.include_router(pm_dashboard_router)

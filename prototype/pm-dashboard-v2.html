@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOA Mission Control</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-base: #0b0e14;
+  --bg-surface: #111720;
+  --bg-raised: #171d2a;
+  --bg-hover: #1c2333;
+  --bg-active: #222b3d;
+
+  --accent: #4c9aff;
+  --accent-dim: rgba(76, 154, 255, 0.15);
+  --accent-glow: rgba(76, 154, 255, 0.25);
+
+  --green: #36b37e;
+  --green-dim: rgba(54, 179, 126, 0.15);
+  --yellow: #ffab00;
+  --yellow-dim: rgba(255, 171, 0, 0.15);
+  --red: #ff5630;
+  --red-dim: rgba(255, 86, 48, 0.15);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167, 139, 250, 0.15);
+
+  --text-bright: #e6edf3;
+  --text-primary: #c9d1d9;
+  --text-secondary: #8b949e;
+  --text-muted: #545d68;
+
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.1);
+
+  --font: 'IBM Plex Sans', -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+}
+
+html { font-size: 13px; }
+body {
+  font-family: var(--font);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══ Top Bar ═══ */
+.topbar {
+  height: 44px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.topbar-brand {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topbar-brand .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(54,179,126,0.5);
+}
+.topbar-nav { display: flex; gap: 2px; }
+.topbar-tab {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  background: none;
+  font-family: var(--font);
+}
+.topbar-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.topbar-tab.active { color: var(--accent); background: var(--accent-dim); }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-btn {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.topbar-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.topbar-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ═══ Layout: 3-panel ═══ */
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 300px;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ═══ Left Panel: Project List ═══ */
+.left-panel {
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-section-header {
+  padding: 14px 16px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.panel-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 0 12px 14px;
+  flex-shrink: 0;
+}
+.kpi-mini {
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.kpi-mini .kpi-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: -0.02em;
+}
+.kpi-mini .kpi-lbl {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+.project-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.project-item {
+  padding: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  position: relative;
+}
+.project-item:hover { background: var(--bg-hover); }
+.project-item.selected {
+  background: var(--accent-dim);
+  border-color: rgba(76,154,255,0.2);
+}
+.project-item .proj-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.project-item .proj-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.project-item .proj-customer {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.project-item .proj-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mini-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-active);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mini-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+.proj-pct {
+  font-size: 10px;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text-secondary);
+  width: 32px;
+  text-align: right;
+}
+
+.status-indicator {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-indicator.green { background: var(--green); box-shadow: 0 0 6px rgba(54,179,126,0.5); }
+.status-indicator.yellow { background: var(--yellow); box-shadow: 0 0 6px rgba(255,171,0,0.5); }
+.status-indicator.red { background: var(--red); box-shadow: 0 0 6px rgba(255,86,48,0.5); }
+
+.phase-tag {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.phase-tag.sales { background: var(--purple-dim); color: var(--purple); }
+.phase-tag.eng { background: var(--accent-dim); color: var(--accent); }
+.phase-tag.design { background: var(--yellow-dim); color: var(--yellow); }
+.phase-tag.prod { background: var(--green-dim); color: var(--green); }
+.phase-tag.delivery { background: var(--red-dim); color: var(--red); }
+
+/* ═══ Center: Timeline View ═══ */
+.center-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.timeline-toolbar {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-surface);
+}
+.timeline-toolbar .title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.zoom-controls { display: flex; gap: 4px; }
+.zoom-btn {
+  width: 28px; height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.zoom-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.timeline-container {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+/* Month headers */
+.timeline-months {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+.month-col {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  border-right: 1px solid var(--border);
+}
+.month-col.current {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* Swim lanes */
+.swimlanes {
+  position: relative;
+  min-height: 100%;
+}
+
+.swimlane {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+  min-height: 90px;
+  position: relative;
+  transition: background 0.15s;
+}
+.swimlane:hover { background: rgba(255,255,255,0.02); }
+.swimlane.selected { background: var(--accent-dim); }
+
+.swimlane-label {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-bright);
+  z-index: 2;
+  pointer-events: none;
+}
+.swimlane-sublabel {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 1px;
+}
+
+/* Task bars in timeline */
+.task-bar-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 0;
+  margin-left: 130px;
+  position: relative;
+  height: 22px;
+}
+.task-bar {
+  height: 16px;
+  border-radius: 3px;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  overflow: hidden;
+  white-space: nowrap;
+  transition: all 0.2s;
+  cursor: default;
+}
+.task-bar:hover {
+  height: 20px;
+  margin-top: -2px;
+  z-index: 3;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.task-bar.done { background: var(--green); opacity: 0.85; }
+.task-bar.current { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+.task-bar.upcoming { background: var(--bg-active); border: 1px solid var(--border-strong); color: var(--text-secondary); }
+.task-bar.overdue { background: var(--red); }
+
+/* Today line */
+.today-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: var(--red);
+  z-index: 4;
+  pointer-events: none;
+}
+.today-line::before {
+  content: 'TODAY';
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--red);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+/* Machine sub-rows */
+.machine-subrow {
+  margin-left: 130px;
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+}
+.machine-sublabel {
+  font-size: 9px;
+  color: var(--text-muted);
+  width: 80px;
+  text-align: right;
+  flex-shrink: 0;
+  font-family: var(--mono);
+}
+.machine-subbar {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-active);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.machine-subfill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+/* ═══ Right Panel: AI Assistant ═══ */
+.right-panel {
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ai-icon {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+}
+.ai-header-text .ai-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.ai-header-text .ai-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.ai-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* Alert cards */
+.alert-card {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+  transition: all 0.15s;
+  cursor: default;
+}
+.alert-card:hover { border-color: var(--border-strong); }
+.alert-card.critical { border-left: 3px solid var(--red); background: var(--red-dim); }
+.alert-card.warning { border-left: 3px solid var(--yellow); background: var(--yellow-dim); }
+.alert-card.info { border-left: 3px solid var(--accent); background: var(--accent-dim); }
+.alert-card.success { border-left: 3px solid var(--green); background: var(--green-dim); }
+
+.alert-type {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.alert-card.critical .alert-type { color: var(--red); }
+.alert-card.warning .alert-type { color: var(--yellow); }
+.alert-card.info .alert-type { color: var(--accent); }
+.alert-card.success .alert-type { color: var(--green); }
+
+.alert-msg {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+.alert-msg strong { color: var(--text-bright); font-weight: 600; }
+.alert-detail {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+
+/* Section dividers in AI panel */
+.ai-section {
+  padding: 10px 4px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-section::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Suggestion actions */
+.suggestion-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sug-btn {
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.sug-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sug-btn.accept { border-color: var(--green); color: var(--green); }
+.sug-btn.accept:hover { background: var(--green-dim); }
+
+/* Upcoming milestones list */
+.upcoming-list { padding: 0; }
+.upcoming-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.upcoming-item:last-child { border-bottom: none; }
+.upcoming-date {
+  font-size: 10px;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text-secondary);
+  width: 50px;
+  flex-shrink: 0;
+}
+.upcoming-info .up-task {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.upcoming-info .up-proj {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.upcoming-countdown {
+  margin-left: auto;
+  font-size: 10px;
+  font-family: var(--mono);
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.upcoming-countdown.soon { background: var(--yellow-dim); color: var(--yellow); }
+.upcoming-countdown.ok { background: var(--bg-active); color: var(--text-secondary); }
+
+/* ═══ Scrollbar ═══ */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ═══ Animations ═══ */
+@keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-slide { animation: slideIn 0.3s ease both; }
+.animate-fade { animation: fadeIn 0.4s ease both; }
+.d1 { animation-delay: 0.05s; }
+.d2 { animation-delay: 0.1s; }
+.d3 { animation-delay: 0.15s; }
+.d4 { animation-delay: 0.2s; }
+.d5 { animation-delay: 0.25s; }
+</style>
+</head>
+<body>
+
+<!-- ═══ Top Bar ═══ -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-brand">
+      <span class="dot"></span>
+      GOA Mission Control
+    </div>
+    <div class="topbar-nav">
+      <button class="topbar-tab active">Overview</button>
+      <button class="topbar-tab">Kanban</button>
+      <button class="topbar-tab">Gantt</button>
+      <button class="topbar-tab">Reports</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-btn">Import Gantt PDF</button>
+    <button class="topbar-btn primary">+ New Project</button>
+  </div>
+</div>
+
+<!-- ═══ 3-Panel Layout ═══ -->
+<div class="layout">
+
+  <!-- LEFT: Project List + KPIs -->
+  <div class="left-panel">
+    <div class="panel-section-header">
+      <span class="panel-section-title">Portfolio</span>
+    </div>
+    <div class="kpi-strip">
+      <div class="kpi-mini animate-slide d1">
+        <div class="kpi-val">4</div>
+        <div class="kpi-lbl">Active</div>
+      </div>
+      <div class="kpi-mini animate-slide d2">
+        <div class="kpi-val" style="color:var(--red)">1</div>
+        <div class="kpi-lbl">At Risk</div>
+      </div>
+      <div class="kpi-mini animate-slide d3">
+        <div class="kpi-val">85%</div>
+        <div class="kpi-lbl">On-Time</div>
+      </div>
+      <div class="kpi-mini animate-slide d4">
+        <div class="kpi-val">127<span style="font-size:11px;font-weight:400;color:var(--text-muted)">d</span></div>
+        <div class="kpi-lbl">Avg Lead</div>
+      </div>
+    </div>
+
+    <div class="panel-section-header">
+      <span class="panel-section-title">Projects</span>
+    </div>
+    <div class="project-list">
+      <div class="project-item selected animate-slide d1" onclick="selectProject(this, 'xeolas')">
+        <div class="proj-top">
+          <span class="proj-name">Xeolas Pharma</span>
+          <span class="status-indicator green"></span>
+        </div>
+        <div class="proj-customer">A3490-92 &middot; 4 machines &middot; <span class="phase-tag prod">Production</span></div>
+        <div class="proj-progress">
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:44%;background:var(--green)"></div></div>
+          <span class="proj-pct">44%</span>
+        </div>
+      </div>
+
+      <div class="project-item animate-slide d2" onclick="selectProject(this, 'pharma')">
+        <div class="proj-top">
+          <span class="proj-name">Pharma Corp</span>
+          <span class="status-indicator yellow"></span>
+        </div>
+        <div class="proj-customer">PHC-2026-002 &middot; Mini-Jolly &middot; <span class="phase-tag design">Design</span></div>
+        <div class="proj-progress">
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:28%;background:var(--yellow)"></div></div>
+          <span class="proj-pct">28%</span>
+        </div>
+      </div>
+
+      <div class="project-item animate-slide d3" onclick="selectProject(this, 'automech')">
+        <div class="proj-top">
+          <span class="proj-name">AutoMech Industries</span>
+          <span class="status-indicator green"></span>
+        </div>
+        <div class="proj-customer">AMI-2026-003 &middot; SortStar &middot; <span class="phase-tag eng">Eng. Prep</span></div>
+        <div class="proj-progress">
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:18%;background:var(--accent)"></div></div>
+          <span class="proj-pct">18%</span>
+        </div>
+      </div>
+
+      <div class="project-item animate-slide d4" onclick="selectProject(this, 'meridian')">
+        <div class="proj-top">
+          <span class="proj-name">Meridian Medical</span>
+          <span class="status-indicator green"></span>
+        </div>
+        <div class="proj-customer">MER-2026-004 &middot; CF-3P &middot; <span class="phase-tag sales">Sales</span></div>
+        <div class="proj-progress">
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:8%;background:var(--purple)"></div></div>
+          <span class="proj-pct">8%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER: Timeline -->
+  <div class="center-panel">
+    <div class="timeline-toolbar">
+      <span class="title" id="timelineTitle">Xeolas Pharma — Timeline</span>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="zoom-controls">
+          <button class="zoom-btn" title="Zoom out">-</button>
+          <button class="zoom-btn" title="Zoom in">+</button>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button class="topbar-tab active" style="font-size:10px;padding:4px 10px;">PM Tasks</button>
+          <button class="topbar-tab" style="font-size:10px;padding:4px 10px;" onclick="toggleView('gantt')">Production</button>
+          <button class="topbar-tab" style="font-size:10px;padding:4px 10px;" onclick="toggleView('both')">Combined</button>
+        </div>
+      </div>
+    </div>
+    <div class="timeline-container" id="timelineContainer">
+      <!-- Month headers -->
+      <div class="timeline-months">
+        <div class="month-col">Jan 2026</div>
+        <div class="month-col current">Feb 2026</div>
+        <div class="month-col">Mar 2026</div>
+        <div class="month-col">Apr 2026</div>
+        <div class="month-col">May 2026</div>
+        <div class="month-col">Jun 2026</div>
+        <div class="month-col">Jul 2026</div>
+      </div>
+
+      <div class="swimlanes" id="swimlanes">
+        <!-- Today indicator -->
+        <div class="today-line" style="left: calc(130px + (1/7 * (100% - 130px)) + (21/30 * (100% - 130px) / 7));" id="todayLine"></div>
+
+        <!-- PM Milestone swimlanes (grouped by phase) -->
+        <div class="swimlane selected" id="lane-sales">
+          <div class="swimlane-label">
+            Sales & Onboarding
+            <span class="swimlane-sublabel">4 tasks &middot; Complete</span>
+          </div>
+          <div class="task-bar-row">
+            <div class="task-bar done" style="left:2%;width:3%;" title="Down Payment - Jan 5">Down Pmt</div>
+            <div class="task-bar done" style="left:5.5%;width:2%;" title="Introduction Letter - Jan 8">Intro</div>
+            <div class="task-bar done" style="left:8%;width:2%;" title="Binder - Jan 10">Binder</div>
+            <div class="task-bar done" style="left:10.5%;width:2%;" title="Transfer File - Jan 12">Transfer</div>
+          </div>
+        </div>
+
+        <div class="swimlane selected" id="lane-eng">
+          <div class="swimlane-label">
+            Engineering Prep
+            <span class="swimlane-sublabel">3 tasks &middot; Complete</span>
+          </div>
+          <div class="task-bar-row">
+            <div class="task-bar done" style="left:13%;width:3%;" title="Eng. Samples Received - Jan 18">Samples</div>
+            <div class="task-bar done" style="left:16.5%;width:3%;" title="Product Matrix Sent - Jan 22">Matrix Sent</div>
+            <div class="task-bar done" style="left:20%;width:3%;" title="Matrix Confirmed - Jan 28">Confirmed</div>
+          </div>
+        </div>
+
+        <div class="swimlane selected" id="lane-design">
+          <div class="swimlane-label">
+            Design & Approval
+            <span class="swimlane-sublabel">5 tasks &middot; In Progress</span>
+          </div>
+          <div class="task-bar-row">
+            <div class="task-bar done" style="left:23.5%;width:2.5%;" title="Layout Issued - Feb 3">Layout</div>
+            <div class="task-bar done" style="left:26.5%;width:2%;" title="Layout Approved - Feb 8">Approved</div>
+            <div class="task-bar done" style="left:29%;width:1.5%;" title="Approval Paid - Feb 10">Paid</div>
+            <div class="task-bar done" style="left:31%;width:1.5%;" title="GOA(s) - Feb 12">GOA</div>
+            <div class="task-bar current" style="left:33%;width:3%;" title="Pre-Kick Off - Feb 18">Pre-KO</div>
+          </div>
+        </div>
+
+        <div class="swimlane selected" id="lane-prod">
+          <div class="swimlane-label">
+            Production
+            <span class="swimlane-sublabel">7 tasks &middot; Upcoming</span>
+          </div>
+          <div class="task-bar-row">
+            <div class="task-bar upcoming" style="left:37%;width:2%;" title="Gantt Published - Feb 25">Gantt</div>
+            <div class="task-bar upcoming" style="left:40%;width:3%;" title="Bulk Samples Req - Mar 5">Samples Req</div>
+            <div class="task-bar upcoming" style="left:44%;width:4%;" title="Bulk Samples Received - Mar 20">Samples Recv</div>
+            <div class="task-bar upcoming" style="left:49%;width:2%;" title="Samples to Suppliers - Mar 25">To Suppliers</div>
+            <div class="task-bar upcoming" style="left:52%;width:3%;" title="Eng. Kick Off - Apr 1">Eng. KO</div>
+            <div class="task-bar upcoming" style="left:56%;width:4%;" title="Released from Design - Apr 20">Released</div>
+          </div>
+          <div class="task-bar-row">
+            <div class="task-bar upcoming" style="left:56%;width:3%;" title="3rd Party Ordered - Apr 25">3P Order</div>
+            <div class="task-bar upcoming" style="left:67%;width:5%;" title="3rd Party Received - May 30">3P Recv</div>
+          </div>
+        </div>
+
+        <div class="swimlane selected" id="lane-delivery">
+          <div class="swimlane-label">
+            Delivery
+            <span class="swimlane-sublabel">5 tasks &middot; Upcoming</span>
+          </div>
+          <div class="task-bar-row">
+            <div class="task-bar upcoming" style="left:78%;width:3%;" title="Revised FAT - Jun 15">Rev FAT</div>
+            <div class="task-bar upcoming" style="left:86%;width:3%;" title="Actual FAT - Jul 9">FAT</div>
+            <div class="task-bar upcoming" style="left:89.5%;width:2%;" title="COR Completion - Jul 11">COR</div>
+            <div class="task-bar upcoming" style="left:92%;width:2%;" title="Crating & Pre-ship - Jul 14-16">Crate</div>
+            <div class="task-bar upcoming" style="left:94.5%;width:2.5%;" title="Shipment - Jul 20">Ship</div>
+          </div>
+        </div>
+
+        <!-- Production Gantt lanes (hidden by default) -->
+        <div id="ganttLanes" style="display:none;">
+          <div style="height:1px;background:var(--accent);opacity:0.3;margin:4px 0;"></div>
+
+          <div class="swimlane">
+            <div class="swimlane-label">
+              CF-2P
+              <span class="swimlane-sublabel">A3490 &middot; 13%</span>
+            </div>
+            <div class="machine-subrow"><span class="machine-sublabel">Design</span><div class="machine-subbar"><div class="machine-subfill" style="width:100%;background:var(--green);"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Purch & Fab</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Kitting</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Assembly</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Electrical</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Testing</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+          </div>
+
+          <div class="swimlane">
+            <div class="swimlane-label">
+              Mini-Jolly
+              <span class="swimlane-sublabel">A3492 &middot; 10%</span>
+            </div>
+            <div class="machine-subrow"><span class="machine-sublabel">Design</span><div class="machine-subbar"><div class="machine-subfill" style="width:100%;background:var(--green);"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Purch & Fab</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Kitting</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Assembly</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Testing</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+          </div>
+
+          <div class="swimlane">
+            <div class="swimlane-label">
+              Automation Sys
+              <span class="swimlane-sublabel">A3491 &middot; 15%</span>
+            </div>
+            <div class="machine-subrow"><span class="machine-sublabel">Design</span><div class="machine-subbar"><div class="machine-subfill" style="width:100%;background:var(--green);"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Purch & Fab</span><div class="machine-subbar"><div class="machine-subfill" style="width:5%;background:var(--accent);"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Assembly</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Testing</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+          </div>
+
+          <div class="swimlane">
+            <div class="swimlane-label">
+              Turn Table
+              <span class="swimlane-sublabel">A3493 &middot; 5%</span>
+            </div>
+            <div class="machine-subrow"><span class="machine-sublabel">Design</span><div class="machine-subbar"><div class="machine-subfill" style="width:60%;background:var(--accent);"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Purch & Fab</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Assembly</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+            <div class="machine-subrow"><span class="machine-sublabel">Testing</span><div class="machine-subbar"><div class="machine-subfill" style="width:0%;"></div></div></div>
+          </div>
+
+          <div class="swimlane">
+            <div class="swimlane-label">
+              FAT
+              <span class="swimlane-sublabel">All machines &middot; Jul 9-13</span>
+            </div>
+            <div class="task-bar-row">
+              <div class="task-bar upcoming" style="left:86%;width:4%;" title="FAT - Jul 9 to Jul 13">Factory Acceptance Test (3 days)</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: AI Assistant -->
+  <div class="right-panel">
+    <div class="ai-header">
+      <div class="ai-icon">AI</div>
+      <div class="ai-header-text">
+        <div class="ai-title">Project Assistant</div>
+        <div class="ai-sub">Real-time insights and alerts</div>
+      </div>
+    </div>
+    <div class="ai-body">
+
+      <div class="ai-section">Alerts</div>
+
+      <div class="alert-card critical animate-fade d1">
+        <div class="alert-type">Critical Path Risk</div>
+        <div class="alert-msg"><strong>Mini-Jolly drives the FAT date.</strong> It finishes Jul 8, just 1 day before FAT starts Jul 9. Zero buffer.</div>
+        <div class="alert-detail">Critical path analysis &middot; buffer &lt; 2 days</div>
+      </div>
+
+      <div class="alert-card warning animate-fade d2">
+        <div class="alert-type">Stage Stall</div>
+        <div class="alert-msg"><strong>CF-2P Purchasing & Fabrication</strong> at 0% — this 85-day phase started Feb 17. No recorded progress yet.</div>
+        <div class="alert-detail">Stall detection &middot; 4 days without movement</div>
+        <div class="suggestion-actions">
+          <button class="sug-btn">Dismiss</button>
+          <button class="sug-btn accept">Escalate to Procurement</button>
+        </div>
+      </div>
+
+      <div class="alert-card warning animate-fade d3">
+        <div class="alert-type">Resource Contention</div>
+        <div class="alert-msg"><strong>3 machines converging on Assembly</strong> between May 25 and Jun 18. Shop floor capacity may be insufficient.</div>
+        <div class="alert-detail">Resource forecast &middot; 3 months ahead</div>
+      </div>
+
+      <div class="ai-section">Predictions</div>
+
+      <div class="alert-card info animate-fade d4">
+        <div class="alert-type">Completion Estimate</div>
+        <div class="alert-msg">Based on current velocity, estimated project completion: <strong>Jul 13, 2026</strong>. On schedule.</div>
+        <div class="alert-detail">Confidence: 78% &middot; Range: Jul 10-20</div>
+      </div>
+
+      <div class="alert-card success animate-fade d5">
+        <div class="alert-type">Milestone Achieved</div>
+        <div class="alert-msg">All 4 machines have <strong>completed Design phase</strong>. BOM released and processed for CF-2P, Mini-Jolly, and Automation System.</div>
+        <div class="alert-detail">Feb 10, 2026 &middot; ahead of schedule by 2 days</div>
+      </div>
+
+      <div class="ai-section">Upcoming Milestones</div>
+
+      <div class="upcoming-list">
+        <div class="upcoming-item">
+          <span class="upcoming-date">Feb 25</span>
+          <div class="upcoming-info">
+            <div class="up-task">Gantt Published</div>
+            <div class="up-proj">Xeolas Pharma</div>
+          </div>
+          <span class="upcoming-countdown soon">4d</span>
+        </div>
+        <div class="upcoming-item">
+          <span class="upcoming-date">Mar 5</span>
+          <div class="upcoming-info">
+            <div class="up-task">Bulk Samples Requested</div>
+            <div class="up-proj">Xeolas Pharma</div>
+          </div>
+          <span class="upcoming-countdown ok">12d</span>
+        </div>
+        <div class="upcoming-item">
+          <span class="upcoming-date">Mar 10</span>
+          <div class="upcoming-info">
+            <div class="up-task">Layout Approval</div>
+            <div class="up-proj">Pharma Corp</div>
+          </div>
+          <span class="upcoming-countdown soon">17d</span>
+        </div>
+        <div class="upcoming-item">
+          <span class="upcoming-date">Mar 15</span>
+          <div class="upcoming-info">
+            <div class="up-task">Product Matrix Confirmed</div>
+            <div class="up-proj">AutoMech Industries</div>
+          </div>
+          <span class="upcoming-countdown ok">22d</span>
+        </div>
+        <div class="upcoming-item">
+          <span class="upcoming-date">Apr 1</span>
+          <div class="upcoming-info">
+            <div class="up-task">Eng. Kick Off</div>
+            <div class="up-proj">Xeolas Pharma</div>
+          </div>
+          <span class="upcoming-countdown ok">39d</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Project selection
+function selectProject(el, id) {
+  document.querySelectorAll('.project-item').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+
+  const titles = {
+    xeolas: 'Xeolas Pharma — Timeline',
+    pharma: 'Pharma Corp — Timeline',
+    automech: 'AutoMech Industries — Timeline',
+    meridian: 'Meridian Medical — Timeline'
+  };
+  document.getElementById('timelineTitle').textContent = titles[id] || 'Timeline';
+}
+
+// Toggle production gantt lanes
+function toggleView(view) {
+  const ganttLanes = document.getElementById('ganttLanes');
+  const tabs = document.querySelectorAll('.timeline-toolbar .topbar-tab');
+
+  tabs.forEach(t => t.classList.remove('active'));
+
+  if (view === 'gantt') {
+    ganttLanes.style.display = 'block';
+    document.querySelectorAll('#lane-sales, #lane-eng, #lane-design, #lane-prod, #lane-delivery').forEach(l => l.style.display = 'none');
+    event.target.classList.add('active');
+  } else if (view === 'both') {
+    ganttLanes.style.display = 'block';
+    document.querySelectorAll('#lane-sales, #lane-eng, #lane-design, #lane-prod, #lane-delivery').forEach(l => l.style.display = 'block');
+    event.target.classList.add('active');
+  } else {
+    ganttLanes.style.display = 'none';
+    document.querySelectorAll('#lane-sales, #lane-eng, #lane-design, #lane-prod, #lane-delivery').forEach(l => l.style.display = 'block');
+    tabs[0].classList.add('active');
+  }
+}
+
+// Position today line more accurately (Feb 21 in a Jan-Jul range)
+// Jan=0, Feb=1/7, Feb 21 = 1/7 + 21/30 * 1/7
+(function() {
+  const line = document.getElementById('todayLine');
+  // 7 months total, Feb 21 is ~1.7 months in
+  const pct = (1 + 21/28) / 7 * 100;
+  line.style.left = `calc(130px + ${pct}% * (1 - 130px / 100%))`;
+  // Simplified: just place it roughly
+  line.style.left = '24.5%';
+})();
+</script>
+</body>
+</html>

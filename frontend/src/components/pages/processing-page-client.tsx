@@ -10,8 +10,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StepIndicator } from "@/components/processing/step-indicator";
 import { ExtractionViewer } from "@/components/processing/extraction-viewer";
+import { QuoteGoaList } from "@/components/processing/quote-goa-list";
 import {
   fetchProcessingArtifacts,
   fetchProcessingMachineData,
@@ -26,6 +28,8 @@ type MachineOption = {
   machine: MachineData;
 };
 
+type ProcessingTab = "quotes" | "process-new";
+
 function createMachineOption(machine: MachineData, index: number): MachineOption {
   const key = machine.id != null ? `id:${machine.id}` : `idx:${index}`;
   const label = machine.machine_name?.trim() || `Machine ${index + 1}`;
@@ -33,6 +37,7 @@ function createMachineOption(machine: MachineData, index: number): MachineOption
 }
 
 export default function ProcessingPage() {
+  const [activeTab, setActiveTab] = useState<ProcessingTab>("quotes");
   const [step, setStep] = useState<ProcessingStep>("load-quote");
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [selectedQuote, setSelectedQuote] = useState("");
@@ -59,6 +64,9 @@ export default function ProcessingPage() {
 
       setQuoteFromQuery(quoteValue);
       setSelectedQuote((current) => current || quoteValue || "");
+      if (quoteValue) {
+        setActiveTab("process-new");
+      }
       if (machineValue && Number.isFinite(parsedMachine) && parsedMachine > 0) {
         setMachineFromQuery(parsedMachine);
       } else {
@@ -199,141 +207,172 @@ export default function ProcessingPage() {
 
   const selectedQuoteIdNumber = selectedQuote ? Number(selectedQuote) : undefined;
 
+  function handleProcessQuote(quoteId: number) {
+    const quoteValue = String(quoteId);
+    setActiveTab("process-new");
+    setDisableDirectMachineMode(true);
+    setMachineFromQuery(null);
+    setQuoteFromQuery(quoteValue);
+    setSelectedQuote(quoteValue);
+    setSelectedMachineKey("");
+    setStep("load-quote");
+  }
+
   return (
-    <div>
-      <h2 className="text-2xl font-semibold tracking-tight">Processing</h2>
-      <p className="mt-1 mb-6 text-sm text-neutral-500">
-        Process quotes through the GOA extraction pipeline.
-      </p>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">GOA Processing</h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          Manage quote GOA status and run the extraction workflow.
+        </p>
+      </div>
 
-      <StepIndicator current={step} variant={directMachineMode ? "machine-direct" : "full"} />
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ProcessingTab)}>
+        <TabsList className="grid w-full max-w-sm grid-cols-2">
+          <TabsTrigger value="quotes">Quotes</TabsTrigger>
+          <TabsTrigger value="process-new">Process New</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardContent className="pt-6">
-          {error && (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+        <TabsContent value="quotes" className="space-y-3">
+          <QuoteGoaList
+            quotes={quotes}
+            loading={loadingQuotes}
+            error={error}
+            onProcessQuote={handleProcessQuote}
+          />
+        </TabsContent>
 
-          {directMachineMode && step === "load-quote" && (
-            <div className="mx-auto max-w-md space-y-2 rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
-              <h3 className="text-base font-semibold text-foreground">Load Machine</h3>
-              <p>Loading grouped machine data for direct extraction...</p>
-              {loadingArtifacts ? <p className="text-xs">Please wait...</p> : null}
-            </div>
-          )}
+        <TabsContent value="process-new" className="space-y-4">
+          <StepIndicator current={step} variant={directMachineMode ? "machine-direct" : "full"} />
 
-          {!directMachineMode && step === "load-quote" && (
-            <div className="mx-auto max-w-md space-y-6">
-              <h3 className="text-lg font-semibold">Select Quote</h3>
-              <div className="space-y-3">
-                <label className="text-sm font-medium">Select existing quote</label>
-                <Select value={selectedQuote} onValueChange={setSelectedQuote}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a quote..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {quoteOptions.map((quote) => (
-                      <SelectItem key={quote.id} value={quote.id}>
-                        {quote.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {(loadingQuotes || loadingArtifacts) && (
-                  <p className="text-xs text-muted-foreground">Loading quote data...</p>
-                )}
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => setStep("select-machine")}
-                  disabled={!selectedQuote || loadingArtifacts}
-                  className="w-full bg-[#c00000] hover:bg-[#a00000] sm:w-auto"
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {!directMachineMode && step === "select-machine" && (
-            <div className="mx-auto max-w-md space-y-4">
-              <h3 className="text-lg font-semibold">Select Machine</h3>
-
-              {!selectedQuote && (
-                <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
-                  Choose a quote first to load available machines.
+          <Card>
+            <CardContent className="pt-6">
+              {error && (
+                <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
                 </div>
               )}
 
-              {selectedQuote && loadingArtifacts && (
-                <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
-                  Loading machines for the selected quote...
+              {directMachineMode && step === "load-quote" && (
+                <div className="mx-auto max-w-md space-y-2 rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
+                  <h3 className="text-base font-semibold text-foreground">Load Machine</h3>
+                  <p>Loading grouped machine data for direct extraction...</p>
+                  {loadingArtifacts ? <p className="text-xs">Please wait...</p> : null}
                 </div>
               )}
 
-              {selectedQuote && !loadingArtifacts && machineOptions.length === 0 && (
-                <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
-                  No identified machines found for this quote. Complete machine identification from
-                  the dashboard first.
-                </div>
-              )}
-
-              {selectedQuote && !loadingArtifacts && machineOptions.length > 0 && (
-                <>
+              {!directMachineMode && step === "load-quote" && (
+                <div className="mx-auto max-w-md space-y-6">
+                  <h3 className="text-lg font-semibold">Select Quote</h3>
                   <div className="space-y-3">
-                    <label className="text-sm font-medium">Select machine</label>
-                    <Select value={effectiveSelectedMachineKey} onValueChange={setSelectedMachineKey}>
+                    <label className="text-sm font-medium">Select existing quote</label>
+                    <Select value={selectedQuote} onValueChange={setSelectedQuote}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose a machine..." />
+                        <SelectValue placeholder="Choose a quote..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {machineOptions.map((option) => (
-                          <SelectItem key={option.key} value={option.key}>
-                            {option.label}
+                        {quoteOptions.map((quote) => (
+                          <SelectItem key={quote.id} value={quote.id}>
+                            {quote.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {(loadingQuotes || loadingArtifacts) && (
+                      <p className="text-xs text-muted-foreground">Loading quote data...</p>
+                    )}
                   </div>
-
-                  <div className="rounded-md border bg-neutral-50 p-3 text-sm text-muted-foreground">
-                    {selectedQuoteOption?.label ?? selectedQuote}
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={() => setStep("select-machine")}
+                      disabled={!selectedQuote || loadingArtifacts}
+                      className="w-full bg-[#c00000] hover:bg-[#a00000] sm:w-auto"
+                    >
+                      Next
+                    </Button>
                   </div>
-                </>
+                </div>
               )}
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-                <Button variant="outline" onClick={() => setStep("load-quote")}>
-                  Back
-                </Button>
-                <Button
-                  className="bg-[#c00000] hover:bg-[#a00000]"
-                  onClick={() => setStep("process-machine")}
-                  disabled={!selectedMachine || loadingArtifacts}
-                >
-                  Continue to Process
-                </Button>
-              </div>
-            </div>
-          )}
+              {!directMachineMode && step === "select-machine" && (
+                <div className="mx-auto max-w-md space-y-4">
+                  <h3 className="text-lg font-semibold">Select Machine</h3>
 
-          {step === "process-machine" &&
-            (selectedMachine ? (
-              <ExtractionViewer
-                machines={[selectedMachine]}
-                commonItems={commonItems}
-                fullPdfText={fullPdfText}
-                quoteId={selectedQuoteIdNumber}
-              />
-            ) : (
-              <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
-                No machine selected. Go back and choose a machine first.
-              </div>
-            ))}
-        </CardContent>
-      </Card>
+                  {!selectedQuote && (
+                    <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
+                      Choose a quote first to load available machines.
+                    </div>
+                  )}
+
+                  {selectedQuote && loadingArtifacts && (
+                    <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
+                      Loading machines for the selected quote...
+                    </div>
+                  )}
+
+                  {selectedQuote && !loadingArtifacts && machineOptions.length === 0 && (
+                    <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
+                      No identified machines found for this quote. Complete machine identification from
+                      the Quotes tab first.
+                    </div>
+                  )}
+
+                  {selectedQuote && !loadingArtifacts && machineOptions.length > 0 && (
+                    <>
+                      <div className="space-y-3">
+                        <label className="text-sm font-medium">Select machine</label>
+                        <Select value={effectiveSelectedMachineKey} onValueChange={setSelectedMachineKey}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a machine..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {machineOptions.map((option) => (
+                              <SelectItem key={option.key} value={option.key}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="rounded-md border bg-neutral-50 p-3 text-sm text-muted-foreground">
+                        {selectedQuoteOption?.label ?? selectedQuote}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+                    <Button variant="outline" onClick={() => setStep("load-quote")}>
+                      Back
+                    </Button>
+                    <Button
+                      className="bg-[#c00000] hover:bg-[#a00000]"
+                      onClick={() => setStep("process-machine")}
+                      disabled={!selectedMachine || loadingArtifacts}
+                    >
+                      Continue to Process
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {step === "process-machine" &&
+                (selectedMachine ? (
+                  <ExtractionViewer
+                    machines={[selectedMachine]}
+                    commonItems={commonItems}
+                    fullPdfText={fullPdfText}
+                    quoteId={selectedQuoteIdNumber}
+                  />
+                ) : (
+                  <div className="rounded-md border bg-neutral-50 p-4 text-sm text-muted-foreground">
+                    No machine selected. Go back and choose a machine first.
+                  </div>
+                ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

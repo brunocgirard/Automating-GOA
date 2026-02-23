@@ -105,6 +105,22 @@ from .cor import (
     save_cor_document,
 )
 
+# PM dashboard project workflow operations
+from .projects import (
+    create_project,
+    load_all_projects,
+    load_project,
+    load_project_by_quote_ref,
+    ensure_project_for_quote,
+    update_project,
+    delete_project,
+    update_task_status,
+    mark_project_task_done_for_quote,
+    save_gantt_data,
+    get_at_risk_summary,
+    detect_stalls,
+)
+
 # Few-shot learning operations
 from .few_shot import (
     save_few_shot_example,
@@ -173,6 +189,20 @@ __all__ = [
     'list_cor_documents',
     'load_cor_document',
     'save_cor_document',
+
+    # PM dashboard project workflow operations
+    'create_project',
+    'load_all_projects',
+    'load_project',
+    'load_project_by_quote_ref',
+    'ensure_project_for_quote',
+    'update_project',
+    'delete_project',
+    'update_task_status',
+    'mark_project_task_done_for_quote',
+    'save_gantt_data',
+    'get_at_risk_summary',
+    'detect_stalls',
 
     # Few-shot learning operations
     'save_few_shot_example',

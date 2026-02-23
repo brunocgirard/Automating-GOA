@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Check, Copy, Download, Plus, Save, Trash2 } from "lucide-react";
 import {
   fetchQuotes,
@@ -106,6 +107,7 @@ function StepIndicator({ current }: { current: Step }) {
 
 export default function ShippingDocumentsPageClient() {
   const { selectedClientId } = useClientFilter();
+  const searchParams = useSearchParams();
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [step, setStep] = useState<Step>("select");
@@ -147,6 +149,12 @@ export default function ShippingDocumentsPageClient() {
     return Array.from(map.values());
   }, [quotes]);
 
+  const quoteIdFromQuery = useMemo(() => {
+    const raw = searchParams.get("quote");
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? String(parsed) : null;
+  }, [searchParams]);
+
   const invoiceTotal = useMemo(() => {
     if (!state) return 0;
     const manual = toAmount(state.meta.totalInvoiceAmount);
@@ -160,7 +168,7 @@ export default function ShippingDocumentsPageClient() {
   }, [invoiceTotal, state]);
   const lineItemOptions = useMemo(() => state?.lineItemOptions ?? [], [state]);
 
-  async function selectQuote(rawId: string) {
+  const selectQuote = useCallback(async (rawId: string) => {
     if (!rawId) return;
     const quoteId = Number(rawId);
     if (!Number.isFinite(quoteId)) return;
@@ -188,7 +196,13 @@ export default function ShippingDocumentsPageClient() {
     } finally {
       if (latestQuote.current === rawId) setLoadingState(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!quoteIdFromQuery || selectedQuoteId || loadingQuotes) return;
+    if (!quoteOptions.some((option) => option.id === quoteIdFromQuery)) return;
+    void selectQuote(quoteIdFromQuery);
+  }, [loadingQuotes, quoteIdFromQuery, quoteOptions, selectedQuoteId, selectQuote]);
 
   function patchState(fn: (prev: ShippingDocumentState) => ShippingDocumentState) {
     setState((prev) => (prev ? fn(prev) : prev));

@@ -1,4 +1,14 @@
-import type { LineItem, MachineData } from "@/lib/types";
+import type {
+  AtRiskSummary,
+  LineItem,
+  MachineData,
+  ProjectCreateRequest,
+  ProjectDetail,
+  ProjectInsight,
+  ProjectListItem,
+  StallAlert,
+  TaskStatus,
+} from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -380,6 +390,67 @@ interface ApiCorSaveEnvelope extends ApiCorEnvelope {
   saved_at: string;
 }
 
+interface ApiProjectTask {
+  id: number;
+  project_id: number;
+  task_name: string;
+  task_order: number;
+  phase: string;
+  status: string;
+  planned_date?: string | null;
+  actual_date?: string | null;
+  notes?: string | null;
+  modified_date?: string | null;
+}
+
+interface ApiProjectListItem {
+  id: number;
+  project_name: string;
+  customer_name: string;
+  quote_ref?: string | null;
+  machine_summary?: string | null;
+  status: string;
+  risk_level: string;
+  current_phase?: string | null;
+  current_task?: string | null;
+  days_in_phase?: number | null;
+  progress_pct?: number;
+  start_date?: string | null;
+  target_end_date?: string | null;
+  actual_end_date?: string | null;
+  created_date?: string | null;
+  modified_date?: string | null;
+}
+
+interface ApiProjectDetail extends ApiProjectListItem {
+  tasks?: ApiProjectTask[];
+  gantt_data?: Record<string, unknown> | null;
+}
+
+interface ApiAtRiskSummary {
+  count: number;
+  projects?: Array<{
+    project_id?: number | null;
+    name?: string | null;
+    task?: string | null;
+    phase?: string | null;
+    days_stalled?: number | null;
+  }>;
+}
+
+interface ApiInsight {
+  project_id?: number | null;
+  project_name?: string | null;
+  task_id?: number | null;
+  task_name?: string | null;
+  type?: string | null;
+  severity?: "critical" | "warning" | "info" | null;
+  title?: string | null;
+  message?: string | null;
+  phase?: string | null;
+  days_stalled?: number | null;
+}
+
 export interface ShippingCrate {
   id: string;
   lengthIn: string;
@@ -656,6 +727,109 @@ function normalizeCorDownloadFilename(filename: string, contentType: string): st
     candidate = `${candidate}.docx`;
   }
   return candidate;
+}
+
+function normalizeProjectPhase(
+  value: string | null | undefined
+): "sales_onboarding" | "engineering_prep" | "design_approval" | "production" | "delivery" | null {
+  const normalized = asString(value).trim().toLowerCase();
+  if (
+    normalized === "sales_onboarding" ||
+    normalized === "engineering_prep" ||
+    normalized === "design_approval" ||
+    normalized === "production" ||
+    normalized === "delivery"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function normalizeTaskStatus(value: string | null | undefined): TaskStatus {
+  const normalized = asString(value).trim().toLowerCase();
+  if (normalized === "in_progress" || normalized === "done" || normalized === "skipped") {
+    return normalized;
+  }
+  return "pending";
+}
+
+function normalizeRiskLevel(value: string | null | undefined): "on_track" | "at_risk" | "overdue" {
+  const normalized = asString(value).trim().toLowerCase();
+  if (normalized === "at_risk" || normalized === "overdue") return normalized;
+  return "on_track";
+}
+
+function normalizeProjectTask(task: ApiProjectTask): ProjectDetail["tasks"][number] {
+  return {
+    id: task.id,
+    project_id: task.project_id,
+    task_name: asString(task.task_name),
+    task_order: Number(task.task_order) || 0,
+    phase: normalizeProjectPhase(task.phase) ?? "production",
+    status: normalizeTaskStatus(task.status),
+    planned_date: task.planned_date ?? null,
+    actual_date: task.actual_date ?? null,
+    notes: task.notes ?? null,
+    modified_date: task.modified_date ?? null,
+  };
+}
+
+function normalizeProjectListItem(project: ApiProjectListItem): ProjectListItem {
+  return {
+    id: project.id,
+    project_name: asString(project.project_name),
+    customer_name: asString(project.customer_name),
+    quote_ref: project.quote_ref ?? null,
+    machine_summary: project.machine_summary ?? null,
+    status: asString(project.status) || "active",
+    risk_level: normalizeRiskLevel(project.risk_level),
+    current_phase: normalizeProjectPhase(project.current_phase),
+    current_task: project.current_task ?? null,
+    days_in_phase:
+      typeof project.days_in_phase === "number" && Number.isFinite(project.days_in_phase)
+        ? project.days_in_phase
+        : null,
+    progress_pct:
+      typeof project.progress_pct === "number" && Number.isFinite(project.progress_pct)
+        ? project.progress_pct
+        : 0,
+    start_date: project.start_date ?? null,
+    target_end_date: project.target_end_date ?? null,
+    actual_end_date: project.actual_end_date ?? null,
+    created_date: project.created_date ?? null,
+    modified_date: project.modified_date ?? null,
+  };
+}
+
+function normalizeProjectDetail(project: ApiProjectDetail): ProjectDetail {
+  return {
+    ...normalizeProjectListItem(project),
+    tasks: (project.tasks ?? []).map((task) => normalizeProjectTask(task)),
+    gantt_data: project.gantt_data ?? null,
+  };
+}
+
+function normalizeProjectInsight(value: ApiInsight): ProjectInsight {
+  const severityRaw = asString(value.severity).toLowerCase();
+  const severity: "critical" | "warning" | "info" =
+    severityRaw === "critical" || severityRaw === "warning" || severityRaw === "info"
+      ? severityRaw
+      : "info";
+  return {
+    project_id: typeof value.project_id === "number" ? value.project_id : null,
+    project_name: value.project_name ?? null,
+    task_id: typeof value.task_id === "number" ? value.task_id : null,
+    task_name: value.task_name ?? null,
+    type: asString(value.type) || "info",
+    severity,
+    title: asString(value.title) || "Insight",
+    message: asString(value.message),
+    phase: value.phase ?? null,
+    days_stalled:
+      typeof value.days_stalled === "number" && Number.isFinite(value.days_stalled)
+        ? value.days_stalled
+        : null,
+  };
 }
 
 function normalizeCorState(
@@ -1211,6 +1385,113 @@ export async function fetchQuoteWorkflowStatus(
     corSaved: Boolean(corState),
     corModifiedDate: corState?.modified_date ?? null,
   };
+}
+
+export async function fetchAtRiskSummary(): Promise<AtRiskSummary> {
+  const response = await fetchJson<ApiAtRiskSummary>("/api/pm/at-risk");
+  if (!response) {
+    return { count: 0, projects: [] };
+  }
+  return {
+    count: typeof response.count === "number" ? response.count : 0,
+    projects: (response.projects ?? []).map((entry) => ({
+      project_id: typeof entry.project_id === "number" ? entry.project_id : null,
+      name: asString(entry.name),
+      task: asString(entry.task),
+      phase: asString(entry.phase),
+      days_stalled:
+        typeof entry.days_stalled === "number" && Number.isFinite(entry.days_stalled)
+          ? entry.days_stalled
+          : 0,
+    })),
+  };
+}
+
+export async function fetchStallAlerts(): Promise<StallAlert[]> {
+  const response = (await fetchJson<StallAlert[]>("/api/pm/stalls")) ?? [];
+  return response.map((entry) => ({
+    project_id: Number(entry.project_id) || 0,
+    project_name: asString(entry.project_name),
+    task_id: Number(entry.task_id) || 0,
+    task_name: asString(entry.task_name),
+    phase: asString(entry.phase),
+    days_stalled: Number(entry.days_stalled) || 0,
+  }));
+}
+
+export async function fetchProjects(): Promise<ProjectListItem[]> {
+  const response = (await fetchJson<ApiProjectListItem[]>("/api/pm/projects")) ?? [];
+  return response.map((project) => normalizeProjectListItem(project));
+}
+
+export async function fetchProject(projectId: number): Promise<ProjectDetail | null> {
+  const response = await fetchJson<ApiProjectDetail>(`/api/pm/projects/${projectId}`, undefined, true);
+  if (!response) {
+    return null;
+  }
+  return normalizeProjectDetail(response);
+}
+
+export async function createProject(data: ProjectCreateRequest): Promise<ProjectDetail> {
+  const response = await fetchJson<ApiProjectDetail>("/api/pm/projects", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!response) {
+    throw new Error("Failed to create project.");
+  }
+  return normalizeProjectDetail(response);
+}
+
+export async function updateProjectRecord(
+  projectId: number,
+  data: Partial<ProjectCreateRequest> & {
+    status?: string;
+    risk_level?: string;
+    actual_end_date?: string | null;
+  }
+): Promise<ProjectDetail> {
+  const response = await fetchJson<ApiProjectDetail>(`/api/pm/projects/${projectId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response) {
+    throw new Error("Failed to update project.");
+  }
+  return normalizeProjectDetail(response);
+}
+
+export async function deleteProjectRecord(projectId: number): Promise<void> {
+  await fetchJson(`/api/pm/projects/${projectId}`, { method: "DELETE" });
+}
+
+export async function updateTaskStatus(
+  taskId: number,
+  status: TaskStatus,
+  notes?: string
+): Promise<void> {
+  await fetchJson(`/api/pm/tasks/${taskId}/status`, {
+    method: "PUT",
+    body: JSON.stringify({
+      status,
+      notes,
+    }),
+  });
+}
+
+export async function uploadGanttPdf(projectId: number, file: File): Promise<void> {
+  const body = new FormData();
+  body.append("file", file);
+  await fetchJson(`/api/pm/projects/${projectId}/gantt-upload`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function fetchPmInsights(projectId?: number): Promise<ProjectInsight[]> {
+  const path = typeof projectId === "number" ? `/api/pm/projects/${projectId}/insights` : "/api/pm/insights";
+  const response = (await fetchJson<ApiInsight[]>(path)) ?? [];
+  return response.map((insight) => normalizeProjectInsight(insight));
 }
 
 export async function fetchShippingPrefill(

@@ -55,6 +55,7 @@ from src.utils.db import (
     load_machines_for_quote,
     load_machine_template_data,
     load_priced_items_for_quote,
+    mark_project_task_done_for_quote,
     save_machines_data,
     save_bulk_goa_modifications,
     save_machine_template_data,
@@ -252,6 +253,23 @@ def _resolve_output_options(options: GoaOutputOptions | None) -> GoaOutputOption
         label_overrides={str(key): str(value) for key, value in (options.label_overrides or {}).items()},
         format="html",
     )
+
+
+def _mark_goa_task_done_for_quote(quote_ref: str, source: str) -> None:
+    normalized_quote_ref = str(quote_ref or "").strip()
+    if not normalized_quote_ref:
+        return
+    try:
+        mark_project_task_done_for_quote(
+            normalized_quote_ref,
+            "GOA(s)",
+            notes=f"Auto-advanced from {source}",
+        )
+    except Exception as exc:
+        print(
+            "Warning: failed to auto-advance PM task 'GOA(s)' "
+            f"for quote_ref='{normalized_quote_ref}': {exc}"
+        )
 
 
 def _serialize_output_options(options: GoaOutputOptions | None) -> dict[str, Any] | None:
@@ -640,6 +658,13 @@ def generate_machine_document(payload: GenerateDocumentRequest) -> dict:
             if template_row:
                 machine_template_id = int(template_row["id"])
 
+        quote_ref = str(payload.machine_data.get("client_quote_ref") or "").strip()
+        if not quote_ref and machine_id:
+            machine_row = load_machine_by_id(machine_id)
+            if machine_row:
+                quote_ref = str(machine_row.get("client_quote_ref") or "").strip()
+        _mark_goa_task_done_for_quote(quote_ref, "processing.generate")
+
         return {
             "file_path": file_path,
             "machine_id": machine_id,
@@ -844,6 +869,7 @@ def save_goa_form(machine_template_id: int, payload: GoaFormSaveRequest) -> dict
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to persist generated GOA document path.",
             )
+        _mark_goa_task_done_for_quote(str(template_row.get("quote_ref") or ""), "processing.goa-form.save")
 
     refreshed_row = _load_goa_template_row(machine_template_id)
     if not refreshed_row:
@@ -934,6 +960,7 @@ def generate_goa_form_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to persist generated GOA document path.",
         )
+    _mark_goa_task_done_for_quote(str(template_row.get("quote_ref") or ""), "processing.goa-form.generate")
 
     refreshed_row = _load_goa_template_row(machine_template_id)
     if not refreshed_row:
@@ -1018,6 +1045,7 @@ def generate_document_with_options(payload: GoaGenerateDocumentApiRequest) -> di
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to persist generated document path.",
         )
+    _mark_goa_task_done_for_quote(str(template_row.get("quote_ref") or ""), "processing.direct.generate-document")
 
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_format = "docx" if output_path.lower().endswith(".docx") else "html"

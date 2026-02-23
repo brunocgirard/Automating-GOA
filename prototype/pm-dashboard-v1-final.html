@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOA PM Dashboard — V1 Final</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-base: #f5f4f1;
+  --bg-card: #ffffff;
+  --bg-hover: #fafaf8;
+  --bg-sidebar: #1b1b1f;
+  --bg-col: rgba(255,255,255,0.55);
+
+  --red-brand: #c00000;
+  --red-soft: #fef2f0;
+
+  --accent: #2563eb;
+  --accent-soft: #eff4ff;
+
+  --green: #16a34a;
+  --green-soft: #f0fdf4;
+  --yellow: #ca8a04;
+  --yellow-soft: #fefce8;
+  --red: #dc2626;
+  --red-dim: #fef2f2;
+
+  --text-primary: #18181b;
+  --text-secondary: #71717a;
+  --text-muted: #a1a1aa;
+  --text-inverse: #fafafa;
+
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.1);
+
+  --sidebar-w: 208px;
+  --font: 'DM Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+html { font-size: 13.5px; }
+body { font-family: var(--font); background: var(--bg-base); color: var(--text-primary); height: 100vh; overflow: hidden; display: flex; }
+
+/* ═══ SIDEBAR ═══ */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+.sb-brand { padding: 18px 16px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.sb-brand h1 { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+.sb-brand span { font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-top: 2px; }
+.sb-nav { padding: 10px 8px; flex: 1; }
+.sb-section { font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.25); text-transform: uppercase; letter-spacing: 0.08em; padding: 14px 10px 5px; }
+.sb-item {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 5px;
+  color: rgba(255,255,255,0.5); font-size: 12.5px; font-weight: 500; cursor: pointer;
+  transition: all 0.12s; text-decoration: none;
+}
+.sb-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.8); }
+.sb-item.active { background: var(--red-brand); color: #fff; }
+.sb-icon { width: 16px; height: 16px; opacity: 0.6; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.sb-item.active .sb-icon { opacity: 1; }
+.sb-footer { padding: 14px 16px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 9px; }
+.sb-avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--red-brand), #e83e3e); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; }
+.sb-footer .name { font-size: 11px; color: rgba(255,255,255,0.65); font-weight: 500; }
+.sb-footer .role { font-size: 9.5px; color: rgba(255,255,255,0.3); }
+
+/* ═══ MAIN ═══ */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ═══ HEADER ═══ */
+.header {
+  height: 52px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0;
+}
+.header h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.header-sub { font-size: 11.5px; color: var(--text-muted); margin-left: 12px; }
+.hdr-actions { display: flex; gap: 8px; }
+.hdr-btn {
+  padding: 5px 13px; border-radius: 5px; font-size: 11.5px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary);
+  cursor: pointer; font-family: var(--font); transition: all 0.12s;
+}
+.hdr-btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.hdr-btn.primary { background: var(--red-brand); color: #fff; border-color: var(--red-brand); }
+.hdr-btn.primary:hover { background: #a00000; }
+
+/* ═══ CONTENT ═══ */
+.content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+/* ═══ KPI ROW ═══ */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.kpi {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px 18px; position: relative; overflow: hidden;
+}
+.kpi::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2.5px; }
+.kpi:nth-child(1)::after { background: var(--accent); }
+.kpi:nth-child(2)::after { background: var(--red); }
+.kpi:nth-child(3)::after { background: var(--yellow); }
+.kpi:nth-child(4)::after { background: var(--green); }
+.kpi-label { font-size: 10px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.kpi-val { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.kpi-note { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; }
+
+/* ═══ BOARD ═══ */
+.board-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.board-bar h3 { font-size: 13px; font-weight: 600; }
+.pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+
+.phase {
+  background: var(--bg-col); border: 1px solid var(--border); border-radius: 8px;
+  display: flex; flex-direction: column; min-height: 320px;
+}
+.phase-hdr {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--bg-card);
+  display: flex; align-items: center; justify-content: space-between; border-radius: 8px 8px 0 0;
+}
+.phase-name { font-size: 11.5px; font-weight: 600; }
+.phase-cnt { font-size: 9.5px; font-weight: 600; background: var(--bg-base); color: var(--text-secondary); padding: 1.5px 6px; border-radius: 8px; }
+.phase-tasks-label { padding: 6px 12px 2px; font-size: 9.5px; color: var(--text-muted); font-family: var(--mono); line-height: 1.6; }
+.phase-body { padding: 6px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+/* ═══ PROJECT CARDS ═══ */
+.pcard {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 7px;
+  padding: 11px 12px; cursor: pointer; transition: all 0.15s; position: relative;
+}
+.pcard:hover { border-color: var(--red-brand); box-shadow: var(--shadow-md), 0 0 0 1px var(--red-brand); transform: translateY(-1px); }
+.pcard-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.pcard-name { font-size: 12.5px; font-weight: 600; }
+.risk { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.risk.g { background: var(--green); box-shadow: 0 0 5px rgba(22,163,74,0.4); }
+.risk.y { background: var(--yellow); box-shadow: 0 0 5px rgba(202,138,4,0.4); }
+.risk.r { background: var(--red); box-shadow: 0 0 5px rgba(220,38,38,0.4); }
+.pcard-cust { font-size: 10.5px; color: var(--text-secondary); margin-bottom: 7px; }
+.pcard-bottom { display: flex; align-items: center; justify-content: space-between; }
+.pcard-tag { font-size: 9.5px; font-family: var(--mono); font-weight: 500; padding: 1.5px 6px; border-radius: 3px; }
+.pcard-tag.blue { background: var(--accent-soft); color: var(--accent); }
+.pcard-tag.red { background: var(--red-dim); color: var(--red); }
+.pcard-tag.green { background: var(--green-soft); color: var(--green); }
+.pcard-days { font-size: 10px; color: var(--text-muted); font-family: var(--mono); }
+
+/* progress mini-bar on card */
+.pcard-progress { margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+.pbar-track { flex: 1; height: 3px; background: var(--bg-base); border-radius: 2px; overflow: hidden; }
+.pbar-fill { height: 100%; border-radius: 2px; }
+.pbar-pct { font-size: 9.5px; font-family: var(--mono); font-weight: 600; color: var(--text-muted); }
+
+/* out-of-order indicator */
+.ooo-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9px; color: var(--text-muted); font-family: var(--mono);
+  background: var(--yellow-soft); padding: 1px 5px; border-radius: 3px; margin-left: 4px;
+}
+
+.phase-empty { padding: 20px; text-align: center; font-size: 11px; color: var(--text-muted); font-style: italic; }
+
+/* ═══ DETAIL PANEL ═══ */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 200;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s; backdrop-filter: blur(1.5px);
+}
+.overlay.open { opacity: 1; pointer-events: all; }
+.panel {
+  position: fixed; top: 0; right: -740px; bottom: 0; width: 740px;
+  background: var(--bg-card); z-index: 201; display: flex; flex-direction: column;
+  transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-lg);
+}
+.panel.open { right: 0; }
+
+.panel-hdr {
+  padding: 18px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0;
+}
+.panel-title { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 3px; }
+.panel-sub { font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; }
+.tag { padding: 2px 7px; border-radius: 3px; font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.tag.prog { background: var(--accent-soft); color: var(--accent); }
+.tag.atrisk { background: var(--yellow-soft); color: var(--yellow); }
+.close-x {
+  width: 30px; height: 30px; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--bg-card); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.12s; flex-shrink: 0;
+}
+.close-x:hover { background: var(--bg-base); color: var(--text-primary); }
+
+.panel-body { flex: 1; overflow-y: auto; padding: 22px 24px; }
+
+/* Summary row */
+.sum-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+.sum-item { padding: 12px; background: var(--bg-base); border-radius: 7px; border: 1px solid var(--border); }
+.sum-item .lbl { font-size: 9.5px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+.sum-item .val { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* Quick links */
+.quick-links { display: flex; gap: 6px; margin-bottom: 24px; flex-wrap: wrap; }
+.qlink {
+  padding: 5px 11px; border-radius: 5px; font-size: 10.5px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary);
+  cursor: pointer; font-family: var(--font); transition: all 0.12s; text-decoration: none;
+}
+.qlink:hover { border-color: var(--red-brand); color: var(--red-brand); }
+
+/* Section heading */
+.sec-title { font-size: 12px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.sec-title .line { flex: 1; height: 1px; background: var(--border); }
+
+/* ═══ MILESTONE BAR ═══ */
+.mbar-wrap { margin-bottom: 24px; }
+.mbar {
+  display: flex; align-items: center; height: 32px; background: var(--bg-base);
+  border-radius: 16px; border: 1px solid var(--border); overflow: hidden; position: relative;
+}
+.mseg {
+  flex: 1; height: 100%; display: flex; align-items: center; justify-content: center;
+  position: relative; cursor: default; transition: all 0.15s;
+}
+.mseg.done { background: var(--green); }
+.mseg.wip { background: var(--accent); animation: pulse 2s infinite; }
+.mseg.pending { background: transparent; }
+.mseg.overdue { background: var(--red); }
+/* Non-linear: isolated done segments get rounded inner edges */
+.mseg.done + .mseg:not(.done) { border-left: 2px solid var(--bg-base); }
+.mseg:not(.done) + .mseg.done { border-left: 2px solid var(--bg-base); }
+
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.7} }
+
+.mdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.mseg.done .mdot { background: rgba(255,255,255,0.85); }
+.mseg.wip .mdot { background: #fff; width: 8px; height: 8px; box-shadow: 0 0 6px rgba(255,255,255,0.5); }
+.mseg.pending .mdot { background: var(--border-strong); }
+.mseg.overdue .mdot { background: rgba(255,255,255,0.85); }
+
+.mtooltip {
+  position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%) translateY(2px);
+  background: var(--bg-sidebar); color: var(--text-inverse); padding: 5px 9px; border-radius: 5px;
+  font-size: 10.5px; white-space: nowrap; opacity: 0; pointer-events: none; transition: all 0.15s; z-index: 10;
+}
+.mtooltip::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:4px solid transparent; border-top-color:var(--bg-sidebar); }
+.mseg:hover .mtooltip { opacity: 1; transform: translateX(-50%) translateY(-2px); }
+
+.mbar-legend { display: flex; gap: 14px; margin-top: 8px; padding: 0 4px; }
+.mbar-legend span { font-size: 9.5px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.mbar-legend .dot { width: 8px; height: 8px; border-radius: 2px; }
+
+/* ═══ EXPANDABLE ═══ */
+.expander { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.exp-hdr {
+  padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; background: var(--bg-card); transition: background 0.12s; user-select: none;
+}
+.exp-hdr:hover { background: var(--bg-hover); }
+.exp-hdr .left { display: flex; align-items: center; gap: 8px; }
+.chevron { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; color: var(--text-muted); }
+.expander.open .chevron { transform: rotate(90deg); }
+.exp-name { font-size: 12.5px; font-weight: 600; }
+.exp-badge { font-size: 9.5px; font-weight: 500; padding: 1.5px 7px; border-radius: 3px; font-family: var(--mono); }
+.exp-body { max-height: 0; overflow: hidden; transition: max-height 0.35s cubic-bezier(0.16,1,0.3,1); }
+.expander.open .exp-body { max-height: 1200px; }
+.exp-inner { padding: 14px 16px; border-top: 1px solid var(--border); }
+
+/* ═══ TASK CHECKLIST ═══ */
+.task-group-hdr {
+  font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 10px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 2px;
+}
+.task-row {
+  display: flex; align-items: center; gap: 10px; padding: 7px 2px;
+  border-bottom: 1px solid rgba(0,0,0,0.03); cursor: pointer; transition: background 0.1s;
+  border-radius: 3px;
+}
+.task-row:hover { background: var(--bg-base); }
+.task-check {
+  width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: all 0.15s; font-size: 11px; color: transparent;
+}
+.task-row.done .task-check { background: var(--green); border-color: var(--green); color: #fff; }
+.task-row.wip .task-check { background: var(--accent); border-color: var(--accent); color: #fff; }
+.task-row.skipped .task-check { background: var(--text-muted); border-color: var(--text-muted); color: #fff; }
+.task-label { font-size: 12px; flex: 1; }
+.task-row.done .task-label { color: var(--text-muted); text-decoration: line-through; }
+.task-date { font-size: 10px; font-family: var(--mono); color: var(--text-muted); width: 60px; text-align: right; }
+.task-ooo {
+  font-size: 8.5px; font-family: var(--mono); color: var(--yellow);
+  background: var(--yellow-soft); padding: 1px 5px; border-radius: 2px;
+}
+
+/* ═══ GANTT DETAIL ═══ */
+.machine-row { margin-bottom: 12px; }
+.machine-row:last-child { margin-bottom: 0; }
+.m-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.m-name { font-size: 11.5px; font-weight: 600; }
+.m-pct { font-size: 10.5px; font-family: var(--mono); font-weight: 600; color: var(--text-secondary); }
+.m-bar { height: 7px; background: var(--bg-base); border-radius: 3.5px; overflow: hidden; border: 1px solid var(--border); }
+.m-fill { height: 100%; border-radius: 3.5px; background: var(--accent); }
+.m-dates { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9.5px; color: var(--text-muted); font-family: var(--mono); }
+
+.sub-ph { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.sub-ph:last-child { border-bottom: none; }
+.sub-ph .sp-n { width: 100px; font-size: 10.5px; color: var(--text-secondary); flex-shrink: 0; }
+.sub-ph .sp-bar { flex: 1; height: 5px; background: var(--bg-base); border-radius: 2.5px; overflow: hidden; }
+.sub-ph .sp-f { height: 100%; border-radius: 2.5px; }
+.sub-ph .sp-f.done { background: var(--green); }
+.sub-ph .sp-f.wip { background: var(--accent); }
+.sub-ph .sp-p { width: 30px; text-align: right; font-size: 9.5px; font-family: var(--mono); font-weight: 600; color: var(--text-muted); }
+.sub-ph .sp-d { width: 100px; text-align: right; font-size: 9.5px; font-family: var(--mono); color: var(--text-muted); }
+
+/* ═══ INSIGHTS ═══ */
+.ins-card {
+  display: flex; gap: 10px; padding: 11px 12px; background: var(--bg-base);
+  border: 1px solid var(--border); border-radius: 7px; margin-bottom: 7px; transition: all 0.12s;
+}
+.ins-card:hover { border-color: var(--border-strong); }
+.ins-ico {
+  width: 26px; height: 26px; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0; font-weight: 700;
+}
+.ins-ico.warn { background: var(--yellow-soft); color: var(--yellow); }
+.ins-ico.crit { background: var(--red-dim); color: var(--red); }
+.ins-ico.info { background: var(--accent-soft); color: var(--accent); }
+.ins-text { font-size: 11.5px; line-height: 1.5; }
+.ins-text strong { font-weight: 600; }
+.ins-meta { font-size: 9.5px; color: var(--text-muted); margin-top: 2px; font-family: var(--mono); }
+
+/* ═══ SCROLLBAR ═══ */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+/* ═══ ANIMATION ═══ */
+@keyframes fadeUp { from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)} }
+.ani { animation: fadeUp 0.35s ease both; }
+.d1{animation-delay:.04s}.d2{animation-delay:.08s}.d3{animation-delay:.12s}.d4{animation-delay:.16s}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sb-brand"><h1>GOA Platform</h1><span>Document Assistant</span></div>
+  <nav class="sb-nav">
+    <div class="sb-section">Main</div>
+    <a class="sb-item" href="#"><span class="sb-icon"><svg width="15" height="15" fill="none" viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></span>Dashboard</a>
+    <a class="sb-item" href="#"><span class="sb-icon"><svg width="15" height="15" fill="none" viewBox="0 0 16 16"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.4"/></svg></span>Client Info</a>
+    <a class="sb-item" href="#"><span class="sb-icon"><svg width="15" height="15" fill="none" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>Processing</a>
+    <a class="sb-item" href="#"><span class="sb-icon"><svg width="15" height="15" fill="none" viewBox="0 0 16 16"><path d="M3 3h10v10H3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M3 7h10M7 7v6" stroke="currentColor" stroke-width="1.4"/></svg></span>Shipping Docs</a>
+    <a class="sb-item" href="#"><span class="sb-icon"><svg width="15" height="15" fill="none" viewBox="0 0 16 16"><path d="M4 2h8l2 3v9H2V5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M2 5h12" stroke="currentColor" stroke-width="1.4"/></svg></span>COR Docs</a>
+    <div class="sb-section">Management</div>
+    <a class="sb-item active" href="#"><span class="sb-icon"><svg width="15" height="15" fill="none" viewBox="0 0 16 16"><rect x="1" y="2" width="4" height="12" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="6" y="5" width="4" height="9" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="11" y="3" width="4" height="11" rx="1" stroke="currentColor" stroke-width="1.4"/></svg></span>PM Dashboard</a>
+    <a class="sb-item" href="#"><span class="sb-icon"><svg width="15" height="15" fill="none" viewBox="0 0 16 16"><path d="M2 12l4-5 3 3 5-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Reports</a>
+  </nav>
+  <div class="sb-footer">
+    <div class="sb-avatar">PM</div>
+    <div><div class="name">Project Manager</div><div class="role">Administrator</div></div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <header class="header">
+    <div style="display:flex;align-items:baseline;gap:6px;">
+      <h2>PM Dashboard</h2>
+      <span class="header-sub">Pipeline view &middot; all projects</span>
+    </div>
+    <div class="hdr-actions">
+      <button class="hdr-btn">Import Gantt</button>
+      <button class="hdr-btn primary">+ New Project</button>
+    </div>
+  </header>
+
+  <div class="content">
+    <!-- KPIs -->
+    <div class="kpi-row">
+      <div class="kpi ani d1"><div class="kpi-label">Active Projects</div><div class="kpi-val">4</div><div class="kpi-note">+1 from last month</div></div>
+      <div class="kpi ani d2"><div class="kpi-label">At Risk</div><div class="kpi-val" style="color:var(--red)">1</div><div class="kpi-note">Pharma Corp &mdash; layout overdue</div></div>
+      <div class="kpi ani d3"><div class="kpi-label">Avg Lead Time</div><div class="kpi-val">127<span style="font-size:13px;font-weight:400;color:var(--text-muted)"> days</span></div><div class="kpi-note">+5d vs 122d target</div></div>
+      <div class="kpi ani d4"><div class="kpi-label">On-Time Rate</div><div class="kpi-val" style="color:var(--green)">85%</div><div class="kpi-note">+3% vs last quarter</div></div>
+    </div>
+
+    <!-- BOARD -->
+    <div class="board-bar"><h3>Project Pipeline</h3></div>
+    <div class="pipeline ani d3">
+      <!-- Sales & Onboarding -->
+      <div class="phase">
+        <div class="phase-hdr"><span class="phase-name">Sales & Onboarding</span><span class="phase-cnt">1</span></div>
+        <div class="phase-tasks-label">Down Payment / Intro Letter / Binder / Transfer File</div>
+        <div class="phase-body">
+          <div class="pcard" onclick="openPanel('meridian')">
+            <div class="pcard-top"><span class="pcard-name">Meridian Medical</span><span class="risk g"></span></div>
+            <div class="pcard-cust">MER-2026-004 &middot; CF-3P</div>
+            <div class="pcard-bottom"><span class="pcard-tag blue">Binder</span><span class="pcard-days">3d in phase</span></div>
+            <div class="pcard-progress"><div class="pbar-track"><div class="pbar-fill" style="width:8%;background:var(--accent)"></div></div><span class="pbar-pct">8%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Engineering Prep -->
+      <div class="phase">
+        <div class="phase-hdr"><span class="phase-name">Engineering Prep</span><span class="phase-cnt">1</span></div>
+        <div class="phase-tasks-label">Eng. Samples / Matrix Sent / Matrix Confirmed</div>
+        <div class="phase-body">
+          <div class="pcard" onclick="openPanel('automech')">
+            <div class="pcard-top"><span class="pcard-name">AutoMech Industries</span><span class="risk g"></span></div>
+            <div class="pcard-cust">AMI-2026-003 &middot; SortStar</div>
+            <div class="pcard-bottom"><span class="pcard-tag blue">Matrix Sent</span><span class="pcard-days">7d in phase</span></div>
+            <div class="pcard-progress"><div class="pbar-track"><div class="pbar-fill" style="width:18%;background:var(--accent)"></div></div><span class="pbar-pct">18%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Design & Approval -->
+      <div class="phase">
+        <div class="phase-hdr"><span class="phase-name">Design & Approval</span><span class="phase-cnt">1</span></div>
+        <div class="phase-tasks-label">Layout / Approval / GOA(s) / Pre-Kick Off</div>
+        <div class="phase-body">
+          <div class="pcard" onclick="openPanel('pharma')" style="border-left:3px solid var(--yellow);">
+            <div class="pcard-top"><span class="pcard-name">Pharma Corp</span><span class="risk y"></span></div>
+            <div class="pcard-cust">PHC-2026-002 &middot; Mini-Jolly</div>
+            <div class="pcard-bottom"><span class="pcard-tag red">Layout Approval</span><span class="pcard-days">14d in phase</span></div>
+            <div class="pcard-progress"><div class="pbar-track"><div class="pbar-fill" style="width:28%;background:var(--yellow)"></div></div><span class="pbar-pct">28%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Production -->
+      <div class="phase">
+        <div class="phase-hdr"><span class="phase-name">Production</span><span class="phase-cnt">1</span></div>
+        <div class="phase-tasks-label">Timeline / Bulk Samples / Eng. KO / 3rd Party</div>
+        <div class="phase-body">
+          <div class="pcard" onclick="openPanel('xeolas')" style="border-left:3px solid var(--green);">
+            <div class="pcard-top"><span class="pcard-name">Xeolas Pharma</span><span class="risk g"></span></div>
+            <div class="pcard-cust">A3490-92 &middot; CF-2P + 3 machines</div>
+            <div class="pcard-bottom"><span class="pcard-tag green">Eng. Kick Off</span><span class="pcard-days">22d in phase</span></div>
+            <div class="pcard-progress"><div class="pbar-track"><div class="pbar-fill" style="width:44%;background:var(--green)"></div></div><span class="pbar-pct">44%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delivery -->
+      <div class="phase">
+        <div class="phase-hdr"><span class="phase-name">Delivery</span><span class="phase-cnt">0</span></div>
+        <div class="phase-tasks-label">FAT / COR / Crating / Pre-ship / Shipment</div>
+        <div class="phase-body"><div class="phase-empty">No projects in this phase</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DETAIL PANEL ═══ -->
+<div class="overlay" id="overlay" onclick="closePanel()"></div>
+<div class="panel" id="panel">
+  <div class="panel-hdr">
+    <div>
+      <div class="panel-title" id="pTitle">Xeolas Pharma</div>
+      <div class="panel-sub">
+        <span id="pRef">A3490-92 &middot; 4 machines</span>
+        <span class="tag prog" id="pTag">In Progress</span>
+        <span style="color:var(--text-muted)" id="pDate">Started Jan 12, 2026</span>
+      </div>
+    </div>
+    <button class="close-x" onclick="closePanel()">&times;</button>
+  </div>
+  <div class="panel-body">
+
+    <!-- Summary -->
+    <div class="sum-row">
+      <div class="sum-item"><div class="lbl">Progress</div><div class="val">44%</div></div>
+      <div class="sum-item"><div class="lbl">Days Elapsed</div><div class="val">40<span style="font-size:11px;font-weight:400;color:var(--text-muted)"> / 127</span></div></div>
+      <div class="sum-item"><div class="lbl">Est. Completion</div><div class="val" style="font-size:14px">Jul 13, 2026</div></div>
+      <div class="sum-item"><div class="lbl">Tasks Done</div><div class="val">11<span style="font-size:11px;font-weight:400;color:var(--text-muted)"> / 26</span></div></div>
+    </div>
+
+    <!-- Quick links to existing app pages -->
+    <div class="quick-links">
+      <a class="qlink" href="#">View Client Info</a>
+      <a class="qlink" href="#">View GOA Form</a>
+      <a class="qlink" href="#">Shipping Docs</a>
+      <a class="qlink" href="#">COR Docs</a>
+    </div>
+
+    <!-- Milestone bar -->
+    <div class="sec-title">Milestone Tracker<span class="line"></span></div>
+    <div class="mbar-wrap">
+      <div class="mbar" id="mbar"></div>
+      <div class="mbar-legend">
+        <span><div class="dot" style="background:var(--green)"></div> Done</span>
+        <span><div class="dot" style="background:var(--accent)"></div> In Progress</span>
+        <span><div class="dot" style="background:var(--border-strong)"></div> Pending</span>
+        <span><div class="dot" style="background:var(--yellow)"></div> Out of Order</span>
+      </div>
+    </div>
+
+    <!-- Task Checklist (non-linear) -->
+    <div class="expander open" id="expChecklist">
+      <div class="exp-hdr" onclick="tog('expChecklist')">
+        <div class="left">
+          <span class="chevron"><svg width="14" height="14" fill="none" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="exp-name">Task Checklist</span>
+        </div>
+        <span class="exp-badge" style="background:var(--green-soft);color:var(--green)">11 / 26 done</span>
+      </div>
+      <div class="exp-body"><div class="exp-inner" id="checklistInner">
+        <!-- JS rendered -->
+      </div></div>
+    </div>
+
+    <!-- Production Gantt (collapsed) -->
+    <div class="expander" id="expGantt">
+      <div class="exp-hdr" onclick="tog('expGantt')">
+        <div class="left">
+          <span class="chevron"><svg width="14" height="14" fill="none" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="exp-name">Production Detail (from Gantt PDF)</span>
+        </div>
+        <span class="exp-badge" style="background:var(--accent-soft);color:var(--accent)">4 machines &middot; 11% avg</span>
+      </div>
+      <div class="exp-body"><div class="exp-inner">
+        <div class="machine-row">
+          <div class="m-top"><span class="m-name">CF-2P <span style="font-weight:400;color:var(--text-muted)">(A3490)</span></span><span class="m-pct">13%</span></div>
+          <div class="m-bar"><div class="m-fill" style="width:13%"></div></div>
+          <div class="m-dates"><span>Jan 12</span><span>Jul 2, 2026</span></div>
+          <div style="margin-top:8px;padding-left:2px;">
+            <div class="sub-ph"><span class="sp-n">Design</span><div class="sp-bar"><div class="sp-f done" style="width:100%"></div></div><span class="sp-p">100%</span><span class="sp-d">Jan 12 - Feb 9</span></div>
+            <div class="sub-ph"><span class="sp-n">Purchasing</span><div class="sp-bar"><div class="sp-f wip" style="width:0%"></div></div><span class="sp-p">0%</span><span class="sp-d">Feb 17 - Jun 17</span></div>
+            <div class="sub-ph"><span class="sp-n">Kitting</span><div class="sp-bar"><div class="sp-f" style="width:0%"></div></div><span class="sp-p">0%</span><span class="sp-d">Mar 10 - Jun 19</span></div>
+            <div class="sub-ph"><span class="sp-n">Assembly</span><div class="sp-bar"><div class="sp-f" style="width:0%"></div></div><span class="sp-p">0%</span><span class="sp-d">May 25 - Jun 25</span></div>
+            <div class="sub-ph"><span class="sp-n">Electrical</span><div class="sp-bar"><div class="sp-f" style="width:0%"></div></div><span class="sp-p">0%</span><span class="sp-d">Jun 18 - Jun 22</span></div>
+            <div class="sub-ph"><span class="sp-n">Testing</span><div class="sp-bar"><div class="sp-f" style="width:0%"></div></div><span class="sp-p">0%</span><span class="sp-d">Jun 25 - Jul 2</span></div>
+          </div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:14px 0"></div>
+        <div class="machine-row">
+          <div class="m-top"><span class="m-name">Mini-Jolly <span style="font-weight:400;color:var(--text-muted)">(A3492)</span></span><span class="m-pct">10%</span></div>
+          <div class="m-bar"><div class="m-fill" style="width:10%"></div></div>
+          <div class="m-dates"><span>Jan 26</span><span>Jul 8, 2026</span></div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:14px 0"></div>
+        <div class="machine-row">
+          <div class="m-top"><span class="m-name">Automation System <span style="font-weight:400;color:var(--text-muted)">(A3491)</span></span><span class="m-pct">15%</span></div>
+          <div class="m-bar"><div class="m-fill" style="width:15%"></div></div>
+          <div class="m-dates"><span>Jan 12</span><span>Jun 25, 2026</span></div>
+        </div>
+        <div style="height:1px;background:var(--border);margin:14px 0"></div>
+        <div class="machine-row">
+          <div class="m-top"><span class="m-name">Turn Table <span style="font-weight:400;color:var(--text-muted)">(A3493)</span></span><span class="m-pct">5%</span></div>
+          <div class="m-bar"><div class="m-fill" style="width:5%"></div></div>
+          <div class="m-dates"><span>Feb 9</span><span>Jun 29, 2026</span></div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- AI Insights -->
+    <div class="expander open" id="expInsights">
+      <div class="exp-hdr" onclick="tog('expInsights')">
+        <div class="left">
+          <span class="chevron"><svg width="14" height="14" fill="none" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="exp-name">AI Insights</span>
+        </div>
+        <span class="exp-badge" style="background:var(--yellow-soft);color:var(--yellow)">3 suggestions</span>
+      </div>
+      <div class="exp-body"><div class="exp-inner">
+        <div class="ins-card">
+          <div class="ins-ico crit">!!</div>
+          <div><div class="ins-text"><strong>Mini-Jolly is the critical path</strong> &mdash; finishes Jul 8, one day before FAT starts Jul 9. Any delay directly pushes the FAT date.</div><div class="ins-meta">Critical path analysis &middot; 1 day buffer</div></div>
+        </div>
+        <div class="ins-card">
+          <div class="ins-ico warn">!</div>
+          <div><div class="ins-text"><strong>CF-2P Purchasing & Fabrication at 0%</strong> &mdash; this 85-day phase started Feb 17. Consider checking with procurement.</div><div class="ins-meta">Stage stall detection &middot; 4 days without progress</div></div>
+        </div>
+        <div class="ins-card">
+          <div class="ins-ico info">i</div>
+          <div><div class="ins-text"><strong>3 machines converging on Assembly in June</strong> &mdash; CF-2P, Mini-Jolly, and Turn Table enter assembly between May 25 and Jun 18. Verify shop floor capacity.</div><div class="ins-meta">Resource contention forecast &middot; 4 months ahead</div></div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══ Task Data (non-linear demo — note GOA is done BEFORE Layout Approved) ═══
+const TASKS = [
+  // Sales & Onboarding
+  { order:1,  name:'Down Payment Received',        phase:'Sales & Onboarding', status:'done',    date:'Jan 5',  actual:'Jan 5' },
+  { order:2,  name:'Introduction Letter',           phase:'Sales & Onboarding', status:'done',    date:'Jan 8',  actual:'Jan 8' },
+  { order:3,  name:'Binder',                        phase:'Sales & Onboarding', status:'done',    date:'Jan 10', actual:'Jan 10' },
+  { order:4,  name:'Transfer File',                 phase:'Sales & Onboarding', status:'done',    date:'Jan 12', actual:'Jan 12' },
+  // Engineering Prep
+  { order:5,  name:'Engineering Samples Received',  phase:'Engineering Prep',   status:'done',    date:'Jan 18', actual:'Jan 18' },
+  { order:6,  name:'Product Matrix Sent',           phase:'Engineering Prep',   status:'done',    date:'Jan 22', actual:'Jan 22' },
+  { order:7,  name:'Product Matrix Confirmed',      phase:'Engineering Prep',   status:'done',    date:'Jan 28', actual:'Jan 28' },
+  // Design & Approval — NOTE: GOA done out of order (before Layout Approved)
+  { order:8,  name:'Layout Issued for Approval',    phase:'Design & Approval',  status:'done',    date:'Feb 3',  actual:'Feb 3' },
+  { order:9,  name:'Layout Approved (Signed)',       phase:'Design & Approval',  status:'wip',     date:'Feb 8',  actual:null },
+  { order:10, name:'Layout Approval Paid',           phase:'Design & Approval',  status:'pending', date:'Feb 10', actual:null },
+  { order:11, name:'GOA(s)',                         phase:'Design & Approval',  status:'done',    date:'Feb 12', actual:'Jan 20', ooo:true },
+  { order:12, name:'Pre-Kick Off',                   phase:'Design & Approval',  status:'done',    date:'Feb 18', actual:'Feb 18' },
+  // Production
+  { order:13, name:'Timeline Published (Gantt)',     phase:'Production',         status:'done',    date:'Feb 25', actual:'Feb 20' },
+  { order:14, name:'Bulk Samples Requested',         phase:'Production',         status:'done',    date:'Mar 5',  actual:'Mar 1' },
+  { order:15, name:'Bulk Samples Received',          phase:'Production',         status:'pending', date:'Mar 20', actual:null },
+  { order:16, name:'Samples Sent for Feeders',       phase:'Production',         status:'pending', date:'Mar 25', actual:null },
+  { order:17, name:'Engineering Kick Off',           phase:'Production',         status:'wip',     date:'Apr 1',  actual:null },
+  { order:18, name:'Project Released from Design',   phase:'Production',         status:'pending', date:'Apr 20', actual:null },
+  { order:19, name:'Third Party Equipment Ordered',  phase:'Production',         status:'pending', date:'Apr 25', actual:null },
+  { order:20, name:'Third Party Equipment Received', phase:'Production',         status:'pending', date:'May 30', actual:null },
+  // Delivery
+  { order:21, name:'Revised FAT Published',          phase:'Delivery',           status:'pending', date:'Jun 15', actual:null },
+  { order:22, name:'Actual FAT',                     phase:'Delivery',           status:'pending', date:'Jul 9',  actual:null },
+  { order:23, name:'COR Completion',                 phase:'Delivery',           status:'pending', date:'Jul 11', actual:null },
+  { order:24, name:'Crating',                        phase:'Delivery',           status:'pending', date:'Jul 14', actual:null },
+  { order:25, name:'Pre-Ship Payments',              phase:'Delivery',           status:'pending', date:'Jul 16', actual:null },
+  { order:26, name:'Shipment',                       phase:'Delivery',           status:'pending', date:'Jul 20', actual:null },
+];
+
+// ═══ Build milestone bar (non-linear: each dot independent) ═══
+function buildMilestones() {
+  const bar = document.getElementById('mbar');
+  bar.innerHTML = '';
+  TASKS.forEach(t => {
+    const seg = document.createElement('div');
+    // out-of-order done tasks get a distinct visual
+    let cls = t.status;
+    if (t.ooo && t.status === 'done') cls = 'done';
+    seg.className = `mseg ${cls}`;
+
+    const dot = document.createElement('div');
+    dot.className = 'mdot';
+    // Out-of-order: yellow dot instead of white
+    if (t.ooo) dot.style.background = 'var(--yellow)';
+    seg.appendChild(dot);
+
+    const tip = document.createElement('div');
+    tip.className = 'mtooltip';
+    tip.textContent = `${t.name}` + (t.actual ? ` — ${t.actual}` : ` — planned ${t.date}`);
+    if (t.ooo) tip.textContent += ' (out of order)';
+    seg.appendChild(tip);
+
+    bar.appendChild(seg);
+  });
+}
+
+// ═══ Build task checklist (grouped by phase, non-linear clickable) ═══
+function buildChecklist() {
+  const container = document.getElementById('checklistInner');
+  container.innerHTML = '';
+  let currentPhase = '';
+
+  TASKS.forEach(t => {
+    if (t.phase !== currentPhase) {
+      currentPhase = t.phase;
+      const hdr = document.createElement('div');
+      hdr.className = 'task-group-hdr';
+      hdr.textContent = currentPhase;
+      container.appendChild(hdr);
+    }
+
+    const row = document.createElement('div');
+    row.className = `task-row ${t.status === 'done' ? 'done' : t.status === 'wip' ? 'wip' : ''}`;
+    row.onclick = () => cycleTask(t, row);
+
+    const check = document.createElement('div');
+    check.className = 'task-check';
+    check.textContent = t.status === 'done' ? '\u2713' : t.status === 'wip' ? '\u25B6' : '';
+
+    const label = document.createElement('div');
+    label.className = 'task-label';
+    label.textContent = t.name;
+
+    // Out-of-order badge
+    if (t.ooo) {
+      const ooo = document.createElement('span');
+      ooo.className = 'task-ooo';
+      ooo.textContent = 'out of order';
+      label.appendChild(ooo);
+    }
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'task-date';
+    dateEl.textContent = t.actual || t.date;
+
+    row.appendChild(check);
+    row.appendChild(label);
+    row.appendChild(dateEl);
+    container.appendChild(row);
+  });
+}
+
+// ═══ Cycle task status: pending → wip → done → pending ═══
+function cycleTask(task, row) {
+  const cycle = { pending: 'wip', wip: 'done', done: 'pending' };
+  task.status = cycle[task.status] || 'pending';
+  if (task.status === 'done' && !task.actual) task.actual = 'Feb 22';
+  if (task.status === 'pending') task.actual = null;
+
+  // Check for out-of-order: if this task is done but an earlier task in same phase isn't
+  const samePhaseTasks = TASKS.filter(t => t.phase === task.phase);
+  samePhaseTasks.forEach(t => {
+    const earlierPending = samePhaseTasks.some(e => e.order < t.order && e.status !== 'done' && e.status !== 'skipped');
+    t.ooo = (t.status === 'done' && earlierPending);
+  });
+
+  // Rebuild everything
+  buildMilestones();
+  buildChecklist();
+  updateBadge();
+}
+
+function updateBadge() {
+  const done = TASKS.filter(t => t.status === 'done').length;
+  document.querySelector('#expChecklist .exp-badge').textContent = `${done} / 26 done`;
+}
+
+// ═══ Panel open/close ═══
+const projects = {
+  xeolas:   { name:'Xeolas Pharma',       ref:'A3490-92 \u00b7 4 machines',  tag:'In Progress', tagCls:'prog',   date:'Started Jan 12, 2026' },
+  pharma:   { name:'Pharma Corp',          ref:'PHC-2026-002 \u00b7 Mini-Jolly', tag:'At Risk',  tagCls:'atrisk', date:'Started Dec 5, 2025' },
+  automech: { name:'AutoMech Industries',  ref:'AMI-2026-003 \u00b7 SortStar',   tag:'In Progress', tagCls:'prog', date:'Started Jan 28, 2026' },
+  meridian: { name:'Meridian Medical',     ref:'MER-2026-004 \u00b7 CF-3P',      tag:'In Progress', tagCls:'prog', date:'Started Feb 15, 2026' },
+};
+
+function openPanel(id) {
+  const p = projects[id];
+  document.getElementById('pTitle').textContent = p.name;
+  document.getElementById('pRef').textContent = p.ref;
+  document.getElementById('pTag').textContent = p.tag;
+  document.getElementById('pTag').className = `tag ${p.tagCls}`;
+  document.getElementById('pDate').textContent = p.date;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('panel').classList.add('open');
+  buildMilestones();
+  buildChecklist();
+}
+
+function closePanel() {
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('panel').classList.remove('open');
+}
+
+function tog(id) { document.getElementById(id).classList.toggle('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+</script>
+</body>
+</html>

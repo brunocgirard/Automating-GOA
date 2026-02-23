@@ -370,3 +370,102 @@ class MachineProcessingDataResponse(BaseModel):
     options: list[dict[str, Any]] = Field(default_factory=list)
     common_items: list[dict[str, Any]] = Field(default_factory=list)
     full_pdf_text: str = ""
+
+
+class ProjectTaskResponse(BaseModel):
+    id: int
+    project_id: int
+    task_name: str
+    task_order: int
+    phase: str
+    status: str
+    planned_date: str | None = None
+    actual_date: str | None = None
+    notes: str | None = None
+    modified_date: str | None = None
+
+
+class ProjectListResponse(BaseModel):
+    id: int
+    project_name: str
+    customer_name: str
+    quote_ref: str | None = None
+    machine_summary: str | None = None
+    status: str
+    risk_level: str
+    current_phase: str | None = None
+    current_task: str | None = None
+    days_in_phase: int | None = None
+    progress_pct: int = 0
+    start_date: str | None = None
+    target_end_date: str | None = None
+    actual_end_date: str | None = None
+    created_date: str | None = None
+    modified_date: str | None = None
+
+
+class ProjectDetailResponse(ProjectListResponse):
+    tasks: list[ProjectTaskResponse] = Field(default_factory=list)
+    gantt_data: dict[str, Any] | None = None
+
+
+class ProjectCreateRequest(BaseModel):
+    project_name: str
+    customer_name: str
+    quote_ref: str | None = None
+    machine_summary: str | None = None
+    start_date: str | None = None
+    target_end_date: str | None = None
+
+
+class ProjectUpdateRequest(BaseModel):
+    project_name: str | None = None
+    customer_name: str | None = None
+    quote_ref: str | None = None
+    machine_summary: str | None = None
+    status: str | None = None
+    risk_level: str | None = None
+    start_date: str | None = None
+    target_end_date: str | None = None
+    actual_end_date: str | None = None
+    gantt_data: dict[str, Any] | None = None
+
+
+class TaskStatusUpdateRequest(BaseModel):
+    status: str
+    notes: str | None = None
+
+
+class AtRiskProjectSummaryResponse(BaseModel):
+    project_id: int | None = None
+    name: str
+    task: str
+    phase: str
+    days_stalled: int
+
+
+class AtRiskSummaryResponse(BaseModel):
+    count: int
+    projects: list[AtRiskProjectSummaryResponse] = Field(default_factory=list)
+
+
+class StallAlertResponse(BaseModel):
+    project_id: int
+    project_name: str
+    task_id: int
+    task_name: str
+    phase: str
+    days_stalled: int
+
+
+class InsightResponse(BaseModel):
+    project_id: int | None = None
+    project_name: str | None = None
+    task_id: int | None = None
+    task_name: str | None = None
+    type: str
+    severity: Literal["critical", "warning", "info"]
+    title: str
+    message: str
+    phase: str | None = None
+    days_stalled: int | None = None

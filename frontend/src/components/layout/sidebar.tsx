@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   Cog,
   FileText,
   Files,
@@ -12,6 +11,7 @@ import {
   Search,
   Building2,
   UserRound,
+  Kanban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,9 +21,9 @@ import { cn } from "@/lib/utils";
 import { fetchClients, type Client } from "@/lib/api";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/", label: "PM Dashboard", icon: Kanban },
   { href: "/client-info", label: "Client Info", icon: UserRound },
-  { href: "/processing", label: "Processing", icon: Cog },
+  { href: "/processing", label: "GOA Processing", icon: Cog },
   { href: "/shipping-documents", label: "Shipping Docs", icon: Files },
   { href: "/cor-documents", label: "COR Docs", icon: Files },
   { href: "/reports", label: "Reports", icon: FileText },
@@ -75,7 +75,9 @@ export function Sidebar({
       {/* Nav links */}
       <nav className="flex flex-col gap-1 p-3">
         {navItems.map((item) => {
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href ||
+            (item.href === "/" && pathname === "/pm-dashboard");
           return (
             <Link
               key={item.href}

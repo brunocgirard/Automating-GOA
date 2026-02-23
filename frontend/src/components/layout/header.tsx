@@ -21,9 +21,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </Button>
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#c00000]">
-          <span className="text-sm font-bold text-white">G</span>
+          <span className="text-sm font-bold text-white">P</span>
         </div>
-        <h1 className="text-lg font-semibold tracking-tight">GOA Tool</h1>
+        <h1 className="text-lg font-semibold tracking-tight">PM Tool</h1>
       </div>
     </header>
   );

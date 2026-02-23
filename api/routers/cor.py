@@ -22,6 +22,7 @@ from src.utils.db import (
     list_cor_documents,
     load_machines_for_quote,
     load_cor_document,
+    mark_project_task_done_for_quote,
     save_cor_document,
 )
 
@@ -161,6 +162,18 @@ def save_cor_state(quote_id: int, payload: CorSaveRequest) -> dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save COR state.",
+        )
+
+    try:
+        mark_project_task_done_for_quote(
+            quote_ref,
+            "COR Completion",
+            notes="Auto-advanced from cor.save",
+        )
+    except Exception as exc:
+        print(
+            "Warning: failed to auto-advance PM task 'COR Completion' "
+            f"for quote_ref='{quote_ref}': {exc}"
         )
 
     return {

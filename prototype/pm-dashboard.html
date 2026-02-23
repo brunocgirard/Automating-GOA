@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOA Project Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   GOA PROJECT COMMAND CENTER
+   Industrial-precision aesthetic with warm neutrals
+   ═══════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  /* Core palette - warm industrial */
+  --bg-deep: #1a1d23;
+  --bg-sidebar: #12141a;
+  --bg-main: #f4f3f0;
+  --bg-card: #ffffff;
+  --bg-hover: #f9f8f6;
+  --bg-panel: #ffffff;
+
+  /* Accent - steel blue */
+  --accent: #3b6ff5;
+  --accent-soft: #e8eefb;
+  --accent-glow: rgba(59, 111, 245, 0.12);
+
+  /* Status */
+  --green: #22a06b;
+  --green-soft: #e3fcef;
+  --yellow: #e5a100;
+  --yellow-soft: #fff7e0;
+  --red: #de350b;
+  --red-soft: #ffebe6;
+
+  /* Text */
+  --text-primary: #1a1d23;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-inverse: #f4f3f0;
+
+  /* Borders */
+  --border: #e5e4e0;
+  --border-strong: #d1d0cc;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.1);
+  --shadow-xl: 0 20px 60px rgba(0,0,0,0.15);
+
+  /* Spacing */
+  --sidebar-w: 220px;
+  --header-h: 56px;
+
+  /* Typography */
+  --font-sans: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html { font-size: 14px; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-main);
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ─── Sidebar ─── */
+.sidebar {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.sidebar-brand {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.sidebar-brand h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-inverse);
+  letter-spacing: -0.02em;
+}
+.sidebar-brand span {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  display: block;
+  margin-top: 2px;
+}
+
+.sidebar-nav { padding: 12px 10px; flex: 1; }
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 16px 10px 6px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  color: rgba(255,255,255,0.55);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.85); }
+.nav-item.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59,111,245,0.3);
+}
+.nav-icon {
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.nav-item.active .nav-icon { opacity: 1; }
+
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #7c5bf5);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: #fff;
+}
+.sidebar-footer .user-name { font-size: 12px; color: rgba(255,255,255,0.7); font-weight: 500; }
+.sidebar-footer .user-role { font-size: 10px; color: rgba(255,255,255,0.35); }
+
+/* ─── Main container ─── */
+.main {
+  margin-left: var(--sidebar-w);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── Header ─── */
+.header {
+  height: var(--header-h);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  flex-shrink: 0;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header-left h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.header-left .breadcrumb { font-size: 12px; color: var(--text-muted); }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-sans);
+}
+.header-btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.header-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.header-btn.primary:hover { background: #2d5bd4; }
+
+/* ─── Content ─── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+}
+
+/* ─── KPI Row ─── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+.kpi-card:nth-child(1)::before { background: var(--accent); }
+.kpi-card:nth-child(2)::before { background: var(--red); }
+.kpi-card:nth-child(3)::before { background: var(--yellow); }
+.kpi-card:nth-child(4)::before { background: var(--green); }
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.kpi-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.kpi-sub .trend-up { color: var(--green); }
+.kpi-sub .trend-down { color: var(--red); }
+
+/* ─── Pipeline Board ─── */
+.board-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.board-header h3 { font-size: 14px; font-weight: 600; }
+.board-header .view-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+.view-btn {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  transition: all 0.15s;
+}
+.view-btn.active { background: var(--accent); color: #fff; }
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  min-height: 400px;
+}
+
+.phase-col {
+  background: rgba(255,255,255,0.5);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.phase-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+}
+.phase-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.phase-count {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--bg-main);
+  color: var(--text-secondary);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.phase-tasks {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 8px 14px 4px;
+  line-height: 1.6;
+  font-family: var(--font-mono);
+  letter-spacing: -0.01em;
+}
+.phase-cards {
+  padding: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ─── Project Cards ─── */
+.project-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.project-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--accent);
+  transform: translateY(-1px);
+}
+.project-card .card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.project-card .card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.risk-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.risk-dot.green { background: var(--green); box-shadow: 0 0 6px rgba(34,160,107,0.4); }
+.risk-dot.yellow { background: var(--yellow); box-shadow: 0 0 6px rgba(229,161,0,0.4); }
+.risk-dot.red { background: var(--red); box-shadow: 0 0 6px rgba(222,53,11,0.4); }
+
+.card-customer {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-task {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.card-days {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ─── Detail Panel (slide-over) ─── */
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  backdrop-filter: blur(2px);
+}
+.panel-overlay.open { opacity: 1; pointer-events: all; }
+
+.detail-panel {
+  position: fixed;
+  top: 0; right: -720px; bottom: 0;
+  width: 720px;
+  background: var(--bg-panel);
+  z-index: 201;
+  transition: right 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+}
+.detail-panel.open { right: 0; }
+
+.panel-header {
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-shrink: 0;
+  background: var(--bg-card);
+}
+.panel-title-area {}
+.panel-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.panel-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.panel-subtitle .tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tag.in-progress { background: var(--accent-soft); color: var(--accent); }
+.tag.at-risk { background: var(--yellow-soft); color: var(--yellow); }
+
+.close-btn {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 18px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.close-btn:hover { background: var(--bg-main); color: var(--text-primary); }
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+}
+
+/* ─── Panel: Project Summary ─── */
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.summary-item {
+  padding: 14px;
+  background: var(--bg-main);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.summary-item .label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.summary-item .val {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Panel: Milestone Timeline ─── */
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title .line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.milestone-track {
+  position: relative;
+  padding: 0 0 28px;
+  margin-bottom: 28px;
+}
+.milestone-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  position: relative;
+  height: 40px;
+  background: var(--bg-main);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.milestone-segment {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.2s;
+  cursor: default;
+}
+.milestone-segment.done { background: var(--green); }
+.milestone-segment.current { background: var(--accent); animation: pulse-seg 2s infinite; }
+.milestone-segment.upcoming { background: transparent; }
+.milestone-segment.overdue { background: var(--red); }
+
+@keyframes pulse-seg {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+.milestone-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+}
+.milestone-segment.done .milestone-dot { color: rgba(255,255,255,0.9); }
+.milestone-segment.current .milestone-dot { color: #fff; width: 10px; height: 10px; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+.milestone-segment.upcoming .milestone-dot { color: var(--border-strong); }
+
+/* Milestone labels below the bar */
+.milestone-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 0 4px;
+}
+.milestone-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-align: center;
+  font-family: var(--font-mono);
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+  max-height: 70px;
+  overflow: hidden;
+}
+
+/* Tooltip on hover */
+.milestone-segment:hover .milestone-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+  pointer-events: auto;
+}
+.milestone-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  background: var(--bg-deep);
+  color: var(--text-inverse);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: all 0.2s;
+  z-index: 10;
+  font-weight: 500;
+}
+.milestone-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--bg-deep);
+}
+
+/* ─── Expandable section ─── */
+.expandable {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+.expandable-header {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: var(--bg-card);
+  transition: background 0.15s;
+  user-select: none;
+}
+.expandable-header:hover { background: var(--bg-hover); }
+.expandable-header .left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.expandable-header .chevron {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.25s;
+  color: var(--text-muted);
+}
+.expandable.open .expandable-header .chevron { transform: rotate(90deg); }
+.expandable-header .section-name { font-size: 13px; font-weight: 600; }
+.expandable-header .badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+}
+.expandable-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.expandable.open .expandable-content {
+  max-height: 800px;
+}
+.expandable-inner {
+  padding: 16px 18px;
+  border-top: 1px solid var(--border);
+}
+
+/* ─── Machine progress bars ─── */
+.machine-row {
+  margin-bottom: 14px;
+}
+.machine-row:last-child { margin-bottom: 0; }
+.machine-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.machine-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+.machine-pct {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.progress-bar {
+  height: 8px;
+  background: var(--bg-main);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.progress-fill.blue { background: var(--accent); }
+.progress-fill.green { background: var(--green); }
+
+.machine-dates {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Sub-phase rows inside machine expandable */
+.sub-phase {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.sub-phase:last-child { border-bottom: none; }
+.sub-phase .sp-name {
+  width: 120px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.sub-phase .sp-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-main);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.sub-phase .sp-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+.sub-phase .sp-fill.done { background: var(--green); }
+.sub-phase .sp-fill.wip { background: var(--accent); }
+.sub-phase .sp-fill.empty { background: transparent; }
+.sub-phase .sp-pct {
+  width: 36px;
+  text-align: right;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.sub-phase .sp-dates {
+  width: 120px;
+  text-align: right;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* ─── AI Insights ─── */
+.insights-panel {
+  margin-top: 8px;
+}
+.insight-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: all 0.15s;
+}
+.insight-item:hover { border-color: var(--border-strong); }
+.insight-icon {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  font-weight: 700;
+}
+.insight-icon.warn { background: var(--yellow-soft); color: var(--yellow); }
+.insight-icon.critical { background: var(--red-soft); color: var(--red); }
+.insight-icon.info { background: var(--accent-soft); color: var(--accent); }
+.insight-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+.insight-text strong { font-weight: 600; }
+.insight-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Animations ─── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeInUp 0.4s ease both; }
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.1s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.2s; }
+
+/* ─── Empty state for columns ─── */
+.phase-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════ SIDEBAR ════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <h1>GOA Command</h1>
+    <span>Project Management</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Main</div>
+    <a class="nav-item active" href="#">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/></svg></span>
+      Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+      Projects
+    </a>
+    <a class="nav-item" href="#">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 12V6L8 2L2 6v6l6 4l6-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+      Documents
+    </a>
+    <div class="nav-section-label">Analytics</div>
+    <a class="nav-item" href="#">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="8" width="3" height="6" rx="0.5" stroke="currentColor" stroke-width="1.5"/><rect x="6.5" y="4" width="3" height="10" rx="0.5" stroke="currentColor" stroke-width="1.5"/><rect x="12" y="2" width="3" height="12" rx="0.5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+      Reports
+    </a>
+    <a class="nav-item" href="#">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+      Timeline
+    </a>
+    <div class="nav-section-label">System</div>
+    <a class="nav-item" href="#">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+      Settings
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="avatar">PM</div>
+    <div>
+      <div class="user-name">Project Manager</div>
+      <div class="user-role">Administrator</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ════════════════════════════════════════ MAIN ════════════════════════════════════════ -->
+<div class="main">
+  <header class="header">
+    <div class="header-left">
+      <h2>Pipeline Dashboard</h2>
+      <span class="breadcrumb">All active projects across phases</span>
+    </div>
+    <div class="header-right">
+      <button class="header-btn">Import Gantt</button>
+      <button class="header-btn primary">+ New Project</button>
+    </div>
+  </header>
+
+  <div class="content">
+    <!-- KPI Row -->
+    <div class="kpi-row">
+      <div class="kpi-card animate-in delay-1">
+        <div class="kpi-label">Active Projects</div>
+        <div class="kpi-value">4</div>
+        <div class="kpi-sub"><span class="trend-up">+1</span> from last month</div>
+      </div>
+      <div class="kpi-card animate-in delay-2">
+        <div class="kpi-label">At Risk</div>
+        <div class="kpi-value" style="color: var(--red);">1</div>
+        <div class="kpi-sub">Pharma Corp — layout overdue</div>
+      </div>
+      <div class="kpi-card animate-in delay-3">
+        <div class="kpi-label">Avg Lead Time</div>
+        <div class="kpi-value">127<span style="font-size:14px;font-weight:500;color:var(--text-muted)"> days</span></div>
+        <div class="kpi-sub"><span class="trend-down">+5d</span> vs target (122d)</div>
+      </div>
+      <div class="kpi-card animate-in delay-4">
+        <div class="kpi-label">On-Time Rate</div>
+        <div class="kpi-value" style="color: var(--green);">85%</div>
+        <div class="kpi-sub"><span class="trend-up">+3%</span> vs last quarter</div>
+      </div>
+    </div>
+
+    <!-- Board -->
+    <div class="board-header">
+      <h3>Project Pipeline</h3>
+      <div class="view-toggle">
+        <button class="view-btn active">Board</button>
+        <button class="view-btn">Table</button>
+        <button class="view-btn">Timeline</button>
+      </div>
+    </div>
+
+    <div class="pipeline animate-in delay-3">
+      <!-- Phase 1: Sales & Onboarding -->
+      <div class="phase-col">
+        <div class="phase-header">
+          <span class="phase-name">Sales & Onboarding</span>
+          <span class="phase-count">1</span>
+        </div>
+        <div class="phase-tasks">Down Payment / Intro Letter / Binder / Transfer File</div>
+        <div class="phase-cards">
+          <div class="project-card" onclick="openPanel('meridian')">
+            <div class="card-top">
+              <span class="card-name">Meridian Medical</span>
+              <span class="risk-dot green"></span>
+            </div>
+            <div class="card-customer">MER-2026-004 &middot; CF-3P</div>
+            <div class="card-meta">
+              <span class="card-task">Binder</span>
+              <span class="card-days">3d in phase</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 2: Engineering Prep -->
+      <div class="phase-col">
+        <div class="phase-header">
+          <span class="phase-name">Engineering Prep</span>
+          <span class="phase-count">1</span>
+        </div>
+        <div class="phase-tasks">Eng. Samples / Product Matrix Sent / Matrix Confirmed</div>
+        <div class="phase-cards">
+          <div class="project-card" onclick="openPanel('automech')">
+            <div class="card-top">
+              <span class="card-name">AutoMech Industries</span>
+              <span class="risk-dot green"></span>
+            </div>
+            <div class="card-customer">AMI-2026-003 &middot; SortStar</div>
+            <div class="card-meta">
+              <span class="card-task">Matrix Sent</span>
+              <span class="card-days">7d in phase</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 3: Design & Approval -->
+      <div class="phase-col">
+        <div class="phase-header">
+          <span class="phase-name">Design & Approval</span>
+          <span class="phase-count">1</span>
+        </div>
+        <div class="phase-tasks">Layout / Approval / GOA(s) / Pre-Kick Off</div>
+        <div class="phase-cards">
+          <div class="project-card" onclick="openPanel('pharma')" style="border-left: 3px solid var(--yellow);">
+            <div class="card-top">
+              <span class="card-name">Pharma Corp</span>
+              <span class="risk-dot yellow"></span>
+            </div>
+            <div class="card-customer">PHC-2026-002 &middot; Mini-Jolly</div>
+            <div class="card-meta">
+              <span class="card-task">Layout Approval</span>
+              <span class="card-days">14d in phase</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 4: Production -->
+      <div class="phase-col">
+        <div class="phase-header">
+          <span class="phase-name">Production</span>
+          <span class="phase-count">1</span>
+        </div>
+        <div class="phase-tasks">Timeline / Bulk Samples / Eng. Kick Off / 3rd Party Equip.</div>
+        <div class="phase-cards">
+          <div class="project-card" onclick="openPanel('xeolas')" style="border-left: 3px solid var(--accent);">
+            <div class="card-top">
+              <span class="card-name">Xeolas Pharma</span>
+              <span class="risk-dot green"></span>
+            </div>
+            <div class="card-customer">A3490-92 &middot; CF-2P + 3 machines</div>
+            <div class="card-meta">
+              <span class="card-task">Eng. Kick Off</span>
+              <span class="card-days">22d in phase</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 5: Delivery -->
+      <div class="phase-col">
+        <div class="phase-header">
+          <span class="phase-name">Delivery</span>
+          <span class="phase-count">0</span>
+        </div>
+        <div class="phase-tasks">FAT / COR / Crating / Pre-ship / Shipment</div>
+        <div class="phase-cards">
+          <div class="phase-empty">No projects in this phase</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════ DETAIL PANEL ════════════════════════════════════════ -->
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
+<div class="detail-panel" id="detailPanel">
+  <div class="panel-header">
+    <div class="panel-title-area">
+      <div class="panel-title" id="panelTitle">Xeolas Pharma</div>
+      <div class="panel-subtitle">
+        <span id="panelRef">A3490-92</span>
+        <span class="tag in-progress" id="panelTag">In Progress</span>
+        <span style="color:var(--text-muted)">Started Jan 12, 2026</span>
+      </div>
+    </div>
+    <button class="close-btn" onclick="closePanel()">&times;</button>
+  </div>
+  <div class="panel-body">
+    <!-- Summary stats -->
+    <div class="summary-row">
+      <div class="summary-item">
+        <div class="label">Overall Progress</div>
+        <div class="val">44%</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Days Elapsed</div>
+        <div class="val">40<span style="font-size:12px;font-weight:400;color:var(--text-muted)"> / 127</span></div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Est. Completion</div>
+        <div class="val" style="font-size:16px;">Jul 13, 2026</div>
+      </div>
+    </div>
+
+    <!-- Layer 1: PM Milestones -->
+    <div class="section-title">
+      PM Milestone Tracker
+      <span class="line"></span>
+    </div>
+    <div class="milestone-track">
+      <div class="milestone-bar" id="milestoneBar">
+        <!-- Generated by JS -->
+      </div>
+      <div class="milestone-labels" id="milestoneLabels">
+        <!-- Generated by JS -->
+      </div>
+    </div>
+
+    <!-- Layer 2: Production Gantt (COLLAPSED by default) -->
+    <div class="expandable" id="ganttExpandable">
+      <div class="expandable-header" onclick="toggleExpandable('ganttExpandable')">
+        <div class="left">
+          <span class="chevron"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="section-name">Production Detail (from Gantt PDF)</span>
+        </div>
+        <span class="badge" style="background:var(--accent-soft);color:var(--accent);">4 machines &middot; 11% avg</span>
+      </div>
+      <div class="expandable-content">
+        <div class="expandable-inner" id="ganttContent">
+          <!-- Machine: CF-2P -->
+          <div class="machine-row">
+            <div class="machine-top">
+              <span class="machine-name">CF-2P <span style="font-weight:400;color:var(--text-muted)">(A3490)</span></span>
+              <span class="machine-pct">13%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill blue" style="width:13%"></div></div>
+            <div class="machine-dates"><span>Jan 12</span><span>Jul 2, 2026</span></div>
+            <!-- Sub-phases -->
+            <div style="margin-top:10px;padding-left:4px;">
+              <div class="sub-phase"><span class="sp-name">Design</span><div class="sp-bar"><div class="sp-fill done" style="width:100%"></div></div><span class="sp-pct">100%</span><span class="sp-dates">Jan 12 - Feb 9</span></div>
+              <div class="sub-phase"><span class="sp-name">Purchasing & Fab</span><div class="sp-bar"><div class="sp-fill wip" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Feb 17 - Jun 17</span></div>
+              <div class="sub-phase"><span class="sp-name">Kitting</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Mar 10 - Jun 19</span></div>
+              <div class="sub-phase"><span class="sp-name">Assembly</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">May 25 - Jun 25</span></div>
+              <div class="sub-phase"><span class="sp-name">Electrical</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Jun 18 - Jun 22</span></div>
+              <div class="sub-phase"><span class="sp-name">Commissioning</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Jun 23</span></div>
+              <div class="sub-phase"><span class="sp-name">Testing</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Jun 25 - Jul 2</span></div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:var(--border);margin:16px 0;"></div>
+
+          <!-- Machine: Mini-Jolly -->
+          <div class="machine-row">
+            <div class="machine-top">
+              <span class="machine-name">Mini-Jolly <span style="font-weight:400;color:var(--text-muted)">(A3492)</span></span>
+              <span class="machine-pct">10%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill blue" style="width:10%"></div></div>
+            <div class="machine-dates"><span>Jan 26</span><span>Jul 8, 2026</span></div>
+            <div style="margin-top:10px;padding-left:4px;">
+              <div class="sub-phase"><span class="sp-name">Design</span><div class="sp-bar"><div class="sp-fill done" style="width:100%"></div></div><span class="sp-pct">100%</span><span class="sp-dates">Jan 26 - Feb 10</span></div>
+              <div class="sub-phase"><span class="sp-name">Purchasing & Fab</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Feb 18 - Jun 18</span></div>
+              <div class="sub-phase"><span class="sp-name">Kitting</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Mar 11 - Jun 22</span></div>
+              <div class="sub-phase"><span class="sp-name">Assembly</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">May 26 - Jun 30</span></div>
+              <div class="sub-phase"><span class="sp-name">Testing</span><div class="sp-bar"><div class="sp-fill empty" style="width:0%"></div></div><span class="sp-pct">0%</span><span class="sp-dates">Jul 2 - Jul 8</span></div>
+            </div>
+          </div>
+
+          <div style="height:1px;background:var(--border);margin:16px 0;"></div>
+
+          <!-- Machine: Automation System -->
+          <div class="machine-row">
+            <div class="machine-top">
+              <span class="machine-name">Automation System <span style="font-weight:400;color:var(--text-muted)">(A3491)</span></span>
+              <span class="machine-pct">15%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill blue" style="width:15%"></div></div>
+            <div class="machine-dates"><span>Jan 12</span><span>Jun 25, 2026</span></div>
+          </div>
+
+          <div style="height:1px;background:var(--border);margin:16px 0;"></div>
+
+          <!-- Machine: Turn Table -->
+          <div class="machine-row">
+            <div class="machine-top">
+              <span class="machine-name">Turn Table <span style="font-weight:400;color:var(--text-muted)">(A3493)</span></span>
+              <span class="machine-pct">5%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill blue" style="width:5%"></div></div>
+            <div class="machine-dates"><span>Feb 9</span><span>Jun 29, 2026</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layer 3: AI Insights -->
+    <div class="expandable open" id="insightsExpandable">
+      <div class="expandable-header" onclick="toggleExpandable('insightsExpandable')">
+        <div class="left">
+          <span class="chevron"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="section-name">AI Insights</span>
+        </div>
+        <span class="badge" style="background:var(--yellow-soft);color:var(--yellow);">3 suggestions</span>
+      </div>
+      <div class="expandable-content">
+        <div class="expandable-inner">
+          <div class="insights-panel">
+            <div class="insight-item">
+              <div class="insight-icon warn">!</div>
+              <div>
+                <div class="insight-text"><strong>CF-2P Purchasing & Fabrication at 0%</strong> — this 85-day phase started Feb 17. Expected to see initial progress by now. Consider checking with procurement.</div>
+                <div class="insight-meta">Stage stall detection &middot; threshold: 7d without progress</div>
+              </div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-icon critical">!!</div>
+              <div>
+                <div class="insight-text"><strong>Mini-Jolly is the critical path</strong> — it finishes Jul 8, one day before FAT starts Jul 9. Any delay on Mini-Jolly directly pushes the FAT date.</div>
+                <div class="insight-meta">Critical path analysis &middot; 1 day buffer</div>
+              </div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-icon info">i</div>
+              <div>
+                <div class="insight-text"><strong>3 machines converging on Assembly in June</strong> — CF-2P, Mini-Jolly, and Turn Table all enter assembly between May 25 and Jun 18. Verify shop floor capacity.</div>
+                <div class="insight-meta">Resource contention forecast &middot; 4 months ahead</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// Milestone data
+// ═══════════════════════════════════════
+const milestones = [
+  { name: 'Down Payment', status: 'done', date: 'Jan 5' },
+  { name: 'Intro Letter', status: 'done', date: 'Jan 8' },
+  { name: 'Binder', status: 'done', date: 'Jan 10' },
+  { name: 'Transfer File', status: 'done', date: 'Jan 12' },
+  { name: 'Eng. Samples Recv', status: 'done', date: 'Jan 18' },
+  { name: 'Matrix Sent', status: 'done', date: 'Jan 22' },
+  { name: 'Matrix Confirmed', status: 'done', date: 'Jan 28' },
+  { name: 'Layout Issued', status: 'done', date: 'Feb 3' },
+  { name: 'Layout Approved', status: 'done', date: 'Feb 8' },
+  { name: 'Approval Paid', status: 'done', date: 'Feb 10' },
+  { name: 'GOA(s)', status: 'done', date: 'Feb 12' },
+  { name: 'Pre-Kick Off', status: 'current', date: 'Feb 18' },
+  { name: 'Gantt Published', status: 'upcoming', date: 'Feb 25' },
+  { name: 'Bulk Samples Req', status: 'upcoming', date: 'Mar 5' },
+  { name: 'Bulk Samples Recv', status: 'upcoming', date: 'Mar 20' },
+  { name: 'Samples to Suppliers', status: 'upcoming', date: 'Mar 25' },
+  { name: 'Eng. Kick Off', status: 'upcoming', date: 'Apr 1' },
+  { name: 'Released from Design', status: 'upcoming', date: 'Apr 20' },
+  { name: '3rd Party Ordered', status: 'upcoming', date: 'Apr 25' },
+  { name: '3rd Party Received', status: 'upcoming', date: 'May 30' },
+  { name: 'Revised FAT', status: 'upcoming', date: 'Jun 15' },
+  { name: 'Actual FAT', status: 'upcoming', date: 'Jul 9' },
+  { name: 'COR Completion', status: 'upcoming', date: 'Jul 11' },
+  { name: 'Crating', status: 'upcoming', date: 'Jul 14' },
+  { name: 'Pre-ship Payment', status: 'upcoming', date: 'Jul 16' },
+  { name: 'Shipment', status: 'upcoming', date: 'Jul 20' },
+];
+
+// Build milestone bar
+function buildMilestones() {
+  const bar = document.getElementById('milestoneBar');
+  const labels = document.getElementById('milestoneLabels');
+  bar.innerHTML = '';
+  labels.innerHTML = '';
+
+  milestones.forEach((m, i) => {
+    const seg = document.createElement('div');
+    seg.className = `milestone-segment ${m.status}`;
+    seg.style.flex = '1';
+
+    const dot = document.createElement('div');
+    dot.className = 'milestone-dot';
+    seg.appendChild(dot);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'milestone-tooltip';
+    tooltip.textContent = `${m.name} — ${m.date}`;
+    seg.appendChild(tooltip);
+
+    bar.appendChild(seg);
+
+    // Only show select labels to avoid crowding
+    if (i === 0 || i === 3 || i === 7 || i === 11 || i === 16 || i === 21 || i === 25) {
+      const lbl = document.createElement('div');
+      lbl.className = 'milestone-label';
+      lbl.textContent = m.name;
+      labels.appendChild(lbl);
+    }
+  });
+}
+
+// Panel open/close
+function openPanel(projectId) {
+  document.getElementById('panelOverlay').classList.add('open');
+  document.getElementById('detailPanel').classList.add('open');
+
+  // Customize panel content per project
+  if (projectId === 'xeolas') {
+    document.getElementById('panelTitle').textContent = 'Xeolas Pharma';
+    document.getElementById('panelRef').textContent = 'A3490-92 \u00b7 4 machines';
+    document.getElementById('panelTag').textContent = 'In Progress';
+    document.getElementById('panelTag').className = 'tag in-progress';
+  } else if (projectId === 'pharma') {
+    document.getElementById('panelTitle').textContent = 'Pharma Corp';
+    document.getElementById('panelRef').textContent = 'PHC-2026-002 \u00b7 Mini-Jolly';
+    document.getElementById('panelTag').textContent = 'At Risk';
+    document.getElementById('panelTag').className = 'tag at-risk';
+  } else {
+    document.getElementById('panelTitle').textContent = projectId === 'meridian' ? 'Meridian Medical' : 'AutoMech Industries';
+    document.getElementById('panelRef').textContent = projectId === 'meridian' ? 'MER-2026-004' : 'AMI-2026-003';
+    document.getElementById('panelTag').textContent = 'In Progress';
+    document.getElementById('panelTag').className = 'tag in-progress';
+  }
+
+  buildMilestones();
+}
+
+function closePanel() {
+  document.getElementById('panelOverlay').classList.remove('open');
+  document.getElementById('detailPanel').classList.remove('open');
+}
+
+// Expandable toggle
+function toggleExpandable(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closePanel();
+});
+</script>
+</body>
+</html>

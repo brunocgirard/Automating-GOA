@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Download, Plus, Save, Trash2 } from "lucide-react";
 import {
   fetchCorPrefill,
@@ -120,6 +121,7 @@ function downloadBlob(blob: Blob, filename: string) {
 
 export default function CorDocumentsPageClient() {
   const { selectedClientId } = useClientFilter();
+  const searchParams = useSearchParams();
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [revisions, setRevisions] = useState<CorRevisionSummary[]>([]);
@@ -162,6 +164,12 @@ export default function CorDocumentsPageClient() {
     return Array.from(map.values());
   }, [quotes]);
 
+  const quoteIdFromQuery = useMemo(() => {
+    const raw = searchParams.get("quote");
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? String(parsed) : null;
+  }, [searchParams]);
+
   const machineOptions = useMemo<string[]>(() => {
     const quoteId = Number(selectedQuoteId);
     return getMachineNamesForQuote(quotes, quoteId);
@@ -176,14 +184,14 @@ export default function CorDocumentsPageClient() {
     return options;
   }, [machineOptions, state?.client.machine]);
 
-  async function refreshRevisions(quoteId: number): Promise<CorRevisionSummary[]> {
+  const refreshRevisions = useCallback(async (quoteId: number): Promise<CorRevisionSummary[]> => {
     const list = await fetchCorRevisions(quoteId);
     if (latestQuote.current !== String(quoteId)) return [];
     setRevisions(list.revisions);
     return list.revisions;
-  }
+  }, []);
 
-  async function selectQuote(rawId: string) {
+  const selectQuote = useCallback(async (rawId: string) => {
     if (!rawId) return;
     const quoteId = Number(rawId);
     if (!Number.isFinite(quoteId)) return;
@@ -233,7 +241,13 @@ export default function CorDocumentsPageClient() {
     } finally {
       if (latestQuote.current === rawId) setLoadingState(false);
     }
-  }
+  }, [quotes, refreshRevisions]);
+
+  useEffect(() => {
+    if (!quoteIdFromQuery || selectedQuoteId || loadingQuotes) return;
+    if (!quoteOptions.some((option) => option.id === quoteIdFromQuery)) return;
+    void selectQuote(quoteIdFromQuery);
+  }, [loadingQuotes, quoteIdFromQuery, quoteOptions, selectedQuoteId, selectQuote]);
 
   function patchState(fn: (prev: CorDocumentState) => CorDocumentState) {
     setState((prev) => (prev ? fn(prev) : prev));
