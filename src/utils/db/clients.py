@@ -6,10 +6,14 @@ import sqlite3
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from .base import DB_PATH, get_connection
+from .base import DB_PATH, get_connection, owner_scope_clause, row_to_dict, rows_to_dicts
 
 
-def save_client_info(client_data: Dict[str, any], db_path: str = DB_PATH) -> bool:
+def save_client_info(
+    client_data: Dict[str, Any],
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+) -> bool:
     """
     Saves or updates client information to the database.
 
@@ -53,7 +57,10 @@ def save_client_info(client_data: Dict[str, any], db_path: str = DB_PATH) -> boo
             "order_date": client_data.get("order_date"),
         }
 
-        cursor.execute("SELECT id FROM clients WHERE quote_ref = ?", (client_data['quote_ref'],))
+        cursor.execute(
+            "SELECT id, owner_user_id FROM clients WHERE quote_ref = ?",
+            (client_data['quote_ref'],),
+        )
         existing_record = cursor.fetchone()
 
         if existing_record:
@@ -63,6 +70,18 @@ def save_client_info(client_data: Dict[str, any], db_path: str = DB_PATH) -> boo
                 if value is not None:  # Only update if value is provided
                     updates.append(f"{db_col} = ?")
                     params.append(value)
+
+            if isinstance(owner_user_id, int) and owner_user_id > 0:
+                existing_owner = existing_record[1] if len(existing_record) > 1 else None
+                if existing_owner is not None and int(existing_owner) > 0 and int(existing_owner) != owner_user_id:
+                    print(
+                        "Permission denied in save_client_info: "
+                        f"quote_ref='{client_data['quote_ref']}' is owned by another user."
+                    )
+                    return False
+                if existing_owner is None:
+                    updates.append("owner_user_id = ?")
+                    params.append(owner_user_id)
 
             if not updates:  # No actual fields to update other than processing_date
                 cursor.execute("UPDATE clients SET processing_date = ? WHERE quote_ref = ?",
@@ -84,6 +103,11 @@ def save_client_info(client_data: Dict[str, any], db_path: str = DB_PATH) -> boo
                 values.append(value if value is not None else "")  # Use empty string for missing optional fields
                 placeholders.append('?')
 
+            if isinstance(owner_user_id, int) and owner_user_id > 0:
+                columns.append("owner_user_id")
+                values.append(owner_user_id)
+                placeholders.append("?")
+
             sql = f"INSERT INTO clients ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
             cursor.execute(sql, tuple(values))
             print(f"Inserted new record into 'clients' for quote: {client_data['quote_ref']}")
@@ -98,7 +122,12 @@ def save_client_info(client_data: Dict[str, any], db_path: str = DB_PATH) -> boo
             conn.close()
 
 
-def get_client_by_id(client_id: int, db_path: str = DB_PATH) -> Optional[Dict]:
+def get_client_by_id(
+    client_id: int,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> Optional[Dict]:
     """
     Fetches a specific client record by its ID.
 
@@ -114,9 +143,13 @@ def get_client_by_id(client_id: int, db_path: str = DB_PATH) -> Optional[Dict]:
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM clients WHERE id = ?", (client_id,))
+        scope_sql, scope_params = owner_scope_clause(owner_user_id, include_all_for_admin)
+        cursor.execute(
+            f"SELECT * FROM clients WHERE id = ?{scope_sql}",
+            (client_id, *scope_params),
+        )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return row_to_dict(row)
     except sqlite3.Error as e:
         print(f"Database error loading client by ID '{client_id}': {e}")
         return None
@@ -125,7 +158,55 @@ def get_client_by_id(client_id: int, db_path: str = DB_PATH) -> Optional[Dict]:
             conn.close()
 
 
-def update_client_record(client_id: int, data_to_update: Dict[str, str], db_path: str = DB_PATH) -> bool:
+def get_client_by_quote_ref(
+    quote_ref: str,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> Optional[Dict]:
+    """
+    Fetch a specific client record by quote reference.
+
+    Args:
+        quote_ref: Quote reference value.
+        db_path: Path to the SQLite database file.
+        owner_user_id: Optional owner scope for non-admin users.
+        include_all_for_admin: True to bypass owner scope.
+
+    Returns:
+        Dictionary containing client data if found, None otherwise.
+    """
+    normalized_quote_ref = str(quote_ref or "").strip()
+    if not normalized_quote_ref:
+        return None
+
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(owner_user_id, include_all_for_admin)
+        cursor.execute(
+            f"SELECT * FROM clients WHERE quote_ref = ?{scope_sql} LIMIT 1",
+            (normalized_quote_ref, *scope_params),
+        )
+        row = cursor.fetchone()
+        return row_to_dict(row)
+    except sqlite3.Error as e:
+        print(f"Database error loading client by quote_ref '{normalized_quote_ref}': {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def update_client_record(
+    client_id: int,
+    data_to_update: Dict[str, str],
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> bool:
     """
     Updates specific fields of an existing client record identified by ID.
 
@@ -167,20 +248,24 @@ def update_client_record(client_id: int, data_to_update: Dict[str, str], db_path
                 params.append(value)
 
         if not fields:
-            cursor.execute("UPDATE clients SET processing_date = ? WHERE id = ?",
-                           (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client_id))
+            scope_sql, scope_params = owner_scope_clause(owner_user_id, include_all_for_admin)
+            cursor.execute(
+                f"UPDATE clients SET processing_date = ? WHERE id = ?{scope_sql}",
+                (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client_id, *scope_params),
+            )
             print(f"Only updated processing_date for client ID: {client_id}")
         else:
             fields.append("processing_date = ?")
             params.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            params.append(client_id)
+            scope_sql, scope_params = owner_scope_clause(owner_user_id, include_all_for_admin)
+            params.extend([client_id, *scope_params])
 
-            sql = f"UPDATE clients SET {', '.join(fields)} WHERE id = ?"
+            sql = f"UPDATE clients SET {', '.join(fields)} WHERE id = ?{scope_sql}"
             cursor.execute(sql, tuple(params))
             print(f"Successfully updated client ID: {client_id}")
 
         conn.commit()
-        return True
+        return cursor.rowcount > 0
     except sqlite3.Error as e:
         print(f"Database error updating client ID {client_id}: {e}")
         return False
@@ -189,7 +274,11 @@ def update_client_record(client_id: int, data_to_update: Dict[str, str], db_path
             conn.close()
 
 
-def load_all_clients(db_path: str = DB_PATH) -> List[Dict]:
+def load_all_clients(
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> List[Dict]:
     """
     Loads all client/quote records from the database.
 
@@ -206,18 +295,18 @@ def load_all_clients(db_path: str = DB_PATH) -> List[Dict]:
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(owner_user_id, include_all_for_admin)
         # Select all relevant fields for client list display
-        cursor.execute("""
+        cursor.execute(f"""
         SELECT id, quote_ref, customer_name, machine_model,
                sold_to_address, ship_to_address, telephone, customer_contact_person,
                customer_po, processing_date, incoterm, company, serial_number,
                ax, ox, via, tax_id, hs_code, customer_number, order_date
         FROM clients
+        WHERE 1 = 1{scope_sql}
         ORDER BY processing_date DESC, id DESC
-        """)
-        rows = cursor.fetchall()
-        for row in rows:
-            clients.append(dict(row))
+        """, tuple(scope_params))
+        clients = rows_to_dicts(cursor.fetchall())
     except sqlite3.Error as e:
         print(f"Database error while loading clients: {e}")
     except Exception as e:
@@ -228,7 +317,12 @@ def load_all_clients(db_path: str = DB_PATH) -> List[Dict]:
     return clients
 
 
-def delete_client_record(client_id: int, db_path: str = DB_PATH) -> bool:
+def delete_client_record(
+    client_id: int,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> bool:
     """
     Deletes a client record and its associated data from the database by client ID.
 
@@ -253,7 +347,11 @@ def delete_client_record(client_id: int, db_path: str = DB_PATH) -> bool:
         cursor = conn.cursor()
 
         # Get quote_ref for the client_id to delete associated priced_items
-        cursor.execute("SELECT quote_ref FROM clients WHERE id = ?", (client_id,))
+        scope_sql, scope_params = owner_scope_clause(owner_user_id, include_all_for_admin)
+        cursor.execute(
+            f"SELECT quote_ref FROM clients WHERE id = ?{scope_sql}",
+            (client_id, *scope_params),
+        )
         result = cursor.fetchone()
         if result:
             client_quote_ref_to_delete = result[0]
@@ -264,9 +362,13 @@ def delete_client_record(client_id: int, db_path: str = DB_PATH) -> bool:
             delete_document_content(client_quote_ref_to_delete, db_path)
         else:
             print(f"Warning: Client ID {client_id} not found, cannot get quote_ref for deleting priced items.")
+            return False
 
         # Delete from clients table
-        cursor.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+        cursor.execute(
+            f"DELETE FROM clients WHERE id = ?{scope_sql}",
+            (client_id, *scope_params),
+        )
         conn.commit()
 
         if cursor.rowcount > 0:

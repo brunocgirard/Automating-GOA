@@ -5,17 +5,18 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from api.dependencies.auth import require_authenticated_user
 from api.models.schemas import (
     MachineDetailResponse,
     MachineResponse,
     TemplateResponse,
     TemplateUpdateRequest,
 )
+from api.routers._helpers import load_quote_or_404, require, scope_kwargs
 from api.services.processing_service import load_machine_by_id
 from src.utils.db import (
-    get_client_by_id,
     load_all_clients,
     load_all_processed_machines,
     load_machine_template_data,
@@ -53,8 +54,6 @@ OPTION_PATTERNS = (
     r"\bshipping\b",
     r"\bdelivery\b",
 )
-
-
 def _parse_machine_data(machine: dict[str, Any]) -> dict[str, Any]:
     payload = machine.get("machine_data")
     if isinstance(payload, dict):
@@ -127,8 +126,10 @@ def _serialize_machine_response(
 
 
 @router.get("/machines", response_model=list[MachineResponse])
-def list_machines() -> list[dict]:
-    machines = load_all_processed_machines()
+def list_machines(
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> list[dict]:
+    machines = load_all_processed_machines(**scope_kwargs(current_user))
     response: list[dict] = []
     for machine in machines:
         response.append(
@@ -152,9 +153,10 @@ def list_machines() -> list[dict]:
 @router.get("/machines/all", response_model=list[MachineResponse])
 def list_all_quote_machines(
     main_only: bool = Query(default=False),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> list[dict[str, Any]]:
     response: list[dict[str, Any]] = []
-    for quote in load_all_clients():
+    for quote in load_all_clients(**scope_kwargs(current_user)):
         quote_ref = quote.get("quote_ref")
         if not isinstance(quote_ref, str) or not quote_ref:
             continue
@@ -162,7 +164,7 @@ def list_all_quote_machines(
         quote_id = quote.get("id")
         client_id = quote_id if isinstance(quote_id, int) else None
         client_name = quote.get("customer_name")
-        for machine in load_machines_for_quote(quote_ref):
+        for machine in load_machines_for_quote(quote_ref, **scope_kwargs(current_user)):
             machine_data = _parse_machine_data(machine)
             machine_type = _infer_machine_type(machine_data)
             if main_only and machine_type != "main":
@@ -181,10 +183,11 @@ def list_all_quote_machines(
 
 
 @router.get("/machines/{machine_id}", response_model=MachineDetailResponse)
-def get_machine(machine_id: int) -> dict:
-    machine = load_machine_by_id(machine_id)
-    if not machine:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Machine not found.")
+def get_machine(
+    machine_id: int,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict:
+    machine = require(load_machine_by_id(machine_id, **scope_kwargs(current_user)), "Machine not found.")
     return {
         "id": machine["id"],
         "machine_name": machine.get("machine_name", ""),
@@ -198,13 +201,12 @@ def get_machine(machine_id: int) -> dict:
 def list_machines_for_quote(
     quote_id: int,
     main_only: bool = Query(default=False),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> list[dict]:
-    quote = get_client_by_id(quote_id)
-    if not quote:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found.")
+    quote = load_quote_or_404(quote_id, current_user)
 
     quote_ref = quote["quote_ref"]
-    machines = load_machines_for_quote(quote_ref)
+    machines = load_machines_for_quote(quote_ref, **scope_kwargs(current_user))
     response: list[dict] = []
     for machine in machines:
         machine_data = _parse_machine_data(machine)
@@ -229,17 +231,14 @@ def list_machines_for_quote(
 def get_machine_template(
     machine_id: int,
     template_type: str = Query(default="GOA"),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> dict:
-    machine = load_machine_by_id(machine_id)
-    if not machine:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Machine not found.")
+    require(load_machine_by_id(machine_id, **scope_kwargs(current_user)), "Machine not found.")
 
-    template = load_machine_template_data(machine_id, template_type)
-    if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Template '{template_type}' not found for machine.",
-        )
+    template = require(
+        load_machine_template_data(machine_id, template_type),
+        f"Template '{template_type}' not found for machine.",
+    )
     return {
         "id": template["id"],
         "template_data": template.get("template_data", {}),
@@ -249,10 +248,12 @@ def get_machine_template(
 
 
 @router.put("/machines/{machine_id}/template", response_model=TemplateResponse)
-def update_machine_template(machine_id: int, payload: TemplateUpdateRequest) -> dict:
-    machine = load_machine_by_id(machine_id)
-    if not machine:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Machine not found.")
+def update_machine_template(
+    machine_id: int,
+    payload: TemplateUpdateRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict:
+    require(load_machine_by_id(machine_id, **scope_kwargs(current_user)), "Machine not found.")
 
     saved = save_machine_template_data(
         machine_id=machine_id,

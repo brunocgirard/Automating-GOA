@@ -47,6 +47,7 @@ from .utils import (
 from .clients import (
     save_client_info,
     get_client_by_id,
+    get_client_by_quote_ref,
     update_client_record,
     load_all_clients,
     delete_client_record
@@ -121,6 +122,27 @@ from .projects import (
     detect_stalls,
 )
 
+# Auth and session operations
+from .auth import (
+    count_users,
+    create_user,
+    find_user_by_username,
+    find_user_by_id,
+    list_users,
+    update_user_password,
+    update_user_last_login,
+    deactivate_user,
+    create_session,
+    find_session_by_token_hash,
+    revoke_session,
+    revoke_all_user_sessions,
+    touch_session,
+    write_audit_event,
+    backfill_ownership,
+    update_user_gemini_key,
+    get_user_gemini_key,
+)
+
 # Few-shot learning operations
 from .few_shot import (
     save_few_shot_example,
@@ -147,6 +169,7 @@ __all__ = [
     # Client operations
     'save_client_info',
     'get_client_by_id',
+    'get_client_by_quote_ref',
     'update_client_record',
     'load_all_clients',
     'delete_client_record',
@@ -203,6 +226,25 @@ __all__ = [
     'save_gantt_data',
     'get_at_risk_summary',
     'detect_stalls',
+
+    # Auth/session operations
+    'count_users',
+    'create_user',
+    'find_user_by_username',
+    'find_user_by_id',
+    'list_users',
+    'update_user_password',
+    'update_user_last_login',
+    'deactivate_user',
+    'create_session',
+    'find_session_by_token_hash',
+    'revoke_session',
+    'revoke_all_user_sessions',
+    'touch_session',
+    'write_audit_event',
+    'backfill_ownership',
+    'update_user_gemini_key',
+    'get_user_gemini_key',
 
     # Few-shot learning operations
     'save_few_shot_example',

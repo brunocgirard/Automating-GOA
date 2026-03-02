@@ -11,6 +11,10 @@ import {
   type QuoteWorkflowStatus,
   type QuoteRow,
 } from "@/lib/api";
+import {
+  formatStatusTimestamp,
+  workflowQuoteBadgeConfig,
+} from "@/lib/doc-utils";
 import { useClientFilter } from "@/components/layout/client-filter-context";
 import { QuoteClientInfo } from "@/components/quotes/quote-details";
 import { ItemsTable } from "@/components/quotes/items-table";
@@ -78,25 +82,6 @@ function buildClientOptions(quotes: QuoteSummary[]): ClientOption[] {
   }
 
   return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function formatStatusTimestamp(value: string | null): string {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
-}
-
-function workflowQuoteBadgeConfig(
-  status: QuoteWorkflowStatus["quoteStatus"] | null | undefined
-): { label: string; className: string } {
-  if (status === "ready") {
-    return { label: "Ready", className: "bg-green-100 text-green-800" };
-  }
-  if (status === "processed") {
-    return { label: "Processed", className: "bg-yellow-100 text-yellow-800" };
-  }
-  return { label: "Draft", className: "bg-neutral-200 text-neutral-700" };
 }
 
 function QuoteEditor({ quoteId }: { quoteId: number }) {

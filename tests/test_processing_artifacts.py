@@ -59,8 +59,9 @@ def test_load_quote_artifacts_prefers_priced_items_for_order(monkeypatch) -> Non
         {"item_description": "Common Service", "item_quantity": "1", "item_price_str": "$500", "item_price_numeric": 500.0},
     ]
 
+    monkeypatch.setattr(service, "get_client_by_quote_ref", lambda _quote_ref, **_kwargs: {"quote_ref": _quote_ref})
     monkeypatch.setattr(service, "load_document_content", lambda _quote_ref: {"full_pdf_text": "text", "pdf_filename": "q.pdf"})
-    monkeypatch.setattr(service, "load_machines_for_quote", lambda _quote_ref: machine_rows)
+    monkeypatch.setattr(service, "load_machines_for_quote", lambda _quote_ref, **_kwargs: machine_rows)
     monkeypatch.setattr(service, "load_priced_items_for_quote", lambda _quote_ref: priced_rows)
 
     result = service.load_quote_artifacts("Q-123")
@@ -86,8 +87,9 @@ def test_load_quote_artifacts_falls_back_to_machine_payloads_when_priced_missing
         }
     ]
 
+    monkeypatch.setattr(service, "get_client_by_quote_ref", lambda _quote_ref, **_kwargs: {"quote_ref": _quote_ref})
     monkeypatch.setattr(service, "load_document_content", lambda _quote_ref: {})
-    monkeypatch.setattr(service, "load_machines_for_quote", lambda _quote_ref: machine_rows)
+    monkeypatch.setattr(service, "load_machines_for_quote", lambda _quote_ref, **_kwargs: machine_rows)
     monkeypatch.setattr(service, "load_priced_items_for_quote", lambda _quote_ref: [])
 
     result = service.load_quote_artifacts("Q-456")

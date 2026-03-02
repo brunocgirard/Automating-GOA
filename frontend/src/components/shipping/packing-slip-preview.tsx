@@ -1,16 +1,8 @@
 import type { ShippingDocumentState } from "@/lib/api";
+import { line, toNumber } from "@/lib/doc-utils";
 
 interface PackingSlipPreviewProps {
   state: ShippingDocumentState;
-}
-
-function toNumber(value: string): number {
-  const parsed = Number(value.replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function line(value: string): string {
-  return value.trim() || "-";
 }
 
 export function PackingSlipPreview({ state }: PackingSlipPreviewProps) {

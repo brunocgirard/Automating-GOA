@@ -15,6 +15,7 @@ import {
   type ShippingLineItemOption,
   type ShippingMachine,
 } from "@/lib/api";
+import { uid } from "@/lib/doc-utils";
 import { useClientFilter } from "@/components/layout/client-filter-context";
 import { PackingSlipPreview } from "@/components/shipping/packing-slip-preview";
 import { CommercialInvoicePreview } from "@/components/shipping/commercial-invoice-preview";
@@ -50,13 +51,6 @@ function resolveMachineLineItemValue(
   return options.some((option) => option.id === machine.lineItemOptionId)
     ? machine.lineItemOptionId
     : "__manual__";
-}
-
-function uid(prefix: string): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
 function downloadBlob(blob: Blob, filename: string) {

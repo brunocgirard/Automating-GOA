@@ -113,7 +113,7 @@ function inferLocationFromKey(key: string): Pick<SortstarLocation, "section" | "
   if (normalized.startsWith("vd_")) {
     return { section: "OPTIONAL SYSTEMS", group: "Validation Documents" };
   }
-  if (normalized === "options_listing" || normalized.startsWith("options_")) {
+  if (normalized === "option_listing" || normalized === "options_listing" || normalized.startsWith("options_")) {
     return { section: "Option Listing", group: null };
   }
 

@@ -32,7 +32,7 @@ def test_run_extraction_v2_full_prefill_returns_metadata(monkeypatch):
     monkeypatch.setenv("LLM_FORCE_PASS2_CRITICAL_TEXT", "true")
     monkeypatch.setenv("LLM_CRITICAL_TEXT_RESOLVER_ENABLED", "true")
 
-    monkeypatch.setattr(service, "configure_gemini_client", lambda: True)
+    monkeypatch.setattr(service, "configure_gemini_client", lambda **_kwargs: True)
     monkeypatch.setattr(service, "_build_selected_pdf_descriptions", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(service, "apply_post_processing_rules", lambda data, *_args, **_kwargs: data)
     monkeypatch.setattr(service, "sanitize_extracted_fields", lambda extracted_data, expected_schema: (extracted_data, {}))

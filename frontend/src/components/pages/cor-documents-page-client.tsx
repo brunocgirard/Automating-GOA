@@ -15,6 +15,7 @@ import {
   type CorRevisionSummary,
   type QuoteRow,
 } from "@/lib/api";
+import { uid } from "@/lib/doc-utils";
 import { useClientFilter } from "@/components/layout/client-filter-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,13 +36,6 @@ function getMachineNamesForQuote(rows: QuoteRow[], quoteId: number): string[] {
     unique.add(name);
   }
   return Array.from(unique.values());
-}
-
-function uid(prefix: string): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
 function todayDateValue(): string {

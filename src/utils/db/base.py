@@ -1,12 +1,9 @@
-"""
-Database base module - contains DB path constants and initialization.
-This module provides the foundation for all database operations.
-"""
-
-import sqlite3
 import os
-from typing import Optional
+import json
+import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,6 +19,50 @@ TEMPLATE_FILE_PATH = os.path.join("templates", "template.docx")
 
 # Keep track of database files that have already been initialized in-process.
 _INITIALIZED_DB_PATHS: set[str] = set()
+
+
+def timestamp() -> str:
+    """Return a standard DB timestamp string."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def owner_scope_clause(
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+    table_alias: str = "",
+) -> tuple[str, list[int]]:
+    """Return a SQL ownership filter fragment and its params."""
+    prefix = f"{table_alias}." if table_alias else ""
+    if include_all_for_admin:
+        return "", []
+    if isinstance(owner_user_id, int) and owner_user_id > 0:
+        return f" AND {prefix}owner_user_id = ?", [owner_user_id]
+    return "", []
+
+
+def row_to_dict(row: sqlite3.Row | None) -> dict | None:
+    """Convert a sqlite row to a dict."""
+    return dict(row) if row else None
+
+
+def rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict]:
+    """Convert sqlite rows to plain dicts."""
+    return [dict(row) for row in rows]
+
+
+def safe_json_loads(value: str | bytes | bytearray | None, default=None):
+    """Best-effort JSON parsing with a caller-provided fallback."""
+    if not value:
+        return default
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return default
+
+
+def to_text(value) -> str:
+    """Normalize values to stripped text."""
+    return str(value).strip() if value is not None else ""
 
 
 def _normalize_db_path(db_path: str) -> str:
@@ -46,7 +87,19 @@ def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
         _INITIALIZED_DB_PATHS.add(normalized_path)
 
     conn = sqlite3.connect(normalized_path)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
+
+
+@contextmanager
+def connection_context(db_path: str = DB_PATH):
+    """Yield a DB connection and always close it on exit."""
+    conn = get_connection(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db(db_path: str = DB_PATH):
@@ -72,6 +125,8 @@ def init_db(db_path: str = DB_PATH):
             os.makedirs(db_dir)
 
         conn = sqlite3.connect(normalized_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -95,7 +150,8 @@ def init_db(db_path: str = DB_PATH):
             tax_id TEXT,
             hs_code TEXT,
             customer_number TEXT,
-            order_date TEXT
+            order_date TEXT,
+            owner_user_id INTEGER
         )
         """)
 
@@ -106,13 +162,75 @@ def init_db(db_path: str = DB_PATH):
         new_columns = {
             "company": "TEXT", "serial_number": "TEXT", "ax": "TEXT",
             "ox": "TEXT", "via": "TEXT", "tax_id": "TEXT", "hs_code": "TEXT",
-            "customer_number": "TEXT", "order_date": "TEXT"
+            "customer_number": "TEXT", "order_date": "TEXT", "owner_user_id": "INTEGER"
         }
 
         for col_name, col_type in new_columns.items():
             if col_name not in existing_columns:
                 cursor.execute(f"ALTER TABLE clients ADD COLUMN {col_name} {col_type}")
                 print(f"Added column '{col_name}' to 'clients' table.")
+
+        # Auth tables for multi-user support.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            display_name TEXT,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'standard',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            gemini_api_key_encrypted TEXT,
+            created_date TEXT NOT NULL,
+            modified_date TEXT NOT NULL,
+            last_login_at TEXT
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            last_seen_at TEXT,
+            revoked_at TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            event_type TEXT NOT NULL,
+            metadata_json TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            occurred_at TEXT NOT NULL
+        )
+        """)
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_sessions_user_id
+            ON sessions (user_id)
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_sessions_token_hash
+            ON sessions (token_hash)
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_auth_audit_user_time
+            ON auth_audit_events (user_id, occurred_at)
+            """
+        )
 
         # Create priced_items table with item_quantity
         cursor.execute("""
@@ -262,9 +380,16 @@ def init_db(db_path: str = DB_PATH):
             gantt_data_json TEXT,
             created_date TEXT NOT NULL,
             modified_date TEXT NOT NULL,
+            owner_user_id INTEGER,
             FOREIGN KEY (quote_ref) REFERENCES clients (quote_ref) ON DELETE SET NULL
         )
         """)
+
+        cursor.execute("PRAGMA table_info(projects)")
+        project_columns = [row[1] for row in cursor.fetchall()]
+        if "owner_user_id" not in project_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN owner_user_id INTEGER")
+            print("Added column 'owner_user_id' to 'projects' table.")
 
         # Independent PM checklist tasks (non-linear execution supported).
         cursor.execute("""

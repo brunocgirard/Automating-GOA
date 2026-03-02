@@ -7,10 +7,22 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List
 
-from .base import DB_PATH
+from .base import (
+    DB_PATH,
+    get_connection,
+    owner_scope_clause,
+    row_to_dict,
+    rows_to_dicts,
+    safe_json_loads,
+)
 
 
-def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str = DB_PATH) -> bool:
+def save_machines_data(
+    client_quote_ref: str,
+    machines_data: Dict,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+) -> bool:
     """
     Saves identified machines and their add-ons to the machines table.
 
@@ -44,10 +56,10 @@ def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str 
     conn = None
     try:
         # First check if the client exists
-        conn = sqlite3.connect(db_path)
+        conn = get_connection(db_path)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id FROM clients WHERE quote_ref = ?", (client_quote_ref,))
+        cursor.execute("SELECT id, owner_user_id FROM clients WHERE quote_ref = ?", (client_quote_ref,))
         client_exists = cursor.fetchone()
 
         if not client_exists:
@@ -60,11 +72,43 @@ def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str 
             if machines_data.get("machines") and len(machines_data["machines"]) > 0:
                 machine_name = machines_data["machines"][0].get("machine_name", "")
 
-            cursor.execute("""
-            INSERT INTO clients (quote_ref, customer_name, machine_model, processing_date)
-            VALUES (?, ?, ?, ?)
-            """, (client_quote_ref, "", machine_name, processing_ts))
+            if isinstance(owner_user_id, int) and owner_user_id > 0:
+                cursor.execute(
+                    """
+                    INSERT INTO clients (
+                        quote_ref,
+                        customer_name,
+                        machine_model,
+                        processing_date,
+                        owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (client_quote_ref, "", machine_name, processing_ts, owner_user_id),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO clients (quote_ref, customer_name, machine_model, processing_date)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (client_quote_ref, "", machine_name, processing_ts),
+                )
             conn.commit()
+        else:
+            existing_owner = client_exists[1] if len(client_exists) > 1 else None
+            if isinstance(owner_user_id, int) and owner_user_id > 0:
+                if existing_owner is not None and int(existing_owner) > 0 and int(existing_owner) != owner_user_id:
+                    print(
+                        "Permission denied in save_machines_data: "
+                        f"quote_ref='{client_quote_ref}' is owned by another user."
+                    )
+                    return False
+                if existing_owner is None:
+                    cursor.execute(
+                        "UPDATE clients SET owner_user_id = ? WHERE quote_ref = ?",
+                        (owner_user_id, client_quote_ref),
+                    )
+                    conn.commit()
 
         # Delete any existing machines for this quote
         cursor.execute("DELETE FROM machines WHERE client_quote_ref = ?", (client_quote_ref,))
@@ -170,7 +214,12 @@ def save_machines_data(client_quote_ref: str, machines_data: Dict, db_path: str 
             conn.close()
 
 
-def load_machines_for_quote(client_quote_ref: str, db_path: str = DB_PATH) -> List[Dict]:
+def load_machines_for_quote(
+    client_quote_ref: str,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> List[Dict]:
     """
     Loads all identified machines for a given quote reference.
 
@@ -188,23 +237,28 @@ def load_machines_for_quote(client_quote_ref: str, db_path: str = DB_PATH) -> Li
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="c",
+        )
 
-        cursor.execute("""
-        SELECT id, machine_name, machine_data_json, processing_date
-        FROM machines
-        WHERE client_quote_ref = ?
-        ORDER BY id
-        """, (client_quote_ref,))
+        cursor.execute(f"""
+        SELECT m.id, m.machine_name, m.machine_data_json, m.processing_date
+        FROM machines m
+        JOIN clients c ON c.quote_ref = m.client_quote_ref
+        WHERE m.client_quote_ref = ?{scope_sql}
+        ORDER BY m.id
+        """, (client_quote_ref, *scope_params))
 
         rows = cursor.fetchall()
         for row in rows:
-            machine_dict = dict(row)
-            try:
-                # Parse the JSON string back to a dictionary
-                machine_dict["machine_data"] = json.loads(machine_dict["machine_data_json"])
-                # Keep the original JSON string in case it's needed
+            machine_dict = row_to_dict(row) or {}
+            machine_data = safe_json_loads(machine_dict["machine_data_json"], {})
+            if isinstance(machine_data, dict):
+                machine_dict["machine_data"] = machine_data
                 machines.append(machine_dict)
-            except json.JSONDecodeError:
+            else:
                 print(f"Error parsing JSON for machine ID {row['id']}")
 
         return machines
@@ -216,7 +270,12 @@ def load_machines_for_quote(client_quote_ref: str, db_path: str = DB_PATH) -> Li
             conn.close()
 
 
-def find_machines_by_name(machine_name: str, db_path: str = DB_PATH) -> List[Dict]:
+def find_machines_by_name(
+    machine_name: str,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> List[Dict]:
     """
     Finds machines by name across all quotes using partial matching.
 
@@ -236,24 +295,29 @@ def find_machines_by_name(machine_name: str, db_path: str = DB_PATH) -> List[Dic
 
         # Use LIKE for partial matching with wildcards
         search_pattern = f"%{machine_name}%"
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="c",
+        )
 
-        cursor.execute("""
+        cursor.execute(f"""
         SELECT m.id, m.machine_name, m.machine_data_json, m.client_quote_ref, m.processing_date,
                c.customer_name, c.id as client_id
         FROM machines m
-        LEFT JOIN clients c ON m.client_quote_ref = c.quote_ref
-        WHERE m.machine_name LIKE ?
+        JOIN clients c ON m.client_quote_ref = c.quote_ref
+        WHERE m.machine_name LIKE ?{scope_sql}
         ORDER BY m.processing_date DESC
-        """, (search_pattern,))
+        """, (search_pattern, *scope_params))
 
         rows = cursor.fetchall()
         for row in rows:
-            machine_dict = dict(row)
-            try:
-                # Parse the JSON string back to a dictionary
-                machine_dict["machine_data"] = json.loads(machine_dict["machine_data_json"])
+            machine_dict = row_to_dict(row) or {}
+            machine_data = safe_json_loads(machine_dict["machine_data_json"], {})
+            if isinstance(machine_data, dict):
+                machine_dict["machine_data"] = machine_data
                 machines.append(machine_dict)
-            except json.JSONDecodeError:
+            else:
                 print(f"Error parsing JSON for machine ID {row['id']}")
 
         return machines
@@ -265,7 +329,11 @@ def find_machines_by_name(machine_name: str, db_path: str = DB_PATH) -> List[Dic
             conn.close()
 
 
-def load_all_processed_machines(db_path: str = DB_PATH) -> List[Dict]:
+def load_all_processed_machines(
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> List[Dict]:
     """
     Loads all machines that have been processed with templates,
     including client information for better organization in the reports page.
@@ -281,9 +349,14 @@ def load_all_processed_machines(db_path: str = DB_PATH) -> List[Dict]:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="c",
+        )
 
         # Join machines, machine_templates, and clients tables to get all necessary data
-        cursor.execute("""
+        cursor.execute(f"""
         SELECT
             m.id,
             m.machine_name,
@@ -299,14 +372,14 @@ def load_all_processed_machines(db_path: str = DB_PATH) -> List[Dict]:
             clients c ON m.client_quote_ref = c.quote_ref
         JOIN
             machine_templates mt ON m.id = mt.machine_id
+        WHERE 1 = 1{scope_sql}
         GROUP BY
             m.id
         ORDER BY
             c.customer_name, m.machine_name
-        """)
+        """, tuple(scope_params))
 
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+        return rows_to_dicts(cursor.fetchall())
     except sqlite3.Error as e:
         print(f"Error loading processed machines: {e}")
         return []

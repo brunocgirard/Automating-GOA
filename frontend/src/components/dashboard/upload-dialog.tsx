@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +25,7 @@ import {
   uploadQuotePdf,
   type QuoteClientInfo as QuoteClientInfoValues,
 } from "@/lib/api";
+import { FileUploadPicker } from "@/components/shared/file-upload-picker";
 import { QuoteClientInfo } from "@/components/quotes/quote-details";
 import type { LineItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -230,7 +231,6 @@ export function UploadDialog({ onUploaded }: UploadDialogProps) {
   const [identifySearch, setIdentifySearch] = useState("");
   const [optionsSearch, setOptionsSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const optionCandidates = useMemo(
     () =>
@@ -450,22 +450,13 @@ export function UploadDialog({ onUploaded }: UploadDialogProps) {
 
         {step === "upload" && (
           <>
-            <div
-              className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors hover:border-primary/50"
-              onClick={() => inputRef.current?.click()}
-            >
-              <Upload className="mb-2 size-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                {file ? file.name : "Click to select a PDF file"}
-              </p>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".pdf"
-                className="hidden"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              />
-            </div>
+            <FileUploadPicker
+              file={file}
+              onSelect={setFile}
+              emptyLabel="Click to select a PDF file"
+              accept=".pdf"
+              variant="dropzone"
+            />
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)} disabled={uploading}>

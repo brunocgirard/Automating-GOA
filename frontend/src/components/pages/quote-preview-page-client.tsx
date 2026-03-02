@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchMachineReport, getQuoteDetail, type QuoteDetail } from "@/lib/api";
+import { useFetch } from "@/hooks/use-fetch";
 import { HtmlPreviewFrame } from "@/components/ui/html-preview-frame";
 import { Button } from "@/components/ui/button";
 import { sanitizeHtml } from "@/lib/sanitize-html";
@@ -18,48 +19,70 @@ interface QuotePreviewPageClientProps {
 }
 
 export default function QuotePreviewPageClient({ id }: QuotePreviewPageClientProps) {
-  const [detail, setDetail] = useState<QuoteDetail | null>(null);
   const [reportHtml, setReportHtml] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const { data: detail, loading: detailLoading, error: detailError } = useFetch<QuoteDetail>(
+    async () => {
+      try {
+        return await getQuoteDetail(id);
+      } catch (err) {
+        throw err instanceof Error ? err : new Error("Failed to load quote.");
+      }
+    },
+    [id]
+  );
+  const loading = detailLoading || reportLoading;
+  const error = previewError ?? detailError;
   const safeReportHtml = useMemo(() => sanitizeHtml(reportHtml ?? ""), [reportHtml]);
 
   useEffect(() => {
-    let active = true;
+    setReportHtml(null);
+    setPreviewError(null);
+    setReportLoading(false);
+  }, [id]);
 
-    void getQuoteDetail(id)
-      .then(async (quote) => {
-        if (!active) return;
-        setDetail(quote);
-        if (quote.machineId) {
-          try {
-            const report = await fetchMachineReport(quote.machineId);
-            if (active) setReportHtml(report.html);
-          } catch (err) {
-            if (active) {
-              if (isMissingGoaTemplateError(err)) {
-                setReportHtml(null);
-                setError(null);
-              } else {
-                setError(err instanceof Error ? err.message : "Failed to load report preview.");
-              }
-            }
-          }
-        }
+  useEffect(() => {
+    if (!detail) {
+      setReportHtml(null);
+      setPreviewError(null);
+      setReportLoading(false);
+      return;
+    }
+
+    if (!detail.machineId) {
+      setReportHtml(null);
+      setPreviewError(null);
+      setReportLoading(false);
+      return;
+    }
+
+    let active = true;
+    setReportLoading(true);
+    setPreviewError(null);
+    setReportHtml(null);
+
+    void fetchMachineReport(detail.machineId)
+      .then((report) => {
+        if (active) setReportHtml(report.html);
       })
       .catch((err) => {
-        if (active) {
-          setError(err instanceof Error ? err.message : "Failed to load quote.");
+        if (!active) return;
+        if (isMissingGoaTemplateError(err)) {
+          setReportHtml(null);
+          setPreviewError(null);
+          return;
         }
+        setPreviewError(err instanceof Error ? err.message : "Failed to load report preview.");
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setReportLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [detail?.quoteRef, detail?.machineId]);
 
   function handlePrint() {
     if (!safeReportHtml) return;

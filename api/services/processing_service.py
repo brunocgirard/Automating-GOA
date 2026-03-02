@@ -6,16 +6,24 @@ import json
 import os
 import re
 import sqlite3
-import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
+from api.services._doc_helpers import write_temp_file
+from api.services._env_helpers import (
+    env_csv as _env_csv,
+    env_flag as _env_flag,
+    env_positive_int as _env_positive_int,
+)
 from src.utils import template_utils
 from src.utils.db import (
     DB_PATH,
     find_machines_by_name,
     get_client_by_id,
+    get_client_by_quote_ref,
+    get_connection,
     load_document_content,
     load_machines_for_quote,
     load_priced_items_for_quote,
@@ -60,31 +68,40 @@ def _resolve_existing_template_path(candidates: tuple[str, ...]) -> str:
 SORTSTAR_TEMPLATE_FILE = _resolve_existing_template_path(SORTSTAR_TEMPLATE_CANDIDATES)
 
 
-def _env_flag(name: str, default: bool = False) -> bool:
-    raw = str(os.getenv(name, "")).strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "on"}
+def _owner_scope_clause(
+    owner_user_id: int | None,
+    include_all_for_admin: bool,
+    *,
+    alias: str = "c",
+) -> tuple[str, list[Any]]:
+    """Return SQL ownership scope for queries joined against clients alias."""
+    if include_all_for_admin:
+        return "", []
+    if isinstance(owner_user_id, int) and owner_user_id > 0:
+        return f" AND {alias}.owner_user_id = ?", [owner_user_id]
+    return "", []
 
 
-def _env_positive_int(name: str, default: int, *, min_value: int = 1) -> int:
-    raw = str(os.getenv(name, "")).strip()
-    if not raw:
-        return default
-    try:
-        parsed = int(raw)
-    except ValueError:
-        return default
-    return max(min_value, parsed)
+def _safe_file_segment(raw: str, fallback: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(raw or "").strip())
+    cleaned = cleaned.strip("._-")
+    return cleaned or fallback
 
 
-def _env_csv(name: str, default: list[str]) -> list[str]:
-    raw = str(os.getenv(name, "")).strip()
-    if not raw:
-        return list(default)
-    values = [value.strip() for value in raw.split(",")]
-    cleaned = [value for value in values if value]
-    return cleaned or list(default)
+def _build_unique_output_path(
+    machine_data: dict[str, Any],
+    machine_name: str,
+    *,
+    is_sortstar_template: bool,
+    user_id: int | None = None,
+) -> str:
+    quote_ref = _safe_file_segment(str(machine_data.get("client_quote_ref") or ""), "quote")
+    clean_name = _safe_file_segment(machine_name, "machine")
+    resolved_user_id = user_id if isinstance(user_id, int) and user_id > 0 else 0
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    extension = "docx" if is_sortstar_template else "html"
+    filename = f"GOA_{quote_ref}_{clean_name}_u{resolved_user_id}_{timestamp}.{extension}"
+    return os.path.join("output", filename)
 
 
 def _template_config(machine_name: str) -> dict[str, Any]:
@@ -319,14 +336,16 @@ def _extract_quote_profile_fields(full_text: str, fallback_quote_ref: str) -> di
 
 
 def extract_and_catalog(
-    pdf_bytes: bytes, filename: str, existing_client_id: int | None = None
+    pdf_bytes: bytes,
+    filename: str,
+    existing_client_id: int | None = None,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
 ) -> dict[str, Any]:
     """Extract quote data from PDF and persist it to CRM tables."""
     temp_pdf_path: str | None = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(pdf_bytes)
-            temp_pdf_path = tmp_file.name
+        temp_pdf_path = write_temp_file(".pdf", pdf_bytes)
 
         items = extract_line_item_details(temp_pdf_path)
         full_text = extract_full_pdf_text(temp_pdf_path)
@@ -356,19 +375,29 @@ def extract_and_catalog(
 
         linked_existing_client_id: int | None = None
         if existing_client_id:
-            existing_client = get_client_by_id(existing_client_id)
+            existing_client = get_client_by_id(
+                existing_client_id,
+                owner_user_id=owner_user_id,
+                include_all_for_admin=include_all_for_admin,
+            )
             if existing_client:
                 linked_existing_client_id = existing_client_id
                 client_info = dict(existing_client)
                 client_info["quote_ref"] = f"{existing_client['quote_ref']}_{quote_ref}"
+            else:
+                raise ValueError("Existing client not found or not accessible.")
 
-        if not save_client_info(client_info):
+        save_owner_kwargs: dict[str, Any] = {}
+        if isinstance(owner_user_id, int) and owner_user_id > 0:
+            save_owner_kwargs["owner_user_id"] = owner_user_id
+
+        if not save_client_info(client_info, **save_owner_kwargs):
             raise RuntimeError(f"Failed to save client record for quote_ref '{client_info['quote_ref']}'.")
         if not save_priced_items(client_info["quote_ref"], items):
             raise RuntimeError(f"Failed to save priced items for quote_ref '{client_info['quote_ref']}'.")
         if full_text and not save_document_content(client_info["quote_ref"], full_text, filename):
             raise RuntimeError(f"Failed to save document content for quote_ref '{client_info['quote_ref']}'.")
-        if not save_machines_data(client_info["quote_ref"], identified):
+        if not save_machines_data(client_info["quote_ref"], identified, **save_owner_kwargs):
             raise RuntimeError(f"Failed to save machine data for quote_ref '{client_info['quote_ref']}'.")
 
         return {
@@ -429,6 +458,7 @@ def run_extraction(
     common_items: list[dict[str, Any]],
     template_contexts: dict[str, Any] | None,
     full_pdf_text: str,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
     """Run extraction via V2 two-pass pipeline or legacy fallback."""
     if _env_flag("EXTRACTION_FULL_PREFILL_V2_ENABLED", default=False):
@@ -437,13 +467,57 @@ def run_extraction(
             common_items=common_items,
             template_contexts=template_contexts,
             full_pdf_text=full_pdf_text,
+            user_id=user_id,
         )
     return _run_extraction_legacy(
         machine_data=machine_data,
         common_items=common_items,
         template_contexts=template_contexts,
         full_pdf_text=full_pdf_text,
+        user_id=user_id,
     )
+
+
+def _fallback_field_label(field_key: str) -> str:
+    without_suffix = field_key[:-6] if field_key.endswith("_check") else field_key
+    cleaned = re.sub(r"[_-]+", " ", without_suffix).strip()
+    return re.sub(r"\b\w", lambda match: match.group(0).upper(), cleaned) if cleaned else field_key
+
+
+def _is_unhelpful_field_label(label: str, field_key: str) -> bool:
+    normalized = label.strip().lower()
+    if not normalized:
+        return True
+    if normalized == field_key.strip().lower():
+        return True
+    if normalized in {"placeholder", "field", "unknown", "n/a", "na", "tbd"}:
+        return True
+    return "{{" in label or "}}" in label
+
+
+def _build_field_labels_from_contexts(
+    contexts: dict[str, Any],
+    field_keys: Iterable[str],
+) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for key in field_keys:
+        label = ""
+        context_entry = contexts.get(key)
+        if isinstance(context_entry, dict):
+            label = str(context_entry.get("description") or "").strip()
+        elif isinstance(context_entry, str):
+            label = context_entry.strip()
+
+        if _is_unhelpful_field_label(label, key):
+            label = (
+                template_utils.SORTSTAR_EXPLICIT_MAPPINGS.get(key)
+                or template_utils.DEFAULT_EXPLICIT_MAPPINGS.get(key)
+                or ""
+            )
+            label = str(label).strip()
+
+        labels[key] = _fallback_field_label(key) if _is_unhelpful_field_label(label, key) else label
+    return labels
 
 
 def _run_extraction_legacy(
@@ -451,9 +525,10 @@ def _run_extraction_legacy(
     common_items: list[dict[str, Any]],
     template_contexts: dict[str, Any] | None,
     full_pdf_text: str,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
-    if not configure_gemini_client():
-        raise RuntimeError("Gemini client configuration failed.")
+    if not configure_gemini_client(user_id=user_id):
+        raise RuntimeError("Please set your Gemini API key in settings before processing.")
 
     contexts = template_contexts or {}
     if not contexts:
@@ -467,11 +542,14 @@ def _run_extraction_legacy(
         effective_common_items,
         contexts,
         full_pdf_text,
+        user_id=user_id,
     )
+    field_labels = _build_field_labels_from_contexts(contexts, filled_data.keys())
     return {
         "filled_data": filled_data,
         "confidence_scores": confidence_scores,
         "suggestions": suggestions,
+        "field_labels": field_labels,
         "metadata": {
             "pipeline_version": "legacy_v1",
             "fields_total": len(contexts),
@@ -515,10 +593,11 @@ def run_extraction_v2_full_prefill(
     common_items: list[dict[str, Any]],
     template_contexts: dict[str, Any] | None,
     full_pdf_text: str,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
     """Two-pass full-template prefill (fast pass + auto-repair pass)."""
-    if not configure_gemini_client():
-        raise RuntimeError("Gemini client configuration failed.")
+    if not configure_gemini_client(user_id=user_id):
+        raise RuntimeError("Please set your Gemini API key in settings before processing.")
 
     contexts = template_contexts or {}
     if not contexts:
@@ -573,6 +652,7 @@ def run_extraction_v2_full_prefill(
         template_placeholder_contexts=contexts,
         full_pdf_text=full_pdf_text,
         pass_options=pass1_options,
+        user_id=user_id,
     )
 
     pass1_confidence = estimate_extraction_confidence(
@@ -623,6 +703,7 @@ def run_extraction_v2_full_prefill(
             template_placeholder_contexts=repair_contexts,
             full_pdf_text=full_pdf_text,
             pass_options=pass2_options,
+            user_id=user_id,
         )
 
     merged_data = dict(pass1_data)
@@ -704,10 +785,12 @@ def run_extraction_v2_full_prefill(
         "critical_text_no_evidence_blanked": int(resolver_metrics.get("critical_text_no_evidence_blanked", 0)),
         "critical_text_targets": critical_text_targets,
     }
+    field_labels = _build_field_labels_from_contexts(contexts, final_data.keys())
     return {
         "filled_data": final_data,
         "confidence_scores": final_confidence,
         "suggestions": final_suggestions,
+        "field_labels": field_labels,
         "metadata": metadata,
     }
 
@@ -773,20 +856,28 @@ def generate_document(
     machine_data: dict[str, Any],
     filled_data: dict[str, str],
     common_items: list[dict[str, Any]],
+    user_id: int | None = None,
 ) -> tuple[str, bool]:
     """Generate GOA output file and return output path + sortstar flag."""
     _, template_file_path, is_sortstar_template = get_contexts_for_machine(machine_data)
     machine_name = machine_data.get("machine_name") or "machine"
-    clean_name = re.sub(r'[\\/*?:"<>|]', "_", machine_name.replace(" ", "_"))
 
     filled_payload = dict(filled_data)
     filled_payload["options_listing"] = build_options_listing(machine_data, common_items, filled_payload)
 
+    output_path = _build_unique_output_path(
+        machine_data,
+        machine_name,
+        is_sortstar_template=is_sortstar_template,
+        user_id=user_id,
+    )
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
     if is_sortstar_template:
-        output_path = f"output_SORTSTAR_{clean_name}_GOA.docx"
         fill_word_document_from_llm_data(template_file_path, filled_payload, output_path)
     else:
-        output_path = f"output_{clean_name}_GOA.html"
         if not generate_goa_form():
             raise RuntimeError("Failed to generate HTML GOA form from Excel template.")
         fill_and_generate_html(str(OUTPUT_HTML_PATH), filled_payload, output_path)
@@ -807,19 +898,25 @@ def save_generated_template(
         raise RuntimeError(f"Failed to save template data for machine_id={machine_id}.")
 
 
-def load_machine_by_id(machine_id: int) -> dict[str, Any] | None:
+def load_machine_by_id(
+    machine_id: int,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any] | None:
     """Load machine row and parsed JSON data."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
         cursor = conn.cursor()
+        scope_sql, scope_params = _owner_scope_clause(owner_user_id, include_all_for_admin, alias="c")
         cursor.execute(
-            """
-            SELECT id, machine_name, client_quote_ref, machine_data_json, processing_date
-            FROM machines
-            WHERE id = ?
+            f"""
+            SELECT m.id, m.machine_name, m.client_quote_ref, m.machine_data_json, m.processing_date
+            FROM machines m
+            JOIN clients c ON c.quote_ref = m.client_quote_ref
+            WHERE m.id = ?{scope_sql}
             """,
-            (machine_id,),
+            (machine_id, *scope_params),
         )
         row = cursor.fetchone()
         if not row:
@@ -838,7 +935,11 @@ def load_machine_name(machine_id: int) -> str:
     return ""
 
 
-def get_machine_id_from_data(machine_data: dict[str, Any]) -> int | None:
+def get_machine_id_from_data(
+    machine_data: dict[str, Any],
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> int | None:
     """Resolve a machine id from machine payload or machine name lookup."""
     machine_id = machine_data.get("id")
     if isinstance(machine_id, int):
@@ -848,22 +949,46 @@ def get_machine_id_from_data(machine_data: dict[str, Any]) -> int | None:
     if not machine_name:
         return None
 
-    matches = find_machines_by_name(machine_name)
+    matches = find_machines_by_name(
+        machine_name,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
     if matches:
         return int(matches[0]["id"])
 
     quote_ref = machine_data.get("client_quote_ref")
     if quote_ref:
-        for machine in load_machines_for_quote(quote_ref):
+        for machine in load_machines_for_quote(
+            quote_ref,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        ):
             if machine.get("machine_name") == machine_name:
                 return int(machine["id"])
     return None
 
 
-def load_quote_artifacts(quote_ref: str) -> dict[str, Any]:
+def load_quote_artifacts(
+    quote_ref: str,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any]:
     """Load full text, items, and machine data for a quote."""
+    authorized_quote = get_client_by_quote_ref(
+        quote_ref,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
+    if not authorized_quote:
+        return {"quote_ref": quote_ref, "full_pdf_text": "", "pdf_filename": "", "items": [], "machines": []}
+
     document = load_document_content(quote_ref) or {}
-    machines = load_machines_for_quote(quote_ref)
+    machines = load_machines_for_quote(
+        quote_ref,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
     # Preserve original quote line-item order for regrouping screens.
     # Reconstructing from machine payloads can reorder items (main/add-ons/common),
     # which breaks index-based assignment of add-ons between selected machines.

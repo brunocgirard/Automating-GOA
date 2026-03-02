@@ -1,13 +1,18 @@
 import type {
   AtRiskSummary,
+  CreateUserRequest,
   LineItem,
+  LoginRequest,
   MachineData,
   ProjectCreateRequest,
   ProjectDetail,
   ProjectInsight,
   ProjectListItem,
+  RegisterRequest,
+  ResetPasswordRequest,
   StallAlert,
   TaskStatus,
+  User,
 } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -155,6 +160,20 @@ interface ApiGoaFormSchemaResponse {
   field_count: number;
 }
 
+interface ApiUser {
+  id: number;
+  username: string;
+  display_name?: string | null;
+  role: string;
+  is_active: boolean;
+  has_gemini_key: boolean;
+}
+
+interface ApiGeminiKeyTestResponse {
+  valid: boolean;
+  error?: string | null;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -233,6 +252,10 @@ export interface ExtractionResult {
   filled_data: Record<string, string>;
   confidence_scores: Record<string, number>;
   suggestions: Array<Record<string, unknown>>;
+  field_labels?: Record<string, string>;
+  queued?: boolean;
+  queue_message?: string | null;
+  queue_wait_ms?: number | null;
   metadata?: ExtractionMetadata | null;
 }
 
@@ -628,6 +651,27 @@ export interface QuoteWorkflowStatus {
   shippingModifiedDate: string | null;
   corSaved: boolean;
   corModifiedDate: string | null;
+}
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+function normalizeUser(payload: ApiUser): User {
+  return {
+    id: payload.id,
+    username: asString(payload.username),
+    display_name: payload.display_name ?? null,
+    role: asString(payload.role) || "standard",
+    is_active: Boolean(payload.is_active),
+    has_gemini_key: Boolean(payload.has_gemini_key),
+  };
 }
 
 function createClientId(name: string, fallback: string): string {
@@ -1061,6 +1105,7 @@ async function fetchJson<T>(
       ...(options?.headers ?? {}),
     },
     cache: "no-store",
+    credentials: "include",
   });
 
   if (allow404 && res.status === 404) {
@@ -1075,13 +1120,104 @@ async function fetchJson<T>(
     } catch {
       // keep default detail
     }
-    throw new Error(detail);
+    throw new ApiError(detail, res.status);
   }
 
   if (res.status === 204) {
     return null;
   }
   return (await res.json()) as T;
+}
+
+export async function login(payload: LoginRequest): Promise<User> {
+  const response = await fetchJson<ApiUser>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!response) {
+    throw new Error("Login failed.");
+  }
+  return normalizeUser(response);
+}
+
+export async function register(payload: RegisterRequest): Promise<User> {
+  const response = await fetchJson<ApiUser>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!response) {
+    throw new Error("Registration failed.");
+  }
+  return normalizeUser(response);
+}
+
+export async function logout(): Promise<void> {
+  await fetchJson("/api/auth/logout", { method: "POST" });
+}
+
+export async function fetchCurrentUser(): Promise<User> {
+  const response = await fetchJson<ApiUser>("/api/auth/me");
+  if (!response) {
+    throw new Error("Failed to load current user.");
+  }
+  return normalizeUser(response);
+}
+
+export async function listUsers(): Promise<User[]> {
+  const response = (await fetchJson<ApiUser[]>("/api/auth/users")) ?? [];
+  return response.map((row) => normalizeUser(row));
+}
+
+export async function createUser(payload: CreateUserRequest): Promise<User> {
+  const response = await fetchJson<ApiUser>("/api/auth/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!response) {
+    throw new Error("Failed to create user.");
+  }
+  return normalizeUser(response);
+}
+
+export async function resetUserPassword(userId: number, payload: ResetPasswordRequest): Promise<void> {
+  await fetchJson(`/api/auth/users/${userId}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function setMyGeminiKey(apiKey: string): Promise<User> {
+  const response = await fetchJson<ApiUser>("/api/auth/me/gemini-key", {
+    method: "PUT",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  if (!response) {
+    throw new Error("Failed to save Gemini API key.");
+  }
+  return normalizeUser(response);
+}
+
+export async function removeMyGeminiKey(): Promise<User> {
+  const response = await fetchJson<ApiUser>("/api/auth/me/gemini-key", {
+    method: "DELETE",
+  });
+  if (!response) {
+    throw new Error("Failed to remove Gemini API key.");
+  }
+  return normalizeUser(response);
+}
+
+export async function testMyGeminiKey(): Promise<{ valid: boolean; error: string | null }> {
+  const response = await fetchJson<ApiGeminiKeyTestResponse>("/api/auth/me/gemini-key/test", {
+    method: "POST",
+  });
+  if (!response) {
+    return { valid: false, error: "Unable to test Gemini API key." };
+  }
+  return {
+    valid: Boolean(response.valid),
+    error: response.error ?? null,
+  };
 }
 
 async function fetchQuoteRowsInternal(): Promise<QuoteRow[]> {
@@ -1572,6 +1708,7 @@ export async function generateShippingDocs(
       "Content-Type": "application/json",
     },
     cache: "no-store",
+    credentials: "include",
     body: JSON.stringify({
       document_type: documentType,
       output_format: outputFormat,
@@ -1734,6 +1871,7 @@ export async function generateCorDoc(
       "Content-Type": "application/json",
     },
     cache: "no-store",
+    credentials: "include",
     body: JSON.stringify({
       cor_data: options?.corData,
       cor_document_id:

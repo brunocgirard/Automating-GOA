@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-
-from api.main import app
 from api.routers import processing as processing_router
 
 
@@ -21,7 +18,7 @@ def _payload() -> dict:
     }
 
 
-def test_extract_endpoint_legacy_contract_compatibility(monkeypatch):
+def test_extract_endpoint_legacy_contract_compatibility(monkeypatch, auth_client):
     """Endpoint must keep legacy top-level fields unchanged."""
     monkeypatch.setattr(
         processing_router,
@@ -33,8 +30,7 @@ def test_extract_endpoint_legacy_contract_compatibility(monkeypatch):
         },
     )
 
-    client = TestClient(app)
-    response = client.post("/api/processing/extract", json=_payload())
+    response = auth_client.post("/api/processing/extract", json=_payload())
 
     assert response.status_code == 200
     body = response.json()
@@ -45,7 +41,7 @@ def test_extract_endpoint_legacy_contract_compatibility(monkeypatch):
     assert body["metadata"] is None
 
 
-def test_extract_endpoint_metadata_presence_and_sanity(monkeypatch):
+def test_extract_endpoint_metadata_presence_and_sanity(monkeypatch, auth_client):
     """Endpoint should return non-breaking metadata for V2 diagnostics."""
     monkeypatch.setattr(
         processing_router,
@@ -73,8 +69,7 @@ def test_extract_endpoint_metadata_presence_and_sanity(monkeypatch):
         },
     )
 
-    client = TestClient(app)
-    response = client.post("/api/processing/extract", json=_payload())
+    response = auth_client.post("/api/processing/extract", json=_payload())
 
     assert response.status_code == 200
     body = response.json()

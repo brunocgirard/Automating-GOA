@@ -11,10 +11,11 @@ from functools import lru_cache
 from html import escape
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from docx import Document
 
+from api.dependencies.auth import require_authenticated_user
 from api.models.schemas import (
     ExtractionRequest,
     ExtractionResponse,
@@ -38,6 +39,7 @@ from api.models.schemas import (
     ProcessingArtifactsResponse,
     PricedItemResponse,
 )
+from api.routers._helpers import require, scope_kwargs, try_advance_pm_task, user_id
 from api.services.processing_service import (
     build_options_listing,
     generate_document,
@@ -47,15 +49,17 @@ from api.services.processing_service import (
     run_extraction,
     save_generated_template,
 )
+from api.services.extraction_concurrency import acquire_extraction_slot
 from src.utils.db import (
     DB_PATH,
+    get_client_by_quote_ref,
+    get_connection,
     group_items_by_confirmed_machines,
     load_document_content,
     load_goa_modifications,
     load_machines_for_quote,
     load_machine_template_data,
     load_priced_items_for_quote,
-    mark_project_task_done_for_quote,
     save_machines_data,
     save_bulk_goa_modifications,
     save_machine_template_data,
@@ -217,12 +221,18 @@ def _resolve_sortstar_template_path() -> str:
     return SORTSTAR_TEMPLATE_CANDIDATES[0]
 
 
-def _resolve_output_path(existing_file_path: str | None, machine_id: int, machine_name: str) -> str:
+def _resolve_output_path(
+    existing_file_path: str | None,
+    machine_id: int,
+    machine_name: str,
+    user_id: int | None = None,
+) -> str:
     if existing_file_path and existing_file_path.lower().endswith((".html", ".docx", ".pdf")):
         return existing_file_path
-    if is_sortstar_machine(machine_name):
-        return f"output_SORTSTAR_{_sanitize_machine_name(machine_name)}_GOA.docx"
-    return f"output_{machine_id}_{_sanitize_machine_name(machine_name)}_GOA.html"
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    safe_name = _sanitize_machine_name(machine_name)
+    resolved_user_id = user_id if isinstance(user_id, int) and user_id > 0 else 0
+    return os.path.join("output", f"GOA_{machine_id}_{safe_name}_u{resolved_user_id}_{timestamp}")
 
 
 def _resolve_generated_file_abs_path(file_path: str | None) -> str | None:
@@ -253,23 +263,6 @@ def _resolve_output_options(options: GoaOutputOptions | None) -> GoaOutputOption
         label_overrides={str(key): str(value) for key, value in (options.label_overrides or {}).items()},
         format="html",
     )
-
-
-def _mark_goa_task_done_for_quote(quote_ref: str, source: str) -> None:
-    normalized_quote_ref = str(quote_ref or "").strip()
-    if not normalized_quote_ref:
-        return
-    try:
-        mark_project_task_done_for_quote(
-            normalized_quote_ref,
-            "GOA(s)",
-            notes=f"Auto-advanced from {source}",
-        )
-    except Exception as exc:
-        print(
-            "Warning: failed to auto-advance PM task 'GOA(s)' "
-            f"for quote_ref='{normalized_quote_ref}': {exc}"
-        )
 
 
 def _serialize_output_options(options: GoaOutputOptions | None) -> dict[str, Any] | None:
@@ -377,6 +370,23 @@ def _render_sortstar_docx_preview_html(file_path: str | None) -> str:
 </html>"""
 
 
+def _fallback_field_label(field_key: str) -> str:
+    without_suffix = field_key[:-6] if field_key.endswith("_check") else field_key
+    cleaned = re.sub(r"[_-]+", " ", without_suffix).strip()
+    return re.sub(r"\b\w", lambda match: match.group(0).upper(), cleaned) if cleaned else field_key
+
+
+def _is_unhelpful_field_label(label: str, field_key: str) -> bool:
+    normalized = label.strip().lower()
+    if not normalized:
+        return True
+    if normalized == field_key.strip().lower():
+        return True
+    if normalized in {"placeholder", "field", "unknown", "n/a", "na", "tbd"}:
+        return True
+    return "{{" in label or "}}" in label
+
+
 def _build_field_labels(template_row: dict[str, Any], template_data: dict[str, Any]) -> dict[str, str]:
     if not template_data:
         return {}
@@ -389,19 +399,28 @@ def _build_field_labels(template_row: dict[str, Any], template_data: dict[str, A
     )
     labels: dict[str, str] = {}
     for key in template_data.keys():
-        mapped = mapping.get(key)
-        if isinstance(mapped, str) and mapped.strip():
-            labels[key] = mapped.strip()
+        mapped = str(mapping.get(key) or "").strip()
+        labels[key] = _fallback_field_label(key) if _is_unhelpful_field_label(mapped, key) else mapped
     return labels
 
 
-def _load_goa_template_row(machine_template_id: int) -> dict[str, Any] | None:
-    conn = sqlite3.connect(DB_PATH)
+def _load_goa_template_row(
+    machine_template_id: int,
+    *,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any] | None:
+    conn = get_connection(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
         cursor = conn.cursor()
+        owner_sql = ""
+        params: list[Any] = [machine_template_id]
+        if not include_all_for_admin and isinstance(owner_user_id, int) and owner_user_id > 0:
+            owner_sql = " AND c.owner_user_id = ?"
+            params.append(owner_user_id)
         cursor.execute(
-            """
+            f"""
             SELECT
                 mt.id AS machine_template_id,
                 mt.machine_id,
@@ -414,9 +433,10 @@ def _load_goa_template_row(machine_template_id: int) -> dict[str, Any] | None:
                 m.client_quote_ref AS quote_ref
             FROM machine_templates mt
             JOIN machines m ON m.id = mt.machine_id
-            WHERE mt.id = ?
+            JOIN clients c ON c.quote_ref = m.client_quote_ref
+            WHERE mt.id = ?{owner_sql}
             """,
-            (machine_template_id,),
+            tuple(params),
         )
         row = cursor.fetchone()
         if not row:
@@ -441,8 +461,14 @@ def _load_goa_template_row(machine_template_id: int) -> dict[str, Any] | None:
         conn.close()
 
 
-def _list_goa_templates(quote_ref: str | None = None, machine_id: int | None = None) -> list[dict[str, Any]]:
-    conn = sqlite3.connect(DB_PATH)
+def _list_goa_templates(
+    quote_ref: str | None = None,
+    machine_id: int | None = None,
+    *,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> list[dict[str, Any]]:
+    conn = get_connection(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
         cursor = conn.cursor()
@@ -457,9 +483,13 @@ def _list_goa_templates(quote_ref: str | None = None, machine_id: int | None = N
                 m.client_quote_ref AS quote_ref
             FROM machine_templates mt
             JOIN machines m ON m.id = mt.machine_id
+            JOIN clients c ON c.quote_ref = m.client_quote_ref
             WHERE 1=1
         """
         params: list[Any] = []
+        if not include_all_for_admin and isinstance(owner_user_id, int) and owner_user_id > 0:
+            query += " AND c.owner_user_id = ?"
+            params.append(owner_user_id)
 
         if quote_ref:
             query += " AND m.client_quote_ref = ?"
@@ -480,6 +510,7 @@ def _generate_goa_output(
     filled_data: dict[str, str],
     *,
     output_options: GoaOutputOptions | None = None,
+    user_id: int | None = None,
 ) -> tuple[str, bool]:
     resolved_options = _resolve_output_options(output_options)
     is_sortstar_template = _is_sortstar_template_row(template_row)
@@ -487,12 +518,28 @@ def _generate_goa_output(
         template_row.get("generated_file_path"),
         int(template_row["machine_id"]),
         str(template_row.get("machine_name", "machine")),
+        user_id=user_id,
     )
+
+    resolved_user_id = user_id if isinstance(user_id, int) and user_id > 0 else 0
+    if not template_row.get("generated_file_path"):
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        safe_name = _sanitize_machine_name(str(template_row.get("machine_name", "machine")))
+        quote_ref = re.sub(r"[^A-Za-z0-9._-]+", "_", str(template_row.get("quote_ref") or "quote")).strip("._-")
+        safe_quote_ref = quote_ref or "quote"
+        output_ext = "docx" if is_sortstar_template else "html"
+        output_path = os.path.join(
+            "output",
+            f"GOA_{safe_quote_ref}_{safe_name}_u{resolved_user_id}_{timestamp}.{output_ext}",
+        )
 
     if is_sortstar_template:
         docx_path = output_path
         if not docx_path.lower().endswith(".docx"):
             docx_path = os.path.splitext(docx_path)[0] + ".docx"
+        output_dir = os.path.dirname(docx_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
 
         fill_word_document_from_llm_data(_resolve_sortstar_template_path(), filled_data, docx_path)
 
@@ -523,14 +570,23 @@ def identify_machines(payload: IdentifyMachinesRequest) -> dict:
 
 
 @router.post("/group", response_model=MachineGroupingResponse)
-def group_items(payload: MachineGroupingRequest) -> dict:
+def group_items(
+    payload: MachineGroupingRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict:
     grouped = group_items_by_confirmed_machines(
         payload.all_items,
         payload.main_machine_indices,
         payload.common_option_indices,
     )
     if payload.quote_ref:
-        saved = save_machines_data(payload.quote_ref, grouped)
+        require(get_client_by_quote_ref(payload.quote_ref, **scope_kwargs(current_user)), "Quote not found.")
+
+        saved = save_machines_data(
+            payload.quote_ref,
+            grouped,
+            owner_user_id=user_id(current_user),
+        )
         if not saved:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -538,7 +594,7 @@ def group_items(payload: MachineGroupingRequest) -> dict:
             )
 
         persisted_machines: list[dict[str, Any]] = []
-        for machine_row in load_machines_for_quote(payload.quote_ref):
+        for machine_row in load_machines_for_quote(payload.quote_ref, **scope_kwargs(current_user)):
             machine_payload = machine_row.get("machine_data")
             if not isinstance(machine_payload, dict):
                 continue
@@ -555,13 +611,22 @@ def group_items(payload: MachineGroupingRequest) -> dict:
 
 
 @router.get("/items/{quote_ref}", response_model=list[PricedItemResponse])
-def get_quote_items(quote_ref: str) -> list[dict]:
+def get_quote_items(
+    quote_ref: str,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> list[dict]:
+    require(get_client_by_quote_ref(quote_ref, **scope_kwargs(current_user)), "Quote not found.")
     return load_priced_items_for_quote(quote_ref)
 
 
 @router.get("/artifacts/{quote_ref}", response_model=ProcessingArtifactsResponse)
-def get_quote_artifacts(quote_ref: str) -> dict:
-    data = load_quote_artifacts(quote_ref)
+def get_quote_artifacts(
+    quote_ref: str,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict:
+    require(get_client_by_quote_ref(quote_ref, **scope_kwargs(current_user)), "Quote not found.")
+
+    data = load_quote_artifacts(quote_ref, **scope_kwargs(current_user))
     return {
         "quote_ref": data["quote_ref"],
         "full_pdf_text": data.get("full_pdf_text", ""),
@@ -572,10 +637,11 @@ def get_quote_artifacts(quote_ref: str) -> dict:
 
 
 @router.get("/machine-data/{machine_id}", response_model=MachineProcessingDataResponse)
-def get_machine_data(machine_id: int) -> dict[str, Any]:
-    machine_row = load_machine_by_id(machine_id)
-    if not machine_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Machine not found.")
+def get_machine_data(
+    machine_id: int,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    machine_row = require(load_machine_by_id(machine_id, **scope_kwargs(current_user)), "Machine not found.")
 
     machine_data = machine_row.get("machine_data")
     if not isinstance(machine_data, dict):
@@ -612,41 +678,65 @@ def get_machine_data(machine_id: int) -> dict[str, Any]:
 
 
 @router.post("/extract", response_model=ExtractionResponse)
-def extract_machine_fields(payload: ExtractionRequest) -> dict:
+def extract_machine_fields(
+    payload: ExtractionRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict:
+    current_user_id = user_id(current_user)
     try:
-        result = run_extraction(
-            machine_data=payload.machine_data,
-            common_items=payload.common_items,
-            template_contexts=payload.template_contexts,
-            full_pdf_text=payload.full_pdf_text,
-        )
+        with acquire_extraction_slot(current_user_id) as slot:
+            result = run_extraction(
+                machine_data=payload.machine_data,
+                common_items=payload.common_items,
+                template_contexts=payload.template_contexts,
+                full_pdf_text=payload.full_pdf_text,
+                user_id=current_user_id,
+            )
     except Exception as exc:
+        detail = str(exc)
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if "Gemini API key" in detail
+            else status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Machine extraction failed: {exc}",
+            status_code=status_code,
+            detail=f"Machine extraction failed: {detail}",
         ) from exc
 
     return {
         "filled_data": result["filled_data"],
         "confidence_scores": result["confidence_scores"],
         "suggestions": result["suggestions"],
+        "field_labels": result.get("field_labels", {}),
+        "queued": slot.queued,
+        "queue_message": slot.queue_message,
+        "queue_wait_ms": slot.wait_ms if slot.queued else None,
         "metadata": result.get("metadata"),
     }
 
 
 @router.post("/generate", response_model=GenerateDocumentResponse)
-def generate_machine_document(payload: GenerateDocumentRequest) -> dict:
+def generate_machine_document(
+    payload: GenerateDocumentRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict:
     try:
         common_items = payload.common_items or payload.machine_data.get("common_items", []) or []
         file_path, _ = generate_document(
             machine_data=payload.machine_data,
             filled_data=payload.filled_data,
             common_items=common_items,
+            user_id=user_id(current_user),
         )
 
-        machine_id = payload.machine_id or get_machine_id_from_data(payload.machine_data)
+        machine_id = payload.machine_id or get_machine_id_from_data(
+            payload.machine_data,
+            **scope_kwargs(current_user),
+        )
         machine_template_id: int | None = None
         if machine_id:
+            require(load_machine_by_id(machine_id, **scope_kwargs(current_user)), "Machine not found.")
             template_payload = dict(payload.filled_data)
             template_payload["options_listing"] = build_options_listing(
                 payload.machine_data,
@@ -660,10 +750,10 @@ def generate_machine_document(payload: GenerateDocumentRequest) -> dict:
 
         quote_ref = str(payload.machine_data.get("client_quote_ref") or "").strip()
         if not quote_ref and machine_id:
-            machine_row = load_machine_by_id(machine_id)
+            machine_row = load_machine_by_id(machine_id, **scope_kwargs(current_user))
             if machine_row:
                 quote_ref = str(machine_row.get("client_quote_ref") or "").strip()
-        _mark_goa_task_done_for_quote(quote_ref, "processing.generate")
+        try_advance_pm_task(quote_ref, "GOA(s)", "processing.generate", current_user)
 
         return {
             "file_path": file_path,
@@ -719,10 +809,14 @@ def get_goa_form_schema() -> dict[str, Any]:
 
 
 @router.get("/goa-form/{machine_template_id}", response_model=GoaFormDetailResponse)
-def get_saved_goa_form(machine_template_id: int) -> dict[str, Any]:
-    template_row = _load_goa_template_row(machine_template_id)
-    if not template_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GOA form not found.")
+def get_saved_goa_form(
+    machine_template_id: int,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    template_row = require(
+        _load_goa_template_row(machine_template_id, **scope_kwargs(current_user)),
+        "GOA form not found.",
+    )
 
     template_data = dict(template_row.get("template_data", {}))
     modifications = load_goa_modifications(machine_template_id)
@@ -764,10 +858,15 @@ def get_saved_goa_form(machine_template_id: int) -> dict[str, Any]:
 
 
 @router.put("/goa-form/{machine_template_id}", response_model=GoaFormSaveResponse)
-def save_goa_form(machine_template_id: int, payload: GoaFormSaveRequest) -> dict[str, Any]:
-    template_row = _load_goa_template_row(machine_template_id)
-    if not template_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GOA form not found.")
+def save_goa_form(
+    machine_template_id: int,
+    payload: GoaFormSaveRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    template_row = require(
+        _load_goa_template_row(machine_template_id, **scope_kwargs(current_user)),
+        "GOA form not found.",
+    )
 
     saved_output_options = _load_saved_output_options(template_row)
     requested_output_options = (
@@ -846,6 +945,7 @@ def save_goa_form(machine_template_id: int, payload: GoaFormSaveRequest) -> dict
                 template_row,
                 filled_data,
                 output_options=response_output_options,
+                user_id=user_id(current_user),
             )
         except RuntimeError as exc:
             raise HTTPException(
@@ -869,9 +969,14 @@ def save_goa_form(machine_template_id: int, payload: GoaFormSaveRequest) -> dict
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to persist generated GOA document path.",
             )
-        _mark_goa_task_done_for_quote(str(template_row.get("quote_ref") or ""), "processing.goa-form.save")
+        try_advance_pm_task(
+            str(template_row.get("quote_ref") or ""),
+            "GOA(s)",
+            "processing.goa-form.save",
+            current_user,
+        )
 
-    refreshed_row = _load_goa_template_row(machine_template_id)
+    refreshed_row = _load_goa_template_row(machine_template_id, **scope_kwargs(current_user))
     if not refreshed_row:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -909,10 +1014,12 @@ def save_goa_form(machine_template_id: int, payload: GoaFormSaveRequest) -> dict
 def generate_goa_form_document(
     machine_template_id: int,
     payload: GoaGenerateDocumentRequest | None = None,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> dict[str, Any]:
-    template_row = _load_goa_template_row(machine_template_id)
-    if not template_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GOA form not found.")
+    template_row = require(
+        _load_goa_template_row(machine_template_id, **scope_kwargs(current_user)),
+        "GOA form not found.",
+    )
 
     filled_data = _normalize_template_data(template_row.get("template_data", {}))
     for change in load_goa_modifications(machine_template_id):
@@ -937,6 +1044,7 @@ def generate_goa_form_document(
             template_row,
             filled_data,
             output_options=output_options,
+            user_id=user_id(current_user),
         )
     except RuntimeError as exc:
         raise HTTPException(
@@ -960,9 +1068,14 @@ def generate_goa_form_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to persist generated GOA document path.",
         )
-    _mark_goa_task_done_for_quote(str(template_row.get("quote_ref") or ""), "processing.goa-form.generate")
+    try_advance_pm_task(
+        str(template_row.get("quote_ref") or ""),
+        "GOA(s)",
+        "processing.goa-form.generate",
+        current_user,
+    )
 
-    refreshed_row = _load_goa_template_row(machine_template_id)
+    refreshed_row = _load_goa_template_row(machine_template_id, **scope_kwargs(current_user))
     if not refreshed_row:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -996,10 +1109,14 @@ def generate_goa_form_document(
 
 
 @direct_router.post("/generate-document", response_model=GoaGenerateDocumentApiResponse)
-def generate_document_with_options(payload: GoaGenerateDocumentApiRequest) -> dict[str, Any]:
-    template_row = _load_goa_template_row(payload.machine_template_id)
-    if not template_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GOA form not found.")
+def generate_document_with_options(
+    payload: GoaGenerateDocumentApiRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    template_row = require(
+        _load_goa_template_row(payload.machine_template_id, **scope_kwargs(current_user)),
+        "GOA form not found.",
+    )
 
     existing_data = _normalize_template_data(template_row.get("template_data", {}))
     incoming_data = _normalize_template_data(payload.filled_data)
@@ -1022,6 +1139,7 @@ def generate_document_with_options(payload: GoaGenerateDocumentApiRequest) -> di
             template_row,
             filled_data,
             output_options=output_options,
+            user_id=user_id(current_user),
         )
     except RuntimeError as exc:
         raise HTTPException(
@@ -1045,7 +1163,12 @@ def generate_document_with_options(payload: GoaGenerateDocumentApiRequest) -> di
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to persist generated document path.",
         )
-    _mark_goa_task_done_for_quote(str(template_row.get("quote_ref") or ""), "processing.direct.generate-document")
+    try_advance_pm_task(
+        str(template_row.get("quote_ref") or ""),
+        "GOA(s)",
+        "processing.direct.generate-document",
+        current_user,
+    )
 
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output_format = "docx" if output_path.lower().endswith(".docx") else "html"
@@ -1059,10 +1182,14 @@ def generate_document_with_options(payload: GoaGenerateDocumentApiRequest) -> di
 
 
 @router.get("/goa-form/{machine_template_id}/file")
-def download_goa_form_file(machine_template_id: int) -> FileResponse:
-    template_row = _load_goa_template_row(machine_template_id)
-    if not template_row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GOA form not found.")
+def download_goa_form_file(
+    machine_template_id: int,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> FileResponse:
+    template_row = require(
+        _load_goa_template_row(machine_template_id, **scope_kwargs(current_user)),
+        "GOA form not found.",
+    )
 
     resolved_path = _resolve_generated_file_abs_path(template_row.get("generated_file_path"))
     if not resolved_path:
@@ -1089,8 +1216,13 @@ def download_goa_form_file(machine_template_id: int) -> FileResponse:
 def list_goa_forms(
     quote_ref: str | None = Query(default=None),
     machine_id: int | None = Query(default=None),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> list[dict[str, Any]]:
-    rows = _list_goa_templates(quote_ref=quote_ref, machine_id=machine_id)
+    rows = _list_goa_templates(
+        quote_ref=quote_ref,
+        machine_id=machine_id,
+        **scope_kwargs(current_user),
+    )
     return [
         {
             "machine_template_id": row["machine_template_id"],

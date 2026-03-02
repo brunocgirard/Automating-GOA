@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from docx import Document
-from fastapi.testclient import TestClient
 
-from api.main import app
 from api.routers import cor as cor_router
 from api.services import cor_doc_service as cor_service
 from api.services.cor_doc_service import build_cor_prefill_data
+from tests.helpers import DocCapture, stub_get_client_by_id
 
 
 def test_build_cor_prefill_data_maps_quote_and_starts_with_blank_line():
@@ -58,17 +57,16 @@ def test_build_cor_prefill_data_maps_quote_and_starts_with_blank_line():
     assert payload["lineItems"][0]["selectedItems"] == ""
 
 
-def test_cor_prefill_endpoint_uses_client_info_and_blank_rows(monkeypatch):
+def test_cor_prefill_endpoint_uses_client_info_and_blank_rows(monkeypatch, auth_client):
     quote = {
         "id": 5,
         "quote_ref": "Q-5",
         "customer_name": "Client A",
         "company": "Jordan Name",
     }
-    monkeypatch.setattr(cor_router, "get_client_by_id", lambda quote_id: quote if quote_id == 5 else None)
+    monkeypatch.setattr("api.routers._helpers.get_client_by_id", stub_get_client_by_id(quote, expected_id=5))
 
-    client = TestClient(app)
-    response = client.get("/api/cor/5/prefill")
+    response = auth_client.get("/api/cor/5/prefill")
 
     assert response.status_code == 200
     payload = response.json()
@@ -92,7 +90,7 @@ def test_cor_prefill_endpoint_uses_client_info_and_blank_rows(monkeypatch):
     assert payload["cor_data"]["lineItems"][0]["selectedItems"] == ""
 
 
-def test_cor_save_endpoint_persists_quote_context(monkeypatch):
+def test_cor_save_endpoint_persists_quote_context(monkeypatch, auth_client):
     quote = {
         "id": 9,
         "quote_ref": "Q-9",
@@ -107,41 +105,28 @@ def test_cor_save_endpoint_persists_quote_context(monkeypatch):
     }
     captured: dict[str, Any] = {}
 
-    monkeypatch.setattr(cor_router, "get_client_by_id", lambda quote_id: quote if quote_id == 9 else None)
+    monkeypatch.setattr("api.routers._helpers.get_client_by_id", stub_get_client_by_id(quote, expected_id=9))
     monkeypatch.setattr(
         cor_router,
         "load_machines_for_quote",
-        lambda quote_ref: [
+        lambda quote_ref, **_kwargs: [
             {"machine_name": "Automatic Bottle Unscrambler Model: SortStar", "machine_data": {"machine_type": "main"}},
             {"machine_name": "Bottle Filler Model: X", "machine_data": {"machine_type": "main"}},
         ] if quote_ref == "Q-9" else [],
     )
 
-    def fake_save(
-        _quote_ref: str,
-        cor_data: dict[str, Any],
-        cor_document_id: int | None = None,
-        create_new: bool = False,
-        cor_no: str | None = None,
-        description: str | None = None,
-    ) -> dict[str, Any]:
-        captured["cor_data"] = cor_data
-        captured["cor_document_id"] = cor_document_id
-        captured["create_new"] = create_new
-        captured["cor_no"] = cor_no
-        captured["description"] = description
-        return {
+    save_capture = DocCapture(
+        return_factory=lambda _quote_ref, cor_data, cor_document_id=None, create_new=False, cor_no=None, description=None: {
             "id": 17,
             "cor_no": cor_data.get("corNo", ""),
             "description": cor_data.get("revisionDescription", ""),
             "modified_date": "2026-02-18 11:30:00",
             "cor_data": cor_data,
         }
+    )
+    monkeypatch.setattr(cor_router, "save_cor_document", save_capture)
 
-    monkeypatch.setattr(cor_router, "save_cor_document", fake_save)
-
-    client = TestClient(app)
-    response = client.post(
+    response = auth_client.post(
         "/api/cor/9/save",
         json={
             "cor_data": {
@@ -163,6 +148,13 @@ def test_cor_save_endpoint_persists_quote_context(monkeypatch):
         },
     )
 
+    args, kwargs = save_capture.calls[0]
+    captured["cor_data"] = args[1]
+    captured["cor_document_id"] = kwargs["cor_document_id"]
+    captured["create_new"] = kwargs["create_new"]
+    captured["cor_no"] = kwargs["cor_no"]
+    captured["description"] = kwargs["description"]
+
     assert response.status_code == 200
     saved_payload = captured["cor_data"]
     assert isinstance(saved_payload, dict)
@@ -181,9 +173,9 @@ def test_cor_save_endpoint_persists_quote_context(monkeypatch):
     assert response.json()["cor_document_id"] == 17
 
 
-def test_cor_revisions_endpoint_returns_numbered_entries(monkeypatch):
+def test_cor_revisions_endpoint_returns_numbered_entries(monkeypatch, auth_client):
     quote = {"id": 11, "quote_ref": "Q-11"}
-    monkeypatch.setattr(cor_router, "get_client_by_id", lambda quote_id: quote if quote_id == 11 else None)
+    monkeypatch.setattr("api.routers._helpers.get_client_by_id", stub_get_client_by_id(quote, expected_id=11))
     monkeypatch.setattr(
         cor_router,
         "list_cor_documents",
@@ -205,8 +197,7 @@ def test_cor_revisions_endpoint_returns_numbered_entries(monkeypatch):
         ],
     )
 
-    client = TestClient(app)
-    response = client.get("/api/cor/11/revisions")
+    response = auth_client.get("/api/cor/11/revisions")
     payload = response.json()
 
     assert response.status_code == 200

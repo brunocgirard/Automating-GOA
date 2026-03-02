@@ -16,10 +16,15 @@ Global State:
 
 import os
 import traceback
+import hashlib
+from threading import Lock
 from typing import Any
 
 from google import genai as _google_genai
 from dotenv import load_dotenv
+
+from api.services.auth_service import decrypt_gemini_key
+from src.utils.db import get_user_gemini_key
 
 
 def _prepare_generation_config(
@@ -137,8 +142,14 @@ genai = _GenAICompatNamespace()
 # Global variable for the model, initialized once
 GENERATIVE_MODEL = None
 MODEL_CACHE: dict[str, Any] = {}
+USER_MODEL_CACHE: dict[tuple[int, str, str], Any] = {}
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
 MODEL_NAME_ENV_VAR = "GOA_LLM_MODEL"
+_MODEL_CACHE_LOCK = Lock()
+
+
+class MissingUserGeminiKeyError(RuntimeError):
+    """Raised when a user has no configured Gemini API key."""
 
 
 def get_configured_model_name() -> str:
@@ -151,21 +162,95 @@ def get_configured_model_name() -> str:
     return configured_name or DEFAULT_GEMINI_MODEL
 
 
-def _create_model(model_name: str) -> Any | None:
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+def _hash_key_for_cache(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+def _resolve_user_api_key(user_id: int) -> str:
+    encrypted_key = get_user_gemini_key(user_id)
+    if not encrypted_key:
+        raise MissingUserGeminiKeyError(
+            "Please set your Gemini API key in settings before processing."
+        )
+    try:
+        api_key = decrypt_gemini_key(encrypted_key)
+    except Exception as exc:
+        raise MissingUserGeminiKeyError(
+            "Stored Gemini API key could not be decrypted. Please set it again."
+        ) from exc
+    if not str(api_key or "").strip():
+        raise MissingUserGeminiKeyError(
+            "Please set your Gemini API key in settings before processing."
+        )
+    return api_key
+
+
+def _create_model(model_name: str, api_key: str | None = None) -> Any | None:
+    resolved_api_key = str(api_key or "").strip() or str(os.getenv("GOOGLE_API_KEY") or "").strip()
+    if not resolved_api_key:
         print("Error: GOOGLE_API_KEY not found in .env file or environment variables.")
         return None
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=resolved_api_key)
     return genai.GenerativeModel(model_name)
 
 
-def configure_gemini_client():
+def get_model_for_user(user_id: int, model_name_override: str | None = None) -> Any:
+    if not isinstance(user_id, int) or user_id <= 0:
+        raise MissingUserGeminiKeyError("Invalid authenticated user id.")
+
+    model_name = str(model_name_override or "").strip() or get_configured_model_name()
+    api_key = _resolve_user_api_key(user_id)
+    key_fingerprint = _hash_key_for_cache(api_key)
+    cache_key = (user_id, model_name, key_fingerprint)
+
+    with _MODEL_CACHE_LOCK:
+        cached = USER_MODEL_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Remove stale entries for this user+model after key rotation.
+        stale_keys = [
+            key for key in USER_MODEL_CACHE.keys()
+            if key[0] == user_id and key[1] == model_name and key != cache_key
+        ]
+        for stale_key in stale_keys:
+            USER_MODEL_CACHE.pop(stale_key, None)
+
+    model = _create_model(model_name, api_key=api_key)
+    if model is None:
+        raise RuntimeError(f"Failed to initialize Gemini model '{model_name}'.")
+
+    with _MODEL_CACHE_LOCK:
+        USER_MODEL_CACHE[cache_key] = model
+    return model
+
+
+def invalidate_user_client_cache(user_id: int) -> None:
+    if not isinstance(user_id, int) or user_id <= 0:
+        return
+    with _MODEL_CACHE_LOCK:
+        stale_keys = [key for key in USER_MODEL_CACHE.keys() if key[0] == user_id]
+        for stale_key in stale_keys:
+            USER_MODEL_CACHE.pop(stale_key, None)
+
+
+def configure_gemini_client(user_id: int | None = None):
     """
     Loads the API key from .env and configures the Gemini client.
     Returns True if configuration is successful, False otherwise.
     """
     global GENERATIVE_MODEL
+    if isinstance(user_id, int) and user_id > 0:
+        try:
+            GENERATIVE_MODEL = get_model_for_user(user_id)
+            return True
+        except MissingUserGeminiKeyError as exc:
+            print(str(exc))
+            return False
+        except Exception as exc:
+            print(f"Error configuring user Gemini client: {exc}")
+            return False
+
     if GENERATIVE_MODEL is not None:
         return True # Already configured
 
@@ -219,7 +304,7 @@ def check_model_usage():
         traceback.print_exc()
 
 
-def get_generative_model(model_name_override: str | None = None):
+def get_generative_model(model_name_override: str | None = None, user_id: int | None = None):
     """
     Returns the configured generative model instance.
     Initializes the client if not already configured.
@@ -229,6 +314,20 @@ def get_generative_model(model_name_override: str | None = None):
     """
     global GENERATIVE_MODEL
     requested_model_name = str(model_name_override or "").strip()
+
+    if isinstance(user_id, int) and user_id > 0:
+        try:
+            return get_model_for_user(
+                user_id=user_id,
+                model_name_override=requested_model_name or None,
+            )
+        except MissingUserGeminiKeyError as exc:
+            print(str(exc))
+            return None
+        except Exception as user_model_error:
+            print(f"Error creating user Gemini model: {user_model_error}")
+            return None
+
     if not requested_model_name:
         if GENERATIVE_MODEL is None:
             if not configure_gemini_client():

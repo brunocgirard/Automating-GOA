@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useFetch } from "@/hooks/use-fetch";
 import { fetchClients, type Client } from "@/lib/api";
 
 const navItems = [
@@ -44,21 +45,14 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const [search, setSearch] = useState("");
-  const [clients, setClients] = useState<Client[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    void fetchClients()
-      .then((rows) => {
-        if (active) setClients(rows);
-      })
-      .catch(() => {
-        if (active) setClients([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { data: clientsData } = useFetch<Client[]>(async () => {
+    try {
+      return await fetchClients();
+    } catch {
+      return [];
+    }
+  });
+  const clients = clientsData ?? [];
 
   const filteredClients = useMemo(
     () =>

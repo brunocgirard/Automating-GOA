@@ -7,7 +7,15 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
-from .base import DB_PATH, get_connection
+from .base import (
+    DB_PATH,
+    get_connection,
+    owner_scope_clause,
+    row_to_dict,
+    rows_to_dicts,
+    safe_json_loads,
+    timestamp,
+)
 
 PROJECT_PHASES: tuple[str, ...] = (
     "sales_onboarding",
@@ -47,12 +55,6 @@ DEFAULT_TASKS: tuple[tuple[int, str, str], ...] = (
     (25, "Pre-Ship Payments", "delivery"),
     (26, "Shipment", "delivery"),
 )
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 def _today() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
@@ -91,12 +93,7 @@ def _is_complete(status: str | None) -> bool:
 
 
 def _parse_json(value: str | None) -> dict[str, Any] | None:
-    if not value:
-        return None
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
-        return None
+    parsed = safe_json_loads(value)
     if isinstance(parsed, dict):
         return parsed
     return None
@@ -273,15 +270,23 @@ def _load_project_tasks(cursor: sqlite3.Cursor, project_id: int) -> list[dict[st
         """,
         (project_id,),
     )
-    return [dict(row) for row in cursor.fetchall()]
+    return rows_to_dicts(cursor.fetchall())
 
 
 def _load_latest_project_for_quote_ref(
     cursor: sqlite3.Cursor,
     quote_ref: str,
+    *,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
 ) -> dict[str, Any] | None:
+    scope_sql, scope_params = owner_scope_clause(
+        owner_user_id,
+        include_all_for_admin,
+        table_alias="projects",
+    )
     cursor.execute(
-        """
+        f"""
         SELECT
             id,
             project_name,
@@ -297,14 +302,14 @@ def _load_latest_project_for_quote_ref(
             created_date,
             modified_date
         FROM projects
-        WHERE quote_ref = ?
+        WHERE quote_ref = ?{scope_sql}
         ORDER BY modified_date DESC, id DESC
         LIMIT 1
         """,
-        (quote_ref,),
+        (quote_ref, *scope_params),
     )
     row = cursor.fetchone()
-    return dict(row) if row else None
+    return row_to_dict(row)
 
 
 def _project_with_metrics(
@@ -338,11 +343,15 @@ def _upsert_project_risk(cursor: sqlite3.Cursor, project_id: int, risk_level: st
         SET risk_level = ?, modified_date = ?
         WHERE id = ?
         """,
-        (risk_level, _timestamp(), project_id),
+        (risk_level, timestamp(), project_id),
     )
 
 
-def create_project(data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, Any] | None:
+def create_project(
+    data: dict[str, Any],
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+) -> dict[str, Any] | None:
     """Create a project and seed default PM tasks."""
     project_name = str(data.get("project_name") or "").strip()
     customer_name = str(data.get("customer_name") or "").strip()
@@ -357,6 +366,15 @@ def create_project(data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, An
     start_date = str(data.get("start_date") or "").strip() or None
     target_end_date = str(data.get("target_end_date") or "").strip() or None
     actual_end_date = str(data.get("actual_end_date") or "").strip() or None
+    resolved_owner_user_id = (
+        owner_user_id
+        if isinstance(owner_user_id, int) and owner_user_id > 0
+        else (
+            int(data.get("owner_user_id"))
+            if isinstance(data.get("owner_user_id"), int) and int(data.get("owner_user_id")) > 0
+            else None
+        )
+    )
     gantt_data = data.get("gantt_data")
     if isinstance(gantt_data, dict):
         gantt_data_json = json.dumps(gantt_data)
@@ -367,7 +385,7 @@ def create_project(data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, An
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
-        now = _timestamp()
+        now = timestamp()
         cursor.execute(
             """
             INSERT INTO projects (
@@ -382,8 +400,9 @@ def create_project(data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, An
                 actual_end_date,
                 gantt_data_json,
                 created_date,
-                modified_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                modified_date,
+                owner_user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 project_name,
@@ -398,6 +417,7 @@ def create_project(data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, An
                 gantt_data_json,
                 now,
                 now,
+                resolved_owner_user_id,
             ),
         )
         project_id = int(cursor.lastrowid)
@@ -432,7 +452,12 @@ def create_project(data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, An
             task_rows,
         )
         conn.commit()
-        return load_project(project_id, db_path=db_path)
+        return load_project(
+            project_id,
+            db_path=db_path,
+            owner_user_id=resolved_owner_user_id,
+            include_all_for_admin=False,
+        )
     except Exception as exc:
         print(f"Error creating project: {exc}")
         return None
@@ -441,7 +466,12 @@ def create_project(data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, An
             conn.close()
 
 
-def load_project_by_quote_ref(quote_ref: str, db_path: str = DB_PATH) -> dict[str, Any] | None:
+def load_project_by_quote_ref(
+    quote_ref: str,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any] | None:
     """Load the most recently modified project for a quote reference."""
     normalized_quote_ref = str(quote_ref or "").strip()
     if not normalized_quote_ref:
@@ -452,7 +482,12 @@ def load_project_by_quote_ref(quote_ref: str, db_path: str = DB_PATH) -> dict[st
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        row = _load_latest_project_for_quote_ref(cursor, normalized_quote_ref)
+        row = _load_latest_project_for_quote_ref(
+            cursor,
+            normalized_quote_ref,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
         if not row:
             return None
         tasks = _load_project_tasks(cursor, int(row["id"]))
@@ -477,6 +512,8 @@ def ensure_project_for_quote(
     machine_summary: str | None = None,
     start_date: str | None = None,
     target_end_date: str | None = None,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
     db_path: str = DB_PATH,
 ) -> dict[str, Any] | None:
     """Create a project for the quote if one doesn't already exist."""
@@ -485,7 +522,12 @@ def ensure_project_for_quote(
     if not normalized_quote_ref or not normalized_customer:
         return None
 
-    existing = load_project_by_quote_ref(normalized_quote_ref, db_path=db_path)
+    existing = load_project_by_quote_ref(
+        normalized_quote_ref,
+        db_path=db_path,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
     if existing:
         return existing
 
@@ -504,20 +546,31 @@ def ensure_project_for_quote(
             "machine_summary": str(machine_summary or "").strip() or None,
             "start_date": str(start_date or "").strip() or _today(),
             "target_end_date": str(target_end_date or "").strip() or None,
+            "owner_user_id": owner_user_id if isinstance(owner_user_id, int) and owner_user_id > 0 else None,
         },
         db_path=db_path,
+        owner_user_id=owner_user_id,
     )
 
 
-def load_all_projects(db_path: str = DB_PATH) -> list[dict[str, Any]]:
+def load_all_projects(
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> list[dict[str, Any]]:
     """Load project list with computed PM metrics."""
     conn = None
     try:
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="projects",
+        )
         cursor.execute(
-            """
+            f"""
             SELECT
                 id,
                 project_name,
@@ -533,10 +586,12 @@ def load_all_projects(db_path: str = DB_PATH) -> list[dict[str, Any]]:
                 created_date,
                 modified_date
             FROM projects
+            WHERE 1 = 1{scope_sql}
             ORDER BY modified_date DESC, id DESC
-            """
+            """,
+            tuple(scope_params),
         )
-        rows = [dict(row) for row in cursor.fetchall()]
+        rows = rows_to_dicts(cursor.fetchall())
         projects: list[dict[str, Any]] = []
         for row in rows:
             tasks = _load_project_tasks(cursor, int(row["id"]))
@@ -560,7 +615,12 @@ def load_all_projects(db_path: str = DB_PATH) -> list[dict[str, Any]]:
             conn.close()
 
 
-def load_project(project_id: int, db_path: str = DB_PATH) -> dict[str, Any] | None:
+def load_project(
+    project_id: int,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any] | None:
     """Load a single project with tasks and parsed gantt payload."""
     if not isinstance(project_id, int) or project_id <= 0:
         return None
@@ -570,8 +630,13 @@ def load_project(project_id: int, db_path: str = DB_PATH) -> dict[str, Any] | No
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="projects",
+        )
         cursor.execute(
-            """
+            f"""
             SELECT
                 id,
                 project_name,
@@ -587,15 +652,15 @@ def load_project(project_id: int, db_path: str = DB_PATH) -> dict[str, Any] | No
                 created_date,
                 modified_date
             FROM projects
-            WHERE id = ?
+            WHERE id = ?{scope_sql}
             LIMIT 1
             """,
-            (project_id,),
+            (project_id, *scope_params),
         )
         row = cursor.fetchone()
         if not row:
             return None
-        project = dict(row)
+        project = row_to_dict(row) or {}
         tasks = _load_project_tasks(cursor, project_id)
         payload = _project_with_metrics(cursor, project, tasks)
         payload["tasks"] = tasks
@@ -615,7 +680,13 @@ def load_project(project_id: int, db_path: str = DB_PATH) -> dict[str, Any] | No
             conn.close()
 
 
-def update_project(project_id: int, data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, Any] | None:
+def update_project(
+    project_id: int,
+    data: dict[str, Any],
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any] | None:
     """Update editable project fields and return refreshed payload."""
     if not isinstance(project_id, int) or project_id <= 0:
         return None
@@ -662,24 +733,36 @@ def update_project(project_id: int, data: dict[str, Any], db_path: str = DB_PATH
             params.append(json.dumps(gantt_data))
 
     if not updates:
-        return load_project(project_id, db_path=db_path)
+        return load_project(
+            project_id,
+            db_path=db_path,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
 
     conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="projects",
+        )
         updates.append("modified_date = ?")
-        params.append(_timestamp())
-        params.append(project_id)
+        params.append(timestamp())
+        params.extend([project_id, *scope_params])
         cursor.execute(
             f"""
             UPDATE projects
             SET {", ".join(updates)}
-            WHERE id = ?
+            WHERE id = ?{scope_sql}
             """,
             params,
         )
         conn.commit()
+        if cursor.rowcount == 0:
+            return None
     except Exception as exc:
         print(f"Error updating project {project_id}: {exc}")
         return None
@@ -687,10 +770,20 @@ def update_project(project_id: int, data: dict[str, Any], db_path: str = DB_PATH
         if conn:
             conn.close()
 
-    return load_project(project_id, db_path=db_path)
+    return load_project(
+        project_id,
+        db_path=db_path,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
 
 
-def delete_project(project_id: int, db_path: str = DB_PATH) -> bool:
+def delete_project(
+    project_id: int,
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> bool:
     """Delete a project and all related project tasks/transitions."""
     if not isinstance(project_id, int) or project_id <= 0:
         return False
@@ -699,7 +792,15 @@ def delete_project(project_id: int, db_path: str = DB_PATH) -> bool:
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="projects",
+        )
+        cursor.execute(
+            f"DELETE FROM projects WHERE id = ?{scope_sql}",
+            (project_id, *scope_params),
+        )
         conn.commit()
         return cursor.rowcount > 0
     except Exception as exc:
@@ -715,6 +816,8 @@ def update_task_status(
     new_status: str,
     notes: str | None = None,
     db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
 ) -> dict[str, Any] | None:
     """Update task status with transition logging and risk recalculation."""
     raw_status = str(new_status or "").strip().lower()
@@ -727,14 +830,30 @@ def update_task_status(
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="p",
+        )
         cursor.execute(
-            """
-            SELECT id, project_id, task_name, task_order, phase, status, planned_date, actual_date, notes, modified_date
-            FROM project_tasks
-            WHERE id = ?
+            f"""
+            SELECT
+                pt.id AS id,
+                pt.project_id,
+                pt.task_name,
+                pt.task_order,
+                pt.phase,
+                pt.status,
+                pt.planned_date,
+                pt.actual_date,
+                pt.notes,
+                pt.modified_date
+            FROM project_tasks pt
+            JOIN projects p ON p.id = pt.project_id
+            WHERE pt.id = ?{scope_sql}
             LIMIT 1
             """,
-            (task_id,),
+            (task_id, *scope_params),
         )
         existing = cursor.fetchone()
         if not existing:
@@ -742,7 +861,7 @@ def update_task_status(
 
         task = dict(existing)
         old_status = _normalize_status(task.get("status"))
-        now = _timestamp()
+        now = timestamp()
 
         actual_date: str | None = task.get("actual_date")
         if normalized_status == "done":
@@ -819,7 +938,7 @@ def update_task_status(
             (task_id,),
         )
         refreshed = cursor.fetchone()
-        return dict(refreshed) if refreshed else None
+        return row_to_dict(refreshed)
     except Exception as exc:
         print(f"Error updating task {task_id}: {exc}")
         return None
@@ -828,7 +947,13 @@ def update_task_status(
             conn.close()
 
 
-def save_gantt_data(project_id: int, gantt_data: dict[str, Any], db_path: str = DB_PATH) -> dict[str, Any] | None:
+def save_gantt_data(
+    project_id: int,
+    gantt_data: dict[str, Any],
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any] | None:
     """Persist parsed Gantt payload on a project."""
     if not isinstance(project_id, int) or project_id <= 0:
         return None
@@ -837,19 +962,29 @@ def save_gantt_data(project_id: int, gantt_data: dict[str, Any], db_path: str = 
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="projects",
+        )
         cursor.execute(
-            """
+            f"""
             UPDATE projects
             SET gantt_data_json = ?, modified_date = ?
-            WHERE id = ?
+            WHERE id = ?{scope_sql}
             """,
-            (json.dumps(gantt_data or {}), _timestamp(), project_id),
+            (json.dumps(gantt_data or {}), timestamp(), project_id, *scope_params),
         )
         if cursor.rowcount == 0:
             conn.commit()
             return None
         conn.commit()
-        return load_project(project_id, db_path=db_path)
+        return load_project(
+            project_id,
+            db_path=db_path,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
     except Exception as exc:
         print(f"Error saving Gantt data for project {project_id}: {exc}")
         return None
@@ -862,6 +997,8 @@ def detect_stalls(
     threshold_days: int = 7,
     project_id: int | None = None,
     db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
 ) -> list[dict[str, Any]]:
     """Detect in-progress tasks stalled beyond threshold days."""
     threshold = max(int(threshold_days), 0)
@@ -870,9 +1007,14 @@ def detect_stalls(
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        scope_sql, scope_params = owner_scope_clause(
+            owner_user_id,
+            include_all_for_admin,
+            table_alias="p",
+        )
         if project_id is None:
             cursor.execute(
-                """
+                f"""
                 SELECT
                     pt.id AS task_id,
                     pt.project_id,
@@ -883,11 +1025,13 @@ def detect_stalls(
                 FROM project_tasks pt
                 JOIN projects p ON p.id = pt.project_id
                 WHERE pt.status = 'in_progress'
-                """
+                {scope_sql}
+                """,
+                tuple(scope_params),
             )
         else:
             cursor.execute(
-                """
+                f"""
                 SELECT
                     pt.id AS task_id,
                     pt.project_id,
@@ -899,10 +1043,11 @@ def detect_stalls(
                 JOIN projects p ON p.id = pt.project_id
                 WHERE pt.status = 'in_progress'
                   AND pt.project_id = ?
+                {scope_sql}
                 """,
-                (project_id,),
+                (project_id, *scope_params),
             )
-        rows = [dict(row) for row in cursor.fetchall()]
+        rows = rows_to_dicts(cursor.fetchall())
 
         results: list[dict[str, Any]] = []
         for row in rows:
@@ -944,9 +1089,18 @@ def detect_stalls(
             conn.close()
 
 
-def get_at_risk_summary(db_path: str = DB_PATH) -> dict[str, Any]:
+def get_at_risk_summary(
+    db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> dict[str, Any]:
     """Return high-level at-risk summary for dashboard alert strip."""
-    stalled = detect_stalls(threshold_days=7, db_path=db_path)
+    stalled = detect_stalls(
+        threshold_days=7,
+        db_path=db_path,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
     by_project: dict[int, dict[str, Any]] = {}
     for entry in stalled:
         project_id = int(entry["project_id"])
@@ -973,6 +1127,8 @@ def mark_project_task_done_for_quote(
     *,
     notes: str | None = None,
     db_path: str = DB_PATH,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
 ) -> dict[str, Any] | None:
     """Mark a named PM task as done for the latest project linked to a quote."""
     normalized_quote_ref = str(quote_ref or "").strip()
@@ -986,7 +1142,12 @@ def mark_project_task_done_for_quote(
         conn = get_connection(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        project_row = _load_latest_project_for_quote_ref(cursor, normalized_quote_ref)
+        project_row = _load_latest_project_for_quote_ref(
+            cursor,
+            normalized_quote_ref,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
         if not project_row:
             return None
         project_id = int(project_row["id"])
@@ -1023,4 +1184,11 @@ def mark_project_task_done_for_quote(
 
     if current_status == "done":
         return None
-    return update_task_status(task_id, "done", notes=notes, db_path=db_path)
+    return update_task_status(
+        task_id,
+        "done",
+        notes=notes,
+        db_path=db_path,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )

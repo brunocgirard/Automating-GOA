@@ -12,10 +12,16 @@ from typing import Any
 from docx import Document
 from docx.shared import Pt
 
+from api.services._doc_helpers import (
+    current_date as _current_date,
+    replace_tokens_in_container,
+    slugify as _slugify,
+    to_float as _to_float,
+    to_text as _to_text,
+)
+
 OUTPUT_ROOT = Path("data/generated/cor")
 TEMPLATE_PATH = Path("Mail_merge/Customer_Oxxxx_COR.docx")
-TOKEN_PATTERN = re.compile(r"\u00ab[^\u00bb]+\u00bb")
-DOUBLE_BRACE_TOKEN_PATTERN = re.compile(r"\{\{\s*[^{}]+\s*\}\}")
 TEMPLATE_PATH_CANDIDATES = (
     Path("Mail_merge/Customer_Oxxxx_COR1.docx"),
     Path("Mail_merge/Customer_Oxxxx_COR.docx"),
@@ -149,7 +155,13 @@ def _replace_core_tokens(document: Document, cor_data: dict[str, Any]) -> None:
         "Comment": comments,
     }
 
-    _replace_tokens_in_container(document, replacements, initiator_value)
+    replace_tokens_in_container(
+        document,
+        replacements,
+        preprocess_text=lambda text: _replace_initiator_pair(text, initiator_value),
+        postprocess_text=_cleanup_or_phrase,
+        recurse_nested_tables=False,
+    )
     for section in document.sections:
         containers = (
             section.header,
@@ -160,17 +172,13 @@ def _replace_core_tokens(document: Document, cor_data: dict[str, Any]) -> None:
             section.even_page_footer,
         )
         for container in containers:
-            _replace_tokens_in_container(container, replacements, initiator_value)
-
-
-def _replace_tokens_in_container(container: Any, replacements: dict[str, str], initiator_value: str) -> None:
-    for paragraph in container.paragraphs:
-        _replace_tokens_in_paragraph(paragraph, replacements, initiator_value)
-    for table in container.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    _replace_tokens_in_paragraph(paragraph, replacements, initiator_value)
+            replace_tokens_in_container(
+                container,
+                replacements,
+                preprocess_text=lambda text: _replace_initiator_pair(text, initiator_value),
+                postprocess_text=_cleanup_or_phrase,
+                recurse_nested_tables=False,
+            )
 
 
 def _fill_cor_template_tables(document: Document, cor_data: dict[str, Any]) -> None:
@@ -236,11 +244,29 @@ def _fill_cor_template_tables(document: Document, cor_data: dict[str, Any]) -> N
 
 
 def _fill_justification_rows(table: Any, justification: str) -> None:
-    if len(table.rows) < 8:
+    if len(table.rows) < 2:
         return
 
-    # Rows 1..6 are the editable justification area in this template.
-    justification_rows = list(range(1, 7))
+    # Justification starts at row 1 and ends before the first section marker row.
+    marker_rows = [
+        idx
+        for marker in (
+            "PAYMENT TERMS",
+            "IMPACT OF CHANGE TO DELIVERABLES",
+            "IMPACT ON DELIVERY DATE",
+            "Qty. Req",
+        )
+        if (idx := _find_row_index_containing(table, marker)) is not None and idx > 1
+    ]
+    if marker_rows:
+        justification_rows = list(range(1, min(marker_rows)))
+    else:
+        # Fallback to the original template assumption (rows 1..6).
+        justification_rows = list(range(1, min(len(table.rows), 7)))
+
+    if not justification_rows:
+        return
+
     lines = [line.strip() for line in justification.splitlines() if line.strip()]
     if not lines and justification.strip():
         lines = [justification.strip()]
@@ -360,31 +386,6 @@ def _find_row_index_containing(table: Any, needle: str) -> int | None:
     return None
 
 
-def _replace_tokens_in_paragraph(paragraph: Any, replacements: dict[str, str], initiator_value: str) -> None:
-    raw_text = "".join(run.text for run in paragraph.runs)
-    if not raw_text:
-        raw_text = paragraph.text or ""
-    if not raw_text:
-        return
-
-    updated = _replace_initiator_pair(raw_text, initiator_value)
-    for token, value in replacements.items():
-        updated = updated.replace(f"\u00ab{token}\u00bb", value)
-        updated = re.sub(r"\{\{\s*" + re.escape(token) + r"\s*\}\}", value, updated)
-    updated = TOKEN_PATTERN.sub("", updated)
-    updated = DOUBLE_BRACE_TOKEN_PATTERN.sub("", updated)
-    updated = _cleanup_or_phrase(updated)
-
-    if updated == raw_text:
-        return
-    if paragraph.runs:
-        paragraph.runs[0].text = updated
-        for run in paragraph.runs[1:]:
-            run.text = ""
-    else:
-        paragraph.text = updated
-
-
 def _fill_comments_rows(document: Document, comments: str) -> None:
     for table in document.tables:
         comments_idx = _find_row_index_containing(table, "COMMENTS:")
@@ -428,33 +429,6 @@ def _format_amount(value: float) -> str:
     if value <= 0:
         return "0"
     return f"{value:,.2f}"
-
-
-def _to_text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""
-
-
-def _to_float(value: Any) -> float:
-    if value is None:
-        return 0.0
-    if isinstance(value, (int, float)):
-        return float(value)
-    cleaned = re.sub(r"[^0-9.\-]", "", str(value))
-    if not cleaned:
-        return 0.0
-    try:
-        return float(cleaned)
-    except ValueError:
-        return 0.0
-
-
-def _current_date() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
-
-
-def _slugify(value: str) -> str:
-    normalized = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip()).strip("-")
-    return normalized.lower()
 
 
 def _cleanup_or_phrase(value: str) -> str:

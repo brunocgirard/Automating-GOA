@@ -451,12 +451,14 @@ SORTSTAR_EXPLICIT_MAPPINGS = {
     "hmi_pc_check": "OPTIONAL SYSTEMS > Control Specifications > HMI PC Upgrade",
     "hmi_size5.7_check": "OPTIONAL SYSTEMS > Control Specifications > HMI Size 5.7\"",
     "hmi_size10_check": "OPTIONAL SYSTEMS > Control Specifications > HMI Size 10\"",
+    "hmi_size15_check": "OPTIONAL SYSTEMS > Control Specifications > HMI Size 15\"",
     "cpp_1axis_check": "OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 1 Axis",
     "cpp_2axis_check": "OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 2 Axis – U-shaped",
     "cpp_3axis_check": "OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 3 Axis",
     "rts_secomea_check": "OPTIONAL SYSTEMS > Remote Technical Service (Secomea)",
     "rts_none_check": "OPTIONAL SYSTEMS > Remote Technical Service > None",
     "rts_co_check": "OPTIONAL SYSTEMS > Remote Technical Service > Connection Only",
+    "rts_y_check": "OPTIONAL SYSTEMS > Remote Technical Service > Yes",
     "eg_none_check": "OPTIONAL SYSTEMS > Euro guarding > None",
     "eg_pnl_check": "OPTIONAL SYSTEMS > Euro guarding > Panel material Lexan",
     "eg_pmtg_check": "OPTIONAL SYSTEMS > Euro guarding > Tempered glass",
@@ -486,6 +488,7 @@ SORTSTAR_EXPLICIT_MAPPINGS = {
     "wrts_y_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Remote Tech. Service Yes",
     "stpc_none_check": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning None",
     "stpc_yes": "OPTIONAL SYSTEMS > Packaging & Transport & Warranty & Install & Spares > Start-up Commissioning Yes – no. of days",
+    "option_listing": "Option Listing > Additional Quoted Options",
     "options_listing": "Option Listing > Additional Quoted Options"
 }
 
@@ -728,10 +731,13 @@ def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[D
     # First, use the existing function to get the placeholder details
     placeholder_details = {}
     schema = {}
+    template_placeholders = set(extract_placeholders(template_path))
 
     # Populate schema with explicitly mapped placeholders first if they are provided
     if explicit_mappings:
         for ph_key, description in explicit_mappings.items():
+            if template_placeholders and ph_key not in template_placeholders:
+                continue
             field_type = "boolean" if ph_key.endswith("_check") else "string"
             # Basic section/subsection parsing from description string
             delimiter = " > " if is_sortstar else " - "
@@ -857,7 +863,7 @@ def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[D
                 schema[ph_key]["negative_indicators"] = negative_indicators
             
         # Ensure all placeholders have schema entries
-        all_phs = extract_placeholders(template_path)
+        all_phs = list(template_placeholders) if template_placeholders else extract_placeholders(template_path)
         for ph in all_phs:
             if ph not in schema:
                 field_type = "boolean" if ph.endswith("_check") else "string"

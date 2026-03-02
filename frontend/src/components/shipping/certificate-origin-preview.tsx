@@ -1,11 +1,8 @@
 import type { ShippingDocumentState } from "@/lib/api";
+import { line } from "@/lib/doc-utils";
 
 interface CertificateOriginPreviewProps {
   state: ShippingDocumentState;
-}
-
-function line(value: string): string {
-  return value.trim() || "-";
 }
 
 export function CertificateOriginPreview({ state }: CertificateOriginPreviewProps) {

@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
-import tempfile
 from pathlib import Path
 from typing import Any
 
+from api.services._doc_helpers import write_temp_file
 from src.llm.client import configure_gemini_client, get_generative_model, genai
 from src.utils.db import save_client_info, save_document_content, save_machines_data, save_priced_items
 from src.utils.pdf_utils import extract_full_pdf_text, extract_line_item_details, identify_machines_from_items
@@ -76,9 +76,7 @@ def extract_client_profile(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
     temp_pdf_path: str | None = None
     quote_ref = Path(filename).stem
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(pdf_bytes)
-            temp_pdf_path = tmp_file.name
+        temp_pdf_path = write_temp_file(".pdf", pdf_bytes)
 
         full_text = extract_full_pdf_text(temp_pdf_path)
         line_items = extract_line_item_details(temp_pdf_path)

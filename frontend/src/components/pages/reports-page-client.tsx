@@ -8,6 +8,7 @@ import {
   type Client,
   type QuoteRow,
 } from "@/lib/api";
+import { useFetch } from "@/hooks/use-fetch";
 import {
   Select,
   SelectContent,
@@ -24,35 +25,21 @@ import { sanitizeHtml } from "@/lib/sanitize-html";
 import { Printer, Download } from "lucide-react";
 
 export default function ReportsPage() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [quotes, setQuotes] = useState<QuoteRow[]>([]);
   const [selectedClient, setSelectedClient] = useState("__all__");
   const [selectedQuote, setSelectedQuote] = useState("");
   const [reportHtml, setReportHtml] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    void Promise.all([fetchClients(), fetchQuotes()])
-      .then(([clientRows, quoteRows]) => {
-        if (!active) return;
-        setClients(clientRows);
-        setQuotes(quoteRows);
-      })
-      .catch((err) => {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load reports data.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const {
+    data: initialData,
+    loading,
+    error: loadError,
+  } = useFetch<{ clients: Client[]; quotes: QuoteRow[] }>(async () => {
+    const [clients, quotes] = await Promise.all([fetchClients(), fetchQuotes()]);
+    return { clients, quotes };
+  });
+  const clients = initialData?.clients ?? [];
+  const quotes = initialData?.quotes ?? [];
+  const error = reportError ?? loadError;
 
   const filteredQuotes = useMemo(() => {
     if (selectedClient === "__all__") return quotes;
@@ -76,7 +63,7 @@ export default function ReportsPage() {
       .catch((err) => {
         if (active) {
           setReportHtml(null);
-          setError(err instanceof Error ? err.message : "Failed to load report.");
+          setReportError(err instanceof Error ? err.message : "Failed to load report.");
         }
       });
 
@@ -145,7 +132,7 @@ export default function ReportsPage() {
                   setSelectedClient(value);
                   setSelectedQuote("");
                   setReportHtml(null);
-                  setError(null);
+                  setReportError(null);
                 }}
               >
                 <SelectTrigger className="w-full sm:w-[260px]">
@@ -169,7 +156,7 @@ export default function ReportsPage() {
                 onValueChange={(value) => {
                   setSelectedQuote(value);
                   setReportHtml(null);
-                  setError(null);
+                  setReportError(null);
                 }}
               >
                 <SelectTrigger className="w-full sm:w-[360px]">

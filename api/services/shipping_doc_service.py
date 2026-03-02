@@ -15,6 +15,14 @@ from typing import Any
 
 from docx import Document
 
+from api.services._doc_helpers import (
+    replace_tokens_in_cell as _replace_tokens_in_cell,
+    replace_tokens_in_container as _replace_tokens_in_container,
+    slugify as _slugify,
+    to_float as _to_float,
+    to_text as _to_text,
+)
+
 HS_CODE_FILE = Path("src/data/hs_codes.json")
 OUTPUT_ROOT = Path("data/generated/shipping")
 
@@ -38,9 +46,6 @@ TEMPLATE_PATHS = {
     "commercial_invoice": Path("Mail_merge/Commercial Invoice.docx"),
     "certificate_origin": Path("Mail_merge/CERTIFICATION OF ORIGIN_NAFTA.docx"),
 }
-
-TOKEN_PATTERN = re.compile(r"\u00ab[^\u00bb]+\u00bb")
-DOUBLE_BRACE_TOKEN_PATTERN = re.compile(r"\{\{\s*[^{}]+\s*\}\}")
 
 DEFAULT_META: dict[str, str] = {
     "brokerInfo": "",
@@ -712,7 +717,12 @@ def _fill_repeating_machine_rows(document: Document, machine_rows: list[dict[str
                     "Next Record": "",
                 }
             for cell in row.cells:
-                _replace_tokens_in_cell(cell, replacement, {})
+                _replace_tokens_in_cell(
+                    cell,
+                    replacement,
+                    {},
+                    postprocess_text=_normalize_token_whitespace,
+                )
 
 
 def _find_repeating_row_indices(table: Any) -> list[int]:
@@ -739,7 +749,12 @@ def _replace_tokens_in_document(
     token_replacements: dict[str, str],
     literal_replacements: dict[str, str],
 ) -> None:
-    _replace_tokens_in_container(document, token_replacements, literal_replacements)
+    _replace_tokens_in_container(
+        document,
+        token_replacements,
+        literal_replacements,
+        postprocess_text=_normalize_token_whitespace,
+    )
 
     for section in document.sections:
         containers = (
@@ -751,69 +766,12 @@ def _replace_tokens_in_document(
             section.even_page_footer,
         )
         for container in containers:
-            _replace_tokens_in_container(container, token_replacements, literal_replacements)
-
-
-def _replace_tokens_in_container(
-    container: Any,
-    token_replacements: dict[str, str],
-    literal_replacements: dict[str, str],
-) -> None:
-    for paragraph in container.paragraphs:
-        _replace_tokens_in_paragraph(paragraph, token_replacements, literal_replacements)
-
-    for table in container.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                _replace_tokens_in_cell(cell, token_replacements, literal_replacements)
-
-
-def _replace_tokens_in_cell(
-    cell: Any,
-    token_replacements: dict[str, str],
-    literal_replacements: dict[str, str],
-) -> None:
-    for paragraph in cell.paragraphs:
-        _replace_tokens_in_paragraph(paragraph, token_replacements, literal_replacements)
-    for nested in cell.tables:
-        for row in nested.rows:
-            for nested_cell in row.cells:
-                _replace_tokens_in_cell(nested_cell, token_replacements, literal_replacements)
-
-
-def _replace_tokens_in_paragraph(
-    paragraph: Any,
-    token_replacements: dict[str, str],
-    literal_replacements: dict[str, str],
-) -> None:
-    raw_text = "".join(run.text for run in paragraph.runs)
-    if not raw_text:
-        raw_text = paragraph.text or ""
-    if not raw_text:
-        return
-
-    updated_text = raw_text
-    for token, value in token_replacements.items():
-        updated_text = updated_text.replace(f"\u00ab{token}\u00bb", value)
-        updated_text = re.sub(r"\{\{\s*" + re.escape(token) + r"\s*\}\}", value, updated_text)
-
-    for source, target in literal_replacements.items():
-        if source:
-            updated_text = updated_text.replace(source, target)
-
-    updated_text = TOKEN_PATTERN.sub("", updated_text)
-    updated_text = DOUBLE_BRACE_TOKEN_PATTERN.sub("", updated_text)
-    updated_text = re.sub(r"\s+\n", "\n", updated_text)
-
-    if updated_text == raw_text:
-        return
-
-    if paragraph.runs:
-        paragraph.runs[0].text = updated_text
-        for run in paragraph.runs[1:]:
-            run.text = ""
-    else:
-        paragraph.text = updated_text
+            _replace_tokens_in_container(
+                container,
+                token_replacements,
+                literal_replacements,
+                postprocess_text=_normalize_token_whitespace,
+            )
 
 
 def _build_global_token_replacements(
@@ -1050,24 +1008,6 @@ def _row_contains_token(text: str, token_name: str) -> bool:
     return bool(re.search(r"\{\{\s*" + re.escape(token_name) + r"\s*\}\}", text))
 
 
-def _to_text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""
-
-
-def _to_float(value: Any) -> float:
-    if value is None:
-        return 0.0
-    if isinstance(value, (int, float)):
-        return float(value)
-    cleaned = re.sub(r"[^0-9.\-]", "", str(value))
-    if not cleaned:
-        return 0.0
-    try:
-        return float(cleaned)
-    except ValueError:
-        return 0.0
-
-
 def _to_int(value: Any) -> int | None:
     if value is None:
         return None
@@ -1081,9 +1021,8 @@ def _to_int(value: Any) -> int | None:
         return None
 
 
-def _slugify(value: str) -> str:
-    normalized = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip()).strip("-")
-    return normalized.lower()
+def _normalize_token_whitespace(value: str) -> str:
+    return re.sub(r"\s+\n", "\n", value)
 
 
 def _normalize_machine_text(value: str) -> str:

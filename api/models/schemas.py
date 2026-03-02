@@ -56,6 +56,46 @@ class QuoteUploadResponse(BaseModel):
     linked_existing_client_id: int | None = None
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    display_name: str | None = None
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    display_name: str | None = None
+    role: str
+    is_active: bool
+    has_gemini_key: bool
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    display_name: str | None = None
+    password: str
+    role: str = "standard"
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+
+class SetGeminiKeyRequest(BaseModel):
+    api_key: str
+
+
+class GeminiKeyTestResponse(BaseModel):
+    valid: bool
+    error: str | None = None
+
+
 class PricedItemResponse(BaseModel):
     id: int
     item_description: str | None = None
@@ -128,6 +168,10 @@ class ExtractionResponse(BaseModel):
     filled_data: dict[str, str]
     confidence_scores: dict[str, float]
     suggestions: list[dict[str, Any]]
+    field_labels: dict[str, str] = Field(default_factory=dict)
+    queued: bool = False
+    queue_message: str | None = None
+    queue_wait_ms: int | None = None
     metadata: dict[str, Any] | None = None
 
 

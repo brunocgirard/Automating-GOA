@@ -9,6 +9,7 @@ from typing import Any
 
 from docx import Document
 
+from api.services._doc_helpers import replace_tokens_in_paragraph
 from api.services import shipping_doc_service as shipping_service
 
 
@@ -161,7 +162,7 @@ def test_replace_tokens_in_paragraph_supports_double_brace_placeholders():
     doc = Document()
     paragraph = doc.add_paragraph("PO {{Customer_PO}} / Name {{Customer}} / OX {{Ox}}")
 
-    shipping_service._replace_tokens_in_paragraph(
+    replace_tokens_in_paragraph(
         paragraph,
         {"Customer_PO": "PO-100", "Customer": "ACME", "Ox": "OX-55"},
         {},

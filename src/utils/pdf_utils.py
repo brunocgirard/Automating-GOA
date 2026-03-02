@@ -93,6 +93,8 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
     This enhanced version merges multi-line descriptions and uses flexible selection logic.
     """
     extracted_items: List[Dict[str, Optional[str]]] = []
+    # Deduplicate across the full PDF, not just within each extracted table block.
+    unique_items_set = set()
     
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -128,22 +130,28 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
                         if has_essential_content:
                             is_continuation = False
 
-                        # Description extraction
-                        description_cell = str(row[desc_col_idx]).strip() if desc_col_idx is not None and len(row) > desc_col_idx and row[desc_col_idx] else ""
-                        
-                        # Fallback: If this is a NEW item (has content) but description is missing, look in other columns
-                        # This handles cases where the description text is shifted to a different column
-                        if has_essential_content and not description_cell:
-                            forbidden_indices = {qty_col_idx, sel_text_col_idx, unit_cost_col_idx}
+                        # Description extraction with shifted-column fallback.
+                        description_cell = (
+                            str(row[desc_col_idx]).strip()
+                            if desc_col_idx is not None and len(row) > desc_col_idx and row[desc_col_idx]
+                            else ""
+                        )
+                        if not description_cell:
+                            forbidden_indices = {
+                                idx
+                                for idx in (qty_col_idx, sel_text_col_idx, unit_cost_col_idx, desc_col_idx)
+                                if idx is not None and idx != -1
+                            }
                             candidates = []
                             for i, cell in enumerate(row):
-                                if i in forbidden_indices or i == desc_col_idx: continue
+                                if i in forbidden_indices:
+                                    continue
                                 cell_text = str(cell).strip() if cell else ""
                                 if cell_text:
                                     candidates.append(cell_text)
-                            
+
                             if candidates:
-                                # Pick the longest candidate as likely description
+                                # Pick the longest non-key column cell as the likely description.
                                 description_cell = max(candidates, key=len)
 
                         # If the description cell is empty, it's usually a continuation, UNLESS it has essential content (new item without desc)
@@ -155,18 +163,32 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
                             if current_item:
                                 merged_rows.append(current_item)
                             current_item = list(row) # Make a copy
+                            # Normalize shifted description cells into the canonical description column.
+                            if (
+                                description_cell
+                                and desc_col_idx is not None
+                            ):
+                                if len(current_item) <= desc_col_idx:
+                                    current_item.extend([None] * (desc_col_idx + 1 - len(current_item)))
+                                current_item[desc_col_idx] = description_cell
                         # If it's a continuation, append the description to the current item
                         elif current_item and description_cell:
                             # Safely append description
-                            if desc_col_idx is not None and len(current_item) > desc_col_idx:
-                                current_item[desc_col_idx] = (current_item[desc_col_idx] or "") + "\n" + description_cell
+                            if desc_col_idx is not None:
+                                if len(current_item) <= desc_col_idx:
+                                    current_item.extend([None] * (desc_col_idx + 1 - len(current_item)))
+                                existing_description = str(current_item[desc_col_idx]).strip() if current_item[desc_col_idx] else ""
+                                current_item[desc_col_idx] = (
+                                    f"{existing_description}\n{description_cell}"
+                                    if existing_description
+                                    else description_cell
+                                )
                     
                     # Add the last processed item
                     if current_item:
                         merged_rows.append(current_item)
 
                     # Now, process the merged rows to find selected items
-                    unique_items_set = set()
                     for row in merged_rows:
                         # Enhanced selection logic
                         is_selected = False
@@ -208,12 +230,13 @@ def extract_line_item_details(pdf_path: str) -> List[Dict[str, Optional[str]]]:
                             if not description:
                                 description = "(No Description Found)"
 
-                            item_tuple = (description, quantity_text, selection_text)
+                            selected_text = selection_text or unit_cost_text
+                            item_tuple = (description, quantity_text, selected_text)
                             if item_tuple not in unique_items_set:
                                 extracted_items.append({
                                     "description": description,
                                     "quantity_text": quantity_text,
-                                    "selection_text": selection_text or unit_cost_text # Prioritize selection_text, fallback to unit_cost
+                                    "selection_text": selected_text
                                 })
                                 unique_items_set.add(item_tuple)
     except Exception as e:

@@ -4,14 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
 from typing import Any
 
-from .base import DB_PATH, get_connection
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+from .base import DB_PATH, get_connection, row_to_dict, safe_json_loads, timestamp
 
 
 def load_shipping_document(client_quote_ref: str, db_path: str = DB_PATH) -> dict[str, Any] | None:
@@ -38,10 +33,9 @@ def load_shipping_document(client_quote_ref: str, db_path: str = DB_PATH) -> dic
         if not row:
             return None
 
-        payload = dict(row)
-        try:
-            shipping_data = json.loads(payload.get("shipping_data_json") or "{}")
-        except json.JSONDecodeError:
+        payload = row_to_dict(row) or {}
+        shipping_data = safe_json_loads(payload.get("shipping_data_json"), {})
+        if not isinstance(shipping_data, dict):
             shipping_data = {}
 
         return {
@@ -73,7 +67,7 @@ def save_shipping_document(
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
-        now = _timestamp()
+        now = timestamp()
         serialized = json.dumps(shipping_data or {})
 
         cursor.execute(

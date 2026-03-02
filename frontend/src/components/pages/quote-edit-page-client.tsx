@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getQuoteDetail, type QuoteDetail } from "@/lib/api";
+import { useFetch } from "@/hooks/use-fetch";
 import { ItemsTable } from "@/components/quotes/items-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,31 +14,16 @@ interface QuoteEditPageClientProps {
 }
 
 export default function QuoteEditPageClient({ id }: QuoteEditPageClientProps) {
-  const [detail, setDetail] = useState<QuoteDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    void getQuoteDetail(id)
-      .then((response) => {
-        if (!active) return;
-        setDetail(response);
-        setError(null);
-      })
-      .catch((err) => {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load quote detail.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [id]);
+  const { data: detail, loading, error } = useFetch<QuoteDetail>(
+    async () => {
+      try {
+        return await getQuoteDetail(id);
+      } catch (err) {
+        throw err instanceof Error ? err : new Error("Failed to load quote detail.");
+      }
+    },
+    [id]
+  );
 
   if (loading) {
     return (

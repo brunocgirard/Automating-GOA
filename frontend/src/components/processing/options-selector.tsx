@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { LineItem } from "@/lib/types";
+import { toggleSetItem } from "@/lib/utils";
 
 interface OptionItem {
   index: number;
@@ -27,12 +28,7 @@ export function OptionsSelector({ items, onConfirm }: OptionsSelectorProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const toggle = (idx: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
+    setSelected((prev) => toggleSetItem(prev, idx));
   };
 
   const selectAll = () => {

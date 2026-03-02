@@ -602,6 +602,7 @@ def extract_machine_fields_with_options(
     *,
     pass_options: Optional[ExtractionPassOptions] = None,
     template_metadata: Optional[Dict[str, Any]] = None,
+    user_id: int | None = None,
 ) -> tuple[Dict[str, str], Dict[str, Any]]:
     """
     Extract fields using configurable per-pass settings.
@@ -612,8 +613,8 @@ def extract_machine_fields_with_options(
             - extraction metrics metadata
     """
     options = pass_options or ExtractionPassOptions()
-    model = get_generative_model(options.model_name)
-    if model is None and not configure_gemini_client():
+    model = get_generative_model(options.model_name, user_id=user_id)
+    if model is None and not configure_gemini_client(user_id=user_id):
         defaults = {
             key: ("NO" if key.endswith("_check") else "")
             for key in template_placeholder_contexts.keys()
@@ -627,7 +628,7 @@ def extract_machine_fields_with_options(
             "model_name": options.model_name or get_configured_model_name(),
         }
     if model is None:
-        model = get_generative_model(options.model_name)
+        model = get_generative_model(options.model_name, user_id=user_id)
 
     start = time.time()
     machine_name = machine_data.get("machine_name", "")
@@ -793,7 +794,8 @@ def select_repair_field_contexts(
 
 def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
                              template_placeholder_contexts: Dict[str, str],
-                             full_pdf_text: str) -> Dict[str, str]:
+                             full_pdf_text: str,
+                             user_id: int | None = None) -> Dict[str, str]:
     """
     Constructs a comprehensive prompt for the LLM to fill all template fields
     (checkboxes and text fields) based on selected PDF items and full PDF text.
@@ -808,9 +810,9 @@ def get_all_fields_via_llm(selected_pdf_descriptions: List[str],
     Returns:
         Dictionary mapping field keys to extracted values (YES/NO for checkboxes, text for fields)
     """
-    GENERATIVE_MODEL = get_generative_model()
+    GENERATIVE_MODEL = get_generative_model(user_id=user_id)
     if GENERATIVE_MODEL is None:
-        if not configure_gemini_client():
+        if not configure_gemini_client(user_id=user_id):
             print("LLM client not configured. Returning empty data for all fields.")
             return {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
 
@@ -1081,7 +1083,8 @@ def get_llm_chat_update(current_data: Dict[str, str],
                         user_instruction: str,
                         selected_pdf_descriptions: List[str],
                         template_placeholder_contexts: Dict[str, str],
-                        full_pdf_text: str) -> Dict[str, str]:
+                        full_pdf_text: str,
+                        user_id: int | None = None) -> Dict[str, str]:
     """
     Takes current data, user instruction, and original contexts, then asks LLM for an updated data dictionary
     covering ALL fields (text and checkboxes).
@@ -1096,9 +1099,9 @@ def get_llm_chat_update(current_data: Dict[str, str],
     Returns:
         Updated dictionary with corrected field values
     """
-    GENERATIVE_MODEL = get_generative_model()
+    GENERATIVE_MODEL = get_generative_model(user_id=user_id)
     if GENERATIVE_MODEL is None:
-        if not configure_gemini_client():
+        if not configure_gemini_client(user_id=user_id):
             print("LLM client not configured for chat update. Returning current data.")
             return current_data
 
@@ -1227,6 +1230,7 @@ def map_crm_to_document_via_llm(crm_client_data: Dict[str, Any],
                                 crm_priced_items: List[Dict[str, Any]],
                                 document_template_contexts: Dict[str, str],
                                 document_type_hint: str,
+                                user_id: int | None = None,
                                 # full_original_pdf_text: Optional[str] = None # For future LLM calls if CRM data is not enough
                                ) -> Dict[str, str]:
     """
@@ -1243,9 +1247,9 @@ def map_crm_to_document_via_llm(crm_client_data: Dict[str, Any],
     Returns:
         A dictionary ready to be used by doc_filler.py for the target document.
     """
-    GENERATIVE_MODEL = get_generative_model()
+    GENERATIVE_MODEL = get_generative_model(user_id=user_id)
     if GENERATIVE_MODEL is None:
-        if not configure_gemini_client():
+        if not configure_gemini_client(user_id=user_id):
             print(f"LLM client not configured for {document_type_hint} generation. Returning empty data.")
             return {key: "" for key in document_template_contexts.keys()} # Default all to empty
 
@@ -1341,7 +1345,8 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
                                        common_items: List[Dict],
                                        template_placeholder_contexts: Dict[str, Any], # Can be Dict[str, str] or Dict[str, Dict]
                                        full_pdf_text: str,
-                                       template_metadata: Optional[Dict] = None) -> Dict[str, str]:
+                                       template_metadata: Optional[Dict] = None,
+                                       user_id: int | None = None) -> Dict[str, str]:
     """
     Uses LangChain to create robust, schema-driven extraction chains to fill
     fields based on machine data, common items, and full PDF text.
@@ -1359,9 +1364,9 @@ def get_machine_specific_fields_via_llm(machine_data: Dict,
     Returns:
         Dictionary mapping field keys to extracted values
     """
-    GENERATIVE_MODEL = get_generative_model()
+    GENERATIVE_MODEL = get_generative_model(user_id=user_id)
     if GENERATIVE_MODEL is None:
-        if not configure_gemini_client():
+        if not configure_gemini_client(user_id=user_id):
             print("LLM client not configured. Returning empty data.")
             return {key: ("NO" if key.endswith("_check") else "") for key in template_placeholder_contexts.keys()}
 
@@ -1783,7 +1788,8 @@ def get_machine_specific_fields_with_confidence(
     common_items: List[Dict],
     template_placeholder_contexts: Dict[str, Any],
     full_pdf_text: str,
-    template_metadata: Optional[Dict] = None
+    template_metadata: Optional[Dict] = None,
+    user_id: int | None = None,
 ) -> Tuple[Dict[str, str], Dict[str, float], List[Dict[str, Any]]]:
     """
     Enhanced version of get_machine_specific_fields_via_llm that also returns
@@ -1808,7 +1814,8 @@ def get_machine_specific_fields_with_confidence(
         common_items=common_items,
         template_placeholder_contexts=template_placeholder_contexts,
         full_pdf_text=full_pdf_text,
-        template_metadata=template_metadata
+        template_metadata=template_metadata,
+        user_id=user_id,
     )
 
     # Estimate confidence for each field

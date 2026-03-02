@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-
-from api.main import app
 from api.routers import shipping as shipping_router
 from api.services.shipping_doc_service import build_shipping_prefill_data
+from tests.helpers import DocCapture, stub_get_client_by_id
 
 
 def test_build_shipping_prefill_data_includes_line_item_options():
@@ -51,11 +49,11 @@ def test_build_shipping_prefill_data_includes_line_item_options():
     assert options[1]["unitPrice"] == 9200.0
 
 
-def test_load_shipping_state_merges_line_item_options(monkeypatch):
+def test_load_shipping_state_merges_line_item_options(monkeypatch, auth_client):
     quote = {"id": 5, "quote_ref": "Q-5"}
 
-    monkeypatch.setattr(shipping_router, "get_client_by_id", lambda quote_id: quote if quote_id == 5 else None)
-    monkeypatch.setattr(shipping_router, "load_machines_for_quote", lambda _quote_ref: [])
+    monkeypatch.setattr("api.routers._helpers.get_client_by_id", stub_get_client_by_id(quote, expected_id=5))
+    monkeypatch.setattr(shipping_router, "load_machines_for_quote", lambda _quote_ref, **_kwargs: [])
     monkeypatch.setattr(
         shipping_router,
         "load_priced_items_for_quote",
@@ -78,8 +76,7 @@ def test_load_shipping_state_merges_line_item_options(monkeypatch):
         },
     )
 
-    client = TestClient(app)
-    response = client.get("/api/shipping/5/load")
+    response = auth_client.get("/api/shipping/5/load")
 
     assert response.status_code == 200
     payload = response.json()
@@ -90,12 +87,12 @@ def test_load_shipping_state_merges_line_item_options(monkeypatch):
     assert options[0]["unitPrice"] == 12000.0
 
 
-def test_save_shipping_state_persists_line_item_options(monkeypatch):
+def test_save_shipping_state_persists_line_item_options(monkeypatch, auth_client):
     quote = {"id": 6, "quote_ref": "Q-6"}
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(shipping_router, "get_client_by_id", lambda quote_id: quote if quote_id == 6 else None)
-    monkeypatch.setattr(shipping_router, "load_machines_for_quote", lambda _quote_ref: [])
+    monkeypatch.setattr("api.routers._helpers.get_client_by_id", stub_get_client_by_id(quote, expected_id=6))
+    monkeypatch.setattr(shipping_router, "load_machines_for_quote", lambda _quote_ref, **_kwargs: [])
     monkeypatch.setattr(
         shipping_router,
         "load_priced_items_for_quote",
@@ -109,19 +106,18 @@ def test_save_shipping_state_persists_line_item_options(monkeypatch):
         ],
     )
 
-    def fake_save(_quote_ref: str, shipping_data: dict[str, object]) -> dict[str, object]:
-        captured["shipping_data"] = shipping_data
-        return {
+    save_capture = DocCapture(
+        return_factory=lambda _quote_ref, shipping_data: {
             "modified_date": "2026-01-11 10:15:00",
             "shipping_data": shipping_data,
         }
+    )
+    monkeypatch.setattr(shipping_router, "save_shipping_document", save_capture)
 
-    monkeypatch.setattr(shipping_router, "save_shipping_document", fake_save)
-
-    client = TestClient(app)
-    response = client.post("/api/shipping/6/save", json={"shipping_data": {"machines": []}})
+    response = auth_client.post("/api/shipping/6/save", json={"shipping_data": {"machines": []}})
 
     assert response.status_code == 200
+    captured["shipping_data"] = save_capture.calls[0][0][1]
     saved_payload = captured["shipping_data"]
     assert isinstance(saved_payload, dict)
     options = saved_payload.get("lineItemOptions")

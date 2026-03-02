@@ -54,6 +54,7 @@ export function ExtractionViewer(props: ExtractionViewerProps) {
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [goaData, setGoaData] = useState<Record<string, string> | null>(null);
   const [sortstarData, setSortstarData] = useState<Record<string, string> | null>(null);
+  const [sortstarFieldLabels, setSortstarFieldLabels] = useState<Record<string, string>>({});
   const [goaEditorMode, setGoaEditorMode] = useState<GoaEditorMode>("needs-review");
   const [confidenceScores, setConfidenceScores] = useState<Record<string, number>>({});
   const [machineTemplateId, setMachineTemplateId] = useState<number | null>(null);
@@ -74,8 +75,8 @@ export function ExtractionViewer(props: ExtractionViewerProps) {
   );
   const hasEditorData = isSortstarMachine ? !!sortstarData : !!goaData;
   const sortstarSchema = useMemo(
-    () => buildSortstarSchema(sortstarData ?? {}, undefined, "Sortstar Fields"),
-    [sortstarData]
+    () => buildSortstarSchema(sortstarData ?? {}, sortstarFieldLabels, "Sortstar Fields"),
+    [sortstarData, sortstarFieldLabels]
   );
 
   useEffect(() => {
@@ -99,6 +100,7 @@ export function ExtractionViewer(props: ExtractionViewerProps) {
   useEffect(() => {
     setGoaData(null);
     setSortstarData(null);
+    setSortstarFieldLabels({});
     setGoaEditorMode("needs-review");
     setConfidenceScores({});
     setSavedFilePath(null);
@@ -198,6 +200,16 @@ export function ExtractionViewer(props: ExtractionViewerProps) {
         full_pdf_text: fullPdfText,
         template_contexts: null,
       });
+      if (extraction.queued) {
+        const queueMessage =
+          extraction.queue_message ?? "Processing queued, other extractions in progress.";
+        const waitMs =
+          typeof extraction.queue_wait_ms === "number" && extraction.queue_wait_ms > 0
+            ? extraction.queue_wait_ms
+            : null;
+        const waitSuffix = waitMs ? ` Waited ${(waitMs / 1000).toFixed(1)}s for an available slot.` : "";
+        setStatusMessage(`${queueMessage}${waitSuffix}`);
+      }
 
       const filledData: Record<string, string> = {};
       for (const [key, value] of Object.entries(extraction.filled_data)) {
@@ -209,10 +221,12 @@ export function ExtractionViewer(props: ExtractionViewerProps) {
 
       if (isSortstarMachine) {
         setSortstarData(filledData);
+        setSortstarFieldLabels(extraction.field_labels ?? {});
         setGoaData(null);
       } else {
         setGoaData(filledData);
         setSortstarData(null);
+        setSortstarFieldLabels({});
         const hasReviewFields = Object.values(nextConfidenceScores).some(
           (score) => typeof score === "number" && score < REVIEW_THRESHOLD
         );
@@ -221,6 +235,7 @@ export function ExtractionViewer(props: ExtractionViewerProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Extraction failed.");
       setSortstarData(null);
+      setSortstarFieldLabels({});
       setGoaData(null);
     } finally {
       setRunning(false);
@@ -346,6 +361,11 @@ export function ExtractionViewer(props: ExtractionViewerProps) {
           Run Extraction
         </Button>
       </div>
+      {running ? (
+        <p className="text-xs text-amber-700">
+          Extraction in progress. If other extractions are active, this request waits in queue automatically.
+        </p>
+      ) : null}
 
       {schemaError && !isSortstarMachine && (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">

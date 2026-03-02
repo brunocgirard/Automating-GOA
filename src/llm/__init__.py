@@ -75,6 +75,8 @@ from .client import (
     check_model_usage,
     get_configured_model_name,
     get_generative_model,
+    get_model_for_user,
+    invalidate_user_client_cache,
     GENERATIVE_MODEL,
     genai,
 )
@@ -137,6 +139,8 @@ __all__ = [
     "check_model_usage",
     "get_configured_model_name",
     "get_generative_model",
+    "get_model_for_user",
+    "invalidate_user_client_cache",
     "GENERATIVE_MODEL",
     "genai",
 

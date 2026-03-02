@@ -2,27 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
-from datetime import datetime
 from typing import Any
 
-from .base import DB_PATH, get_connection
+import json
 
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _as_text(value: Any) -> str:
-    return str(value).strip() if value is not None else ""
+from .base import DB_PATH, get_connection, row_to_dict, safe_json_loads, timestamp, to_text
 
 
 def _decode_cor_data(payload: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
-    try:
-        return json.loads(payload.get("cor_data_json") or "{}")
-    except (json.JSONDecodeError, AttributeError, TypeError):
-        return {}
+    parsed = safe_json_loads(payload.get("cor_data_json"), {})
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _next_cor_no(cursor: sqlite3.Cursor, client_quote_ref: str) -> str:
@@ -36,13 +26,12 @@ def _next_cor_no(cursor: sqlite3.Cursor, client_quote_ref: str) -> str:
     )
     highest = 0
     for row in cursor.fetchall():
-        value = _as_text(row[0])
+        value = to_text(row[0])
         if not value:
-            try:
-                parsed = json.loads(row[1] or "{}")
-            except (json.JSONDecodeError, TypeError):
+            parsed = safe_json_loads(row[1], {})
+            if not isinstance(parsed, dict):
                 parsed = {}
-            value = _as_text(parsed.get("corNo"))
+            value = to_text(parsed.get("corNo"))
         if value.isdigit():
             highest = max(highest, int(value))
     return str(highest + 1 if highest > 0 else 1)
@@ -70,15 +59,15 @@ def list_cor_documents(client_quote_ref: str, db_path: str = DB_PATH) -> list[di
         rows = cursor.fetchall()
         revisions: list[dict[str, Any]] = []
         for row in rows:
-            payload = dict(row)
+            payload = row_to_dict(row) or {}
             cor_data = _decode_cor_data(payload)
             revisions.append(
                 {
                     "id": payload.get("id"),
                     "client_quote_ref": payload.get("client_quote_ref", ""),
-                    "cor_no": _as_text(payload.get("cor_no")) or _as_text(cor_data.get("corNo")),
-                    "description": _as_text(payload.get("description"))
-                    or _as_text(cor_data.get("revisionDescription")),
+                    "cor_no": to_text(payload.get("cor_no")) or to_text(cor_data.get("corNo")),
+                    "description": to_text(payload.get("description"))
+                    or to_text(cor_data.get("revisionDescription")),
                     "created_date": payload.get("created_date"),
                     "modified_date": payload.get("modified_date"),
                 }
@@ -131,10 +120,10 @@ def load_cor_document(
         if not row:
             return None
 
-        payload = dict(row)
+        payload = row_to_dict(row) or {}
         cor_data = _decode_cor_data(payload)
-        cor_no = _as_text(payload.get("cor_no")) or _as_text(cor_data.get("corNo"))
-        description = _as_text(payload.get("description")) or _as_text(cor_data.get("revisionDescription"))
+        cor_no = to_text(payload.get("cor_no")) or to_text(cor_data.get("corNo"))
+        description = to_text(payload.get("description")) or to_text(cor_data.get("revisionDescription"))
         if cor_no:
             cor_data["corNo"] = cor_no
         if description:
@@ -178,14 +167,14 @@ def save_cor_document(
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
-        now = _timestamp()
+        now = timestamp()
         payload = dict(cor_data or {})
-        resolved_cor_no = _as_text(cor_no) or _as_text(payload.get("corNo"))
+        resolved_cor_no = to_text(cor_no) or to_text(payload.get("corNo"))
         if description is not None:
-            resolved_description = _as_text(description)
+            resolved_description = to_text(description)
             description_provided = True
         elif "revisionDescription" in payload:
-            resolved_description = _as_text(payload.get("revisionDescription"))
+            resolved_description = to_text(payload.get("revisionDescription"))
             description_provided = True
         else:
             resolved_description = ""
@@ -219,9 +208,9 @@ def save_cor_document(
 
         if existing:
             existing_id = int(existing[0])
-            effective_cor_no = resolved_cor_no or _as_text(existing[1]) or _next_cor_no(cursor, client_quote_ref)
+            effective_cor_no = resolved_cor_no or to_text(existing[1]) or _next_cor_no(cursor, client_quote_ref)
             effective_description = (
-                resolved_description if description_provided else _as_text(existing[2])
+                resolved_description if description_provided else to_text(existing[2])
             )
             payload["corNo"] = effective_cor_no
             payload["revisionDescription"] = effective_description

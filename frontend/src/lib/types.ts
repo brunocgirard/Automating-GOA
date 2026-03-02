@@ -12,6 +12,37 @@ export interface Quote {
   processing_date: string | null;
 }
 
+export interface User {
+  id: number;
+  username: string;
+  display_name: string | null;
+  role: "admin" | "standard" | string;
+  is_active: boolean;
+  has_gemini_key: boolean;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  display_name?: string | null;
+  password: string;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  display_name?: string | null;
+  password: string;
+  role?: "admin" | "standard";
+}
+
+export interface ResetPasswordRequest {
+  new_password: string;
+}
+
 export interface Machine {
   id: number;
   machine_name: string;
@@ -47,6 +78,9 @@ export interface ExtractionResult {
   filled_data: Record<string, string>;
   confidence_scores: Record<string, number>;
   suggestions: Array<Record<string, unknown>>;
+  queued?: boolean;
+  queue_message?: string | null;
+  queue_wait_ms?: number | null;
   metadata?: {
     pipeline_version?: string;
     pass1_model?: string;

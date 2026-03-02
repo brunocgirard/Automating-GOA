@@ -10,9 +10,9 @@ Tests cover:
 """
 
 import pytest
-import os
-from pathlib import Path
 from typing import List, Dict, Optional
+
+from tests.helpers import skip_unless_pdf
 
 from src.utils.pdf_utils import (
     extract_line_item_details,
@@ -258,10 +258,51 @@ class TestGetDescriptionFromRow:
 class TestExtractLineItemDetails:
     """Test suite for extract_line_item_details()"""
 
+    def test_extract_shifted_description_columns_with_continuation(self, monkeypatch):
+        """Shifted description cells should be preserved and merged into the item description."""
+        table = [
+            ["Qty.", None, None, "Description", None, None, "Unit Cost", None, None, "Selected Item", None, None],
+            ["1", None, None, "", "Laminar Flow HEPA. Filter Enclosure", "", "", None, None, "117,125", None, None],
+            [None, None, None, None, "• Sixteen (X 16) Blowers covering up the machine and sorting mechanism", None, None, None, None, None, None, None],
+            [None, None, None, None, "• Built into the structure of the machine and machine extension", None, None, None, None, None, None, None],
+            [None, None, None, None, "• Final structure to be approved by engineering department", None, None, None, None, None, None, None],
+        ]
+
+        class FakePage:
+            def __init__(self, tables):
+                self._tables = tables
+
+            def extract_tables(self):
+                return self._tables
+
+        class FakePdf:
+            def __init__(self, pages):
+                self.pages = pages
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        def fake_open(_path):
+            return FakePdf([FakePage([table])])
+
+        monkeypatch.setattr("src.utils.pdf_utils.pdfplumber.open", fake_open)
+
+        items = extract_line_item_details("dummy.pdf")
+
+        assert len(items) == 1
+        assert items[0]["selection_text"] == "117,125"
+        assert items[0]["description"] is not None
+        assert "(No Description Found)" not in items[0]["description"]
+        assert "Laminar Flow HEPA. Filter Enclosure" in items[0]["description"]
+        assert "Sixteen (X 16) Blowers" in items[0]["description"]
+        assert "Final structure to be approved by engineering department" in items[0]["description"]
+
     def test_extract_from_real_pdf_cqc(self, sample_pdf_cqc):
         """Test extraction from real PDF (CQC quote)"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
 
@@ -278,8 +319,7 @@ class TestExtractLineItemDetails:
 
     def test_extract_from_real_pdf_ume(self, sample_pdf_ume):
         """Test extraction from real PDF (UME quote)"""
-        if not os.path.exists(sample_pdf_ume):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_ume}")
+        skip_unless_pdf(sample_pdf_ume)
 
         items = extract_line_item_details(sample_pdf_ume)
 
@@ -289,8 +329,7 @@ class TestExtractLineItemDetails:
 
     def test_extract_returns_list(self, sample_pdf_cqc):
         """Test that function returns a list"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
         assert isinstance(items, list)
@@ -305,8 +344,7 @@ class TestExtractLineItemDetails:
 
     def test_extract_item_structure(self, sample_pdf_cqc):
         """Test that extracted items have correct structure"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
 
@@ -324,8 +362,7 @@ class TestExtractLineItemDetails:
 
     def test_extract_deduplicates_items(self, sample_pdf_cqc):
         """Test that identical items are deduplicated"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
 
@@ -340,8 +377,7 @@ class TestExtractLineItemDetails:
 
     def test_extract_descriptions_are_nonempty(self, sample_pdf_cqc):
         """Test that extracted descriptions are not empty"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
 
@@ -354,8 +390,7 @@ class TestExtractLineItemDetails:
 
     def test_extract_items_have_valid_selection(self, sample_pdf_cqc):
         """Test that extracted items are actually selected (have valid data)"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
 
@@ -377,8 +412,7 @@ class TestExtractFullPdfText:
 
     def test_extract_full_text_basic(self, sample_pdf_cqc):
         """Test basic full text extraction"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         text = extract_full_pdf_text(sample_pdf_cqc)
 
@@ -387,24 +421,21 @@ class TestExtractFullPdfText:
 
     def test_extract_full_text_returns_string(self, sample_pdf_cqc):
         """Test that function returns a string"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         text = extract_full_pdf_text(sample_pdf_cqc)
         assert isinstance(text, str)
 
     def test_extract_full_text_with_default_tolerances(self, sample_pdf_cqc):
         """Test extraction with default x_tol and y_tol"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         text = extract_full_pdf_text(sample_pdf_cqc)
         assert len(text) > 0
 
     def test_extract_full_text_with_custom_tolerances(self, sample_pdf_cqc):
         """Test extraction with custom tolerances"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         text_default = extract_full_pdf_text(sample_pdf_cqc, x_tol=1.5, y_tol=3)
         text_loose = extract_full_pdf_text(sample_pdf_cqc, x_tol=3.0, y_tol=6)
@@ -418,8 +449,7 @@ class TestExtractFullPdfText:
 
     def test_extract_full_text_multiple_pages(self, sample_pdf_cqc):
         """Test that all pages are extracted"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         text = extract_full_pdf_text(sample_pdf_cqc)
 
@@ -428,8 +458,7 @@ class TestExtractFullPdfText:
 
     def test_extract_full_text_contains_newlines(self, sample_pdf_cqc):
         """Test that extracted text contains page separators"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         text = extract_full_pdf_text(sample_pdf_cqc)
 
@@ -446,8 +475,7 @@ class TestExtractFullPdfText:
 
     def test_extract_full_text_content_quality(self, sample_pdf_cqc):
         """Test that extracted text contains meaningful content"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         text = extract_full_pdf_text(sample_pdf_cqc)
 
@@ -731,8 +759,7 @@ class TestExtractContextualDetails:
 
     def test_extract_context_from_real_pdf(self, sample_pdf_cqc):
         """Test context extraction from real PDF"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         # Use a known trigger from the PDF
         trigger = "Bottle Unscrambler"
@@ -745,8 +772,7 @@ class TestExtractContextualDetails:
 
     def test_extract_context_returns_string(self, sample_pdf_cqc):
         """Test that function returns a string"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         context = extract_contextual_details(
             sample_pdf_cqc,
@@ -758,8 +784,7 @@ class TestExtractContextualDetails:
 
     def test_extract_context_empty_descriptions(self, sample_pdf_cqc):
         """Test with empty descriptions list"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         context = extract_contextual_details(
             sample_pdf_cqc,
@@ -783,8 +808,7 @@ class TestExtractContextualDetails:
 
     def test_extract_context_invalid_trigger(self, sample_pdf_cqc):
         """Test with trigger that doesn't exist in PDF"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         context = extract_contextual_details(
             sample_pdf_cqc,
@@ -797,8 +821,7 @@ class TestExtractContextualDetails:
 
     def test_extract_context_short_trigger(self, sample_pdf_cqc):
         """Test that short triggers work (as per doc)"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         # Use a short trigger
         trigger = "Bottle"
@@ -810,8 +833,7 @@ class TestExtractContextualDetails:
 
     def test_extract_context_multiple_items_stop_trigger(self, sample_pdf_cqc):
         """Test that context stops at other item descriptions"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         trigger = "Bottle Unscrambler"
         all_descriptions = [
@@ -828,8 +850,7 @@ class TestExtractContextualDetails:
 
     def test_extract_context_case_insensitive_trigger(self, sample_pdf_cqc):
         """Test that trigger matching is case-insensitive"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         # Try different cases
         trigger_lower = "bottle"
@@ -860,8 +881,7 @@ class TestIntegration:
 
     def test_end_to_end_pdf_to_machines(self, sample_pdf_cqc):
         """Test complete workflow: PDF -> items -> machines"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         # Step 1: Extract line items
         items = extract_line_item_details(sample_pdf_cqc)
@@ -878,8 +898,7 @@ class TestIntegration:
 
     def test_full_text_and_contextual_extraction(self, sample_pdf_cqc):
         """Test that extracted context is coherent"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         # Extract items first
         items = extract_line_item_details(sample_pdf_cqc)
@@ -898,8 +917,7 @@ class TestIntegration:
 
     def test_machine_grouping_with_real_data(self, sample_pdf_cqc):
         """Test machine grouping with real PDF data"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
         result = identify_machines_from_items(items)
@@ -1010,8 +1028,7 @@ class TestEdgeCases:
 
     def test_extract_line_items_with_zero_price(self, sample_pdf_cqc):
         """Test that items with zero/no price are handled"""
-        if not os.path.exists(sample_pdf_cqc):
-            pytest.skip(f"Sample PDF not found: {sample_pdf_cqc}")
+        skip_unless_pdf(sample_pdf_cqc)
 
         items = extract_line_item_details(sample_pdf_cqc)
 

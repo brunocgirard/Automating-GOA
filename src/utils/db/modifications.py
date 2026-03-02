@@ -10,7 +10,7 @@ from src.utils.doc_filler import fill_word_document_from_llm_data
 from src.utils.form_generator import OUTPUT_HTML_PATH
 
 # Import DB_PATH from base module
-from .base import DB_PATH
+from .base import DB_PATH, connection_context, row_to_dict, safe_json_loads
 
 # Define base template paths
 HTML_TEMPLATE_PATH = OUTPUT_HTML_PATH
@@ -63,104 +63,102 @@ def save_goa_modification(
         print("Error: Missing required parameters for save_goa_modification.")
         return False
 
-    conn = None
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        with connection_context(db_path) as conn:
+            cursor = conn.cursor()
 
-        # Check if the machine template exists
-        cursor.execute("SELECT id FROM machine_templates WHERE id = ?", (machine_template_id,))
-        if not cursor.fetchone():
-            print(f"Error: Machine template with ID {machine_template_id} not found.")
-            return False
+            # Check if the machine template exists
+            cursor.execute("SELECT id FROM machine_templates WHERE id = ?", (machine_template_id,))
+            if not cursor.fetchone():
+                print(f"Error: Machine template with ID {machine_template_id} not found.")
+                return False
 
-        # Check if a modification for this field already exists
-        cursor.execute("""
-        SELECT id FROM goa_modifications
-        WHERE machine_template_id = ? AND field_key = ?
-        """, (machine_template_id, field_key))
-
-        existing_modification = cursor.fetchone()
-        modification_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        if existing_modification:
-            # Update existing modification
+            # Check if a modification for this field already exists
             cursor.execute("""
-            UPDATE goa_modifications
-            SET original_value = ?,
-                modified_value = ?,
-                modification_reason = ?,
-                modified_by = ?,
-                modification_date = ?
-            WHERE id = ?
-            """, (
-                original_value,
-                modified_value,
-                modification_reason,
-                modified_by,
-                modification_date,
-                existing_modification[0]
-            ))
-        else:
-            # Insert new modification
-            cursor.execute("""
-            INSERT INTO goa_modifications
-            (machine_template_id, field_key, original_value, modified_value,
-             modification_reason, modified_by, modification_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                machine_template_id,
-                field_key,
-                original_value,
-                modified_value,
-                modification_reason,
-                modified_by,
-                modification_date
-            ))
+            SELECT id FROM goa_modifications
+            WHERE machine_template_id = ? AND field_key = ?
+            """, (machine_template_id, field_key))
 
-        conn.commit()
-        print(f"Saved GOA modification for field '{field_key}' on machine template ID: {machine_template_id}")
+            existing_modification = cursor.fetchone()
+            modification_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Update the template_data_json in machine_templates to reflect this change
-        cursor.execute("SELECT template_data_json FROM machine_templates WHERE id = ?", (machine_template_id,))
-        template_data_row = cursor.fetchone()
-        if template_data_row:
-            try:
-                template_data = json.loads(template_data_row[0])
-                # This will add the field if it's new, or update it if it exists.
-                template_data[field_key] = modified_value
+            if existing_modification:
+                # Update existing modification
                 cursor.execute("""
-                UPDATE machine_templates
-                SET template_data_json = ?, processing_date = ?
+                UPDATE goa_modifications
+                SET original_value = ?,
+                    modified_value = ?,
+                    modification_reason = ?,
+                    modified_by = ?,
+                    modification_date = ?
                 WHERE id = ?
-                """, (json.dumps(template_data), modification_date, machine_template_id))
-                conn.commit()
-                print(f"Updated template data (added/modified field '{field_key}') for machine template ID: {machine_template_id}")
+                """, (
+                    original_value,
+                    modified_value,
+                    modification_reason,
+                    modified_by,
+                    modification_date,
+                    existing_modification[0]
+                ))
+            else:
+                # Insert new modification
+                cursor.execute("""
+                INSERT INTO goa_modifications
+                (machine_template_id, field_key, original_value, modified_value,
+                 modification_reason, modified_by, modification_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    machine_template_id,
+                    field_key,
+                    original_value,
+                    modified_value,
+                    modification_reason,
+                    modified_by,
+                    modification_date
+                ))
 
-                # Regenerate the document
-                cursor.execute("SELECT generated_file_path FROM machine_templates WHERE id = ?", (machine_template_id,))
-                file_path_row = cursor.fetchone()
-                if file_path_row and file_path_row[0]:
-                    generated_file_path = file_path_row[0]
+            conn.commit()
+            print(f"Saved GOA modification for field '{field_key}' on machine template ID: {machine_template_id}")
 
-                    if generated_file_path.endswith('.html'):
-                        print(f"Regenerating HTML document at: {generated_file_path}")
-                        fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
-                        print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
-                    elif generated_file_path.endswith('.docx'):
-                        template_source = _resolve_docx_template_source(generated_file_path)
+            # Update the template_data_json in machine_templates to reflect this change
+            cursor.execute("SELECT template_data_json FROM machine_templates WHERE id = ?", (machine_template_id,))
+            template_data_row = cursor.fetchone()
+            if template_data_row:
+                template_data = safe_json_loads(template_data_row[0])
+                if isinstance(template_data, dict):
+                    # This will add the field if it's new, or update it if it exists.
+                    template_data[field_key] = modified_value
+                    cursor.execute("""
+                    UPDATE machine_templates
+                    SET template_data_json = ?, processing_date = ?
+                    WHERE id = ?
+                    """, (json.dumps(template_data), modification_date, machine_template_id))
+                    conn.commit()
+                    print(f"Updated template data (added/modified field '{field_key}') for machine template ID: {machine_template_id}")
 
-                        if os.path.exists(template_source):
-                            print(f"Regenerating DOCX document at: {generated_file_path} using {template_source}")
-                            fill_word_document_from_llm_data(template_source, template_data, generated_file_path)
-                            print(f"Successfully regenerated DOCX document for machine template ID: {machine_template_id}")
-                        else:
-                            print(f"Warning: Template source {template_source} not found.")
+                    # Regenerate the document
+                    cursor.execute("SELECT generated_file_path FROM machine_templates WHERE id = ?", (machine_template_id,))
+                    file_path_row = cursor.fetchone()
+                    if file_path_row and file_path_row[0]:
+                        generated_file_path = file_path_row[0]
+
+                        if generated_file_path.endswith('.html'):
+                            print(f"Regenerating HTML document at: {generated_file_path}")
+                            fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
+                            print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
+                        elif generated_file_path.endswith('.docx'):
+                            template_source = _resolve_docx_template_source(generated_file_path)
+
+                            if os.path.exists(template_source):
+                                print(f"Regenerating DOCX document at: {generated_file_path} using {template_source}")
+                                fill_word_document_from_llm_data(template_source, template_data, generated_file_path)
+                                print(f"Successfully regenerated DOCX document for machine template ID: {machine_template_id}")
+                            else:
+                                print(f"Warning: Template source {template_source} not found.")
+                    else:
+                        print(f"Warning: Could not retrieve generated_file_path for template ID {machine_template_id}. Document not regenerated.")
                 else:
-                    print(f"Warning: Could not retrieve generated_file_path for template ID {machine_template_id}. Document not regenerated.")
-
-            except json.JSONDecodeError:
-                print(f"Error parsing JSON for machine template ID {machine_template_id} during document regeneration step.")
+                    print(f"Error parsing JSON for machine template ID {machine_template_id} during document regeneration step.")
 
         return True
 
@@ -172,10 +170,6 @@ def save_goa_modification(
         import traceback
         traceback.print_exc()
         return False
-    finally:
-        if conn:
-            conn.close()
-
 
 def load_goa_modifications(machine_template_id: int, db_path: str = DB_PATH) -> List[Dict]:
     """
@@ -187,32 +181,28 @@ def load_goa_modifications(machine_template_id: int, db_path: str = DB_PATH) -> 
     Returns:
         List of dictionaries containing modification data
     """
-    conn = None
     modifications = []
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        with connection_context(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
 
-        cursor.execute("""
-        SELECT id, field_key, original_value, modified_value,
-               modification_reason, modified_by, modification_date
-        FROM goa_modifications
-        WHERE machine_template_id = ?
-        ORDER BY modification_date DESC
-        """, (machine_template_id,))
+            cursor.execute("""
+            SELECT id, field_key, original_value, modified_value,
+                   modification_reason, modified_by, modification_date
+            FROM goa_modifications
+            WHERE machine_template_id = ?
+            ORDER BY modification_date DESC
+            """, (machine_template_id,))
 
-        rows = cursor.fetchall()
-        for row in rows:
-            modifications.append(dict(row))
+            rows = cursor.fetchall()
+            for row in rows:
+                modifications.append(row_to_dict(row) or {})
 
-        return modifications
+            return modifications
     except sqlite3.Error as e:
         print(f"Database error loading GOA modifications for template {machine_template_id}: {e}")
         return []
-    finally:
-        if conn:
-            conn.close()
 
 
 def save_bulk_goa_modifications(
@@ -230,84 +220,77 @@ def save_bulk_goa_modifications(
         print("Error: Missing required parameters for save_bulk_goa_modifications.")
         return False
 
-    conn = None
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        with connection_context(db_path) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("BEGIN TRANSACTION")
+            cursor.execute("BEGIN TRANSACTION")
 
-        cursor.execute("SELECT template_data_json, generated_file_path FROM machine_templates WHERE id = ?", (machine_template_id,))
-        template_row = cursor.fetchone()
-        if not template_row:
-            print(f"Error: Machine template with ID {machine_template_id} not found.")
-            conn.rollback()
-            return False
+            cursor.execute("SELECT template_data_json, generated_file_path FROM machine_templates WHERE id = ?", (machine_template_id,))
+            template_row = cursor.fetchone()
+            if not template_row:
+                print(f"Error: Machine template with ID {machine_template_id} not found.")
+                conn.rollback()
+                return False
 
-        template_data_json, generated_file_path = template_row
-        try:
-            template_data = json.loads(template_data_json or '{}')
-        except json.JSONDecodeError:
-            print(f"Error parsing JSON for machine template ID {machine_template_id}")
-            conn.rollback()
-            return False
+            template_data_json, generated_file_path = template_row
+            template_data = safe_json_loads(template_data_json, {})
+            if not isinstance(template_data, dict):
+                print(f"Error parsing JSON for machine template ID {machine_template_id}")
+                conn.rollback()
+                return False
 
-        modification_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            modification_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        for field_key, change_info in changes.items():
-            original_value = change_info.get("original_value")
-            modified_value = change_info.get("new_value")
+            for field_key, change_info in changes.items():
+                original_value = change_info.get("original_value")
+                modified_value = change_info.get("new_value")
 
-            template_data[field_key] = modified_value
+                template_data[field_key] = modified_value
 
-            cursor.execute("SELECT id FROM goa_modifications WHERE machine_template_id = ? AND field_key = ?", (machine_template_id, field_key))
-            existing_mod = cursor.fetchone()
+                cursor.execute("SELECT id FROM goa_modifications WHERE machine_template_id = ? AND field_key = ?", (machine_template_id, field_key))
+                existing_mod = cursor.fetchone()
 
-            if existing_mod:
-                cursor.execute("""
-                UPDATE goa_modifications
-                SET original_value = ?, modified_value = ?, modification_reason = ?, modified_by = ?, modification_date = ?
-                WHERE id = ?
-                """, (original_value, modified_value, modification_reason, modified_by, modification_date, existing_mod[0]))
-            else:
-                cursor.execute("""
-                INSERT INTO goa_modifications (machine_template_id, field_key, original_value, modified_value, modification_reason, modified_by, modification_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (machine_template_id, field_key, original_value, modified_value, modification_reason, modified_by, modification_date))
-
-        cursor.execute("""
-        UPDATE machine_templates SET template_data_json = ?, processing_date = ? WHERE id = ?
-        """, (json.dumps(template_data), modification_date, machine_template_id))
-
-        conn.commit()
-
-        if regenerate_document and generated_file_path:
-            if generated_file_path.endswith('.html'):
-                print(f"Regenerating HTML document at: {generated_file_path}")
-                fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
-                print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
-            elif generated_file_path.endswith('.docx'):
-                template_source = _resolve_docx_template_source(generated_file_path)
-                if os.path.exists(template_source):
-                    print(f"Regenerating DOCX document at: {generated_file_path} using {template_source}")
-                    fill_word_document_from_llm_data(template_source, template_data, generated_file_path)
-                    print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+                if existing_mod:
+                    cursor.execute("""
+                    UPDATE goa_modifications
+                    SET original_value = ?, modified_value = ?, modification_reason = ?, modified_by = ?, modification_date = ?
+                    WHERE id = ?
+                    """, (original_value, modified_value, modification_reason, modified_by, modification_date, existing_mod[0]))
                 else:
-                    print(f"Warning: Template source {template_source} not found.")
+                    cursor.execute("""
+                    INSERT INTO goa_modifications (machine_template_id, field_key, original_value, modified_value, modification_reason, modified_by, modification_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (machine_template_id, field_key, original_value, modified_value, modification_reason, modified_by, modification_date))
+
+            cursor.execute("""
+            UPDATE machine_templates SET template_data_json = ?, processing_date = ? WHERE id = ?
+            """, (json.dumps(template_data), modification_date, machine_template_id))
+
+            conn.commit()
+
+            if regenerate_document and generated_file_path:
+                if generated_file_path.endswith('.html'):
+                    print(f"Regenerating HTML document at: {generated_file_path}")
+                    fill_and_generate_html(str(HTML_TEMPLATE_PATH), template_data, generated_file_path)
+                    print(f"Successfully regenerated HTML document for machine template ID: {machine_template_id}")
+                elif generated_file_path.endswith('.docx'):
+                    template_source = _resolve_docx_template_source(generated_file_path)
+                    if os.path.exists(template_source):
+                        print(f"Regenerating DOCX document at: {generated_file_path} using {template_source}")
+                        fill_word_document_from_llm_data(template_source, template_data, generated_file_path)
+                        print(f"Successfully regenerated document for machine template ID: {machine_template_id}")
+                    else:
+                        print(f"Warning: Template source {template_source} not found.")
 
         print(f"Saved {len(changes)} GOA modifications for machine template ID: {machine_template_id}")
         return True
 
     except sqlite3.Error as e:
         print(f"Database error in save_bulk_goa_modifications: {e}")
-        if conn: conn.rollback()
         return False
     except Exception as e:
         print(f"Unexpected error in save_bulk_goa_modifications: {e}")
-        if conn: conn.rollback()
         import traceback
         traceback.print_exc()
         return False
-    finally:
-        if conn:
-            conn.close()

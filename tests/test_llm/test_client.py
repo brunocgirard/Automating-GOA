@@ -32,15 +32,21 @@ def reset_client_state():
     from src.llm import client
     original_model = client.GENERATIVE_MODEL
     original_cache = dict(getattr(client, "MODEL_CACHE", {}))
+    original_user_cache = dict(getattr(client, "USER_MODEL_CACHE", {}))
     client.GENERATIVE_MODEL = None
     if hasattr(client, "MODEL_CACHE"):
         client.MODEL_CACHE.clear()
+    if hasattr(client, "USER_MODEL_CACHE"):
+        client.USER_MODEL_CACHE.clear()
     yield
     # Cleanup
     client.GENERATIVE_MODEL = original_model
     if hasattr(client, "MODEL_CACHE"):
         client.MODEL_CACHE.clear()
         client.MODEL_CACHE.update(original_cache)
+    if hasattr(client, "USER_MODEL_CACHE"):
+        client.USER_MODEL_CACHE.clear()
+        client.USER_MODEL_CACHE.update(original_user_cache)
 
 
 class TestConfigureGeminiClient:
@@ -470,15 +476,10 @@ class TestEnvironmentVariableHandling:
 
         mock_getenv.return_value = "   "  # Whitespace only
 
-        # This should fail because the key is not actually empty in the code
-        # but the condition checks for falsiness, not just empty string
-        # So this would actually pass through. Let's verify the behavior.
         result = client.configure_gemini_client()
 
-        # Whitespace string is truthy, so it would attempt configuration
-        # This is a potential bug but we test current behavior
-        if mock_getenv.return_value:
-            mock_genai.configure.assert_called()
+        assert result is False
+        mock_genai.configure.assert_not_called()
 
 
 class TestClientStateManagement:

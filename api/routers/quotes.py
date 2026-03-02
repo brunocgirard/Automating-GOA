@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
+from api.dependencies.auth import is_admin_user, require_authenticated_user
 from api.models.schemas import QuoteResponse, QuoteUpdateRequest, QuoteUploadResponse
+from api.routers._helpers import load_quote_or_404, scope_kwargs, user_id, validate_pdf_upload
 from api.services.processing_service import extract_and_catalog
 from src.utils.db import (
     delete_client_record,
@@ -20,32 +22,31 @@ router = APIRouter(prefix="/api/quotes", tags=["Quotes"])
 
 
 @router.get("", response_model=list[QuoteResponse])
-def list_quotes() -> list[dict]:
-    return load_all_clients()
+def list_quotes(current_user: dict = Depends(require_authenticated_user)) -> list[dict]:
+    return load_all_clients(**scope_kwargs(current_user))
 
 
 @router.get("/{quote_id}", response_model=QuoteResponse)
-def get_quote(quote_id: int) -> dict:
-    quote = get_client_by_id(quote_id)
-    if not quote:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found.")
-    return quote
+def get_quote(quote_id: int, current_user: dict = Depends(require_authenticated_user)) -> dict:
+    return load_quote_or_404(quote_id, current_user)
 
 
 @router.put("/{quote_id}", response_model=QuoteResponse)
-def update_quote(quote_id: int, payload: QuoteUpdateRequest) -> dict:
-    existing = get_client_by_id(quote_id)
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found.")
+def update_quote(
+    quote_id: int,
+    payload: QuoteUpdateRequest,
+    current_user: dict = Depends(require_authenticated_user),
+) -> dict:
+    load_quote_or_404(quote_id, current_user)
 
     update_payload = payload.model_dump(exclude_none=True)
-    if not update_client_record(quote_id, update_payload):
+    if not update_client_record(quote_id, update_payload, **scope_kwargs(current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update quote record.",
         )
 
-    updated = get_client_by_id(quote_id)
+    updated = get_client_by_id(quote_id, **scope_kwargs(current_user))
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -55,12 +56,13 @@ def update_quote(quote_id: int, payload: QuoteUpdateRequest) -> dict:
 
 
 @router.delete("/{quote_id}")
-def delete_quote(quote_id: int) -> dict[str, bool | int]:
-    existing = get_client_by_id(quote_id)
-    if not existing:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found.")
+def delete_quote(
+    quote_id: int,
+    current_user: dict = Depends(require_authenticated_user),
+) -> dict[str, bool | int]:
+    load_quote_or_404(quote_id, current_user)
 
-    if not delete_client_record(quote_id):
+    if not delete_client_record(quote_id, **scope_kwargs(current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete quote.",
@@ -72,18 +74,18 @@ def delete_quote(quote_id: int) -> dict[str, bool | int]:
 async def upload_quote_pdf(
     file: UploadFile = File(...),
     existing_client_id: int | None = Form(default=None),
+    current_user: dict = Depends(require_authenticated_user),
 ) -> dict:
-    if not file.filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File name is required.")
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF uploads are supported.")
-
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+    file_bytes = await validate_pdf_upload(file)
 
     try:
-        result = extract_and_catalog(file_bytes, file.filename, existing_client_id)
+        result = extract_and_catalog(
+            file_bytes,
+            file.filename,
+            existing_client_id,
+            owner_user_id=user_id(current_user),
+            include_all_for_admin=is_admin_user(current_user),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
@@ -104,6 +106,8 @@ async def upload_quote_pdf(
                 machine_summary=machine_model or None,
                 project_name=f"{customer_name} - {machine_model}" if machine_model else quote_ref,
                 start_date=datetime.now().strftime("%Y-%m-%d"),
+                owner_user_id=user_id(current_user),
+                include_all_for_admin=is_admin_user(current_user),
             )
     except Exception as exc:
         print(

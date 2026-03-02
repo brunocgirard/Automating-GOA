@@ -11,11 +11,19 @@ import pytest
 import sqlite3
 import shutil
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from unittest.mock import Mock, MagicMock, patch
 import tempfile
+
+os.environ["AUTH_BOOTSTRAP_ADMIN_USERNAME"] = "admin"
+os.environ["AUTH_BOOTSTRAP_ADMIN_PASSWORD"] = "test-admin-password"
+_RUNTIME_DB_PATH = Path(tempfile.gettempdir()) / "goa_llm_test_runtime.db"
+if _RUNTIME_DB_PATH.exists():
+    _RUNTIME_DB_PATH.unlink()
+os.environ["DATABASE_PATH"] = str(_RUNTIME_DB_PATH)
 
 # Import database modules
 from src.utils.db import (
@@ -60,6 +68,19 @@ def data_dir(project_root):
     return data_dir
 
 
+@pytest.fixture
+def auth_client():
+    """Return a session-authenticated TestClient logged in as the admin user."""
+    from fastapi.testclient import TestClient
+
+    from api.main import app
+    from tests.helpers import login
+
+    with TestClient(app) as client:
+        login(client)
+        yield client
+
+
 # ============================================================================
 # SAMPLE PDF FIXTURES
 # ============================================================================
@@ -68,8 +89,9 @@ def data_dir(project_root):
 def sample_pdf_cqc(templates_dir):
     """Return path to sample CQC PDF for testing."""
     pdf_path = templates_dir / "CQC-25-2638R5-NP.pdf"
-    if not pdf_path.exists():
-        pytest.skip(f"Sample PDF not found: {pdf_path}")
+    from tests.helpers import skip_unless_pdf
+
+    skip_unless_pdf(pdf_path)
     return pdf_path
 
 
@@ -77,8 +99,9 @@ def sample_pdf_cqc(templates_dir):
 def sample_pdf_ume(templates_dir):
     """Return path to sample UME PDF for testing."""
     pdf_path = templates_dir / "UME-23-0001CN-R5-V2.pdf"
-    if not pdf_path.exists():
-        pytest.skip(f"Sample PDF not found: {pdf_path}")
+    from tests.helpers import skip_unless_pdf
+
+    skip_unless_pdf(pdf_path)
     return pdf_path
 
 

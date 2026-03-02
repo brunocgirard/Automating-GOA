@@ -25,10 +25,21 @@ def _to_datetime(value: str | None) -> datetime | None:
         return None
 
 
-def get_stall_alerts(threshold_days: int = 7, project_id: int | None = None) -> list[dict[str, Any]]:
+def get_stall_alerts(
+    threshold_days: int = 7,
+    project_id: int | None = None,
+    *,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> list[dict[str, Any]]:
     """Return critical/warning alerts for stalled in-progress tasks."""
     alerts: list[dict[str, Any]] = []
-    for entry in detect_stalls(threshold_days=threshold_days, project_id=project_id):
+    for entry in detect_stalls(
+        threshold_days=threshold_days,
+        project_id=project_id,
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    ):
         days_stalled = int(entry.get("days_stalled") or 0)
         severity = "critical" if days_stalled >= 14 else "warning"
         alerts.append(
@@ -48,16 +59,28 @@ def get_stall_alerts(threshold_days: int = 7, project_id: int | None = None) -> 
     return alerts
 
 
-def get_critical_path_alerts(project_id: int | None = None) -> list[dict[str, Any]]:
+def get_critical_path_alerts(
+    project_id: int | None = None,
+    *,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> list[dict[str, Any]]:
     """Flag pending tasks with near-term planned dates."""
-    project_rows = load_all_projects()
+    project_rows = load_all_projects(
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
     if project_id is not None:
         project_rows = [row for row in project_rows if int(row.get("id") or 0) == project_id]
 
     alerts: list[dict[str, Any]] = []
     now = datetime.now().date()
     for project_row in project_rows:
-        project_detail = load_project(int(project_row.get("id") or 0))
+        project_detail = load_project(
+            int(project_row.get("id") or 0),
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
         if not project_detail:
             continue
 
@@ -93,8 +116,16 @@ def get_critical_path_alerts(project_id: int | None = None) -> list[dict[str, An
     return alerts
 
 
-def _get_resource_contention_alerts(project_id: int | None = None) -> list[dict[str, Any]]:
-    projects = load_all_projects()
+def _get_resource_contention_alerts(
+    project_id: int | None = None,
+    *,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> list[dict[str, Any]]:
+    projects = load_all_projects(
+        owner_user_id=owner_user_id,
+        include_all_for_admin=include_all_for_admin,
+    )
     phase_buckets: dict[str, list[dict[str, Any]]] = {}
     for project in projects:
         phase = str(project.get("current_phase") or "").strip()
@@ -127,12 +158,29 @@ def _get_resource_contention_alerts(project_id: int | None = None) -> list[dict[
     return alerts
 
 
-def get_all_insights(project_id: int | None = None) -> list[dict[str, Any]]:
+def get_all_insights(
+    project_id: int | None = None,
+    *,
+    owner_user_id: int | None = None,
+    include_all_for_admin: bool = False,
+) -> list[dict[str, Any]]:
     """Aggregate and rank insights; capped at 2 per project."""
     combined = (
-        get_stall_alerts(project_id=project_id)
-        + get_critical_path_alerts(project_id=project_id)
-        + _get_resource_contention_alerts(project_id=project_id)
+        get_stall_alerts(
+            project_id=project_id,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
+        + get_critical_path_alerts(
+            project_id=project_id,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
+        + _get_resource_contention_alerts(
+            project_id=project_id,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
     )
     combined.sort(
         key=lambda row: (

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { fetchQuotes, type QuoteRow } from "@/lib/api";
+import { useFetch } from "@/hooks/use-fetch";
 import { MachineTable } from "@/components/dashboard/quote-table";
 import { QuoteFilters } from "@/components/dashboard/quote-filters";
 import { UploadDialog } from "@/components/dashboard/upload-dialog";
@@ -10,27 +11,20 @@ import { useClientFilter } from "@/components/layout/client-filter-context";
 export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [quotes, setQuotes] = useState<QuoteRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { selectedClientId } = useClientFilter();
-
-  const loadQuotes = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const {
+    data: quotesData,
+    loading,
+    error,
+    reload,
+  } = useFetch<QuoteRow[]>(async () => {
     try {
-      const data = await fetchQuotes();
-      setQuotes(data);
+      return await fetchQuotes();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load quotes.");
-    } finally {
-      setLoading(false);
+      throw err instanceof Error ? err : new Error("Failed to load quotes.");
     }
-  }, []);
-
-  useEffect(() => {
-    void loadQuotes();
-  }, [loadQuotes]);
+  });
+  const quotes = quotesData ?? [];
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
@@ -57,7 +51,7 @@ export default function DashboardPage() {
             Overview of machines by customer and processing status.
           </p>
         </div>
-        <UploadDialog onUploaded={loadQuotes} />
+        <UploadDialog onUploaded={reload} />
       </div>
       <QuoteFilters
         search={search}

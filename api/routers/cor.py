@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
+from api.dependencies.auth import require_authenticated_user
 from api.models.schemas import (
     CorGenerateRequest,
     CorLoadResponse,
@@ -16,24 +17,22 @@ from api.models.schemas import (
     CorSaveRequest,
     CorSaveResponse,
 )
+from api.routers._helpers import (
+    handle_doc_generation,
+    load_quote_or_404,
+    require,
+    scope_kwargs,
+    try_advance_pm_task,
+)
 from api.services.cor_doc_service import build_cor_prefill_data, generate_cor_document
 from src.utils.db import (
-    get_client_by_id,
     list_cor_documents,
     load_machines_for_quote,
     load_cor_document,
-    mark_project_task_done_for_quote,
     save_cor_document,
 )
 
 router = APIRouter(prefix="/api/cor", tags=["COR"])
-
-
-def _load_quote_or_404(quote_id: int) -> dict[str, Any]:
-    quote = get_client_by_id(quote_id)
-    if not quote:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found.")
-    return quote
 
 
 def _prefill_state_for_quote(quote: dict[str, Any]) -> dict[str, Any]:
@@ -48,11 +47,11 @@ def _company_from_quote(quote: dict[str, Any]) -> str:
     return str(quote.get("customer_name") or quote.get("company") or "").strip()
 
 
-def _extract_main_machine_names_for_quote(quote_ref: str) -> list[str]:
+def _extract_main_machine_names_for_quote(quote_ref: str, current_user: dict[str, Any]) -> list[str]:
     if not quote_ref:
         return []
     names: list[str] = []
-    for machine in load_machines_for_quote(quote_ref):
+    for machine in load_machines_for_quote(quote_ref, **scope_kwargs(current_user)):
         name = str(machine.get("machine_name") or "").strip()
         if not name:
             continue
@@ -68,8 +67,13 @@ def _extract_main_machine_names_for_quote(quote_ref: str) -> list[str]:
     return names
 
 
-def _resolve_machine_for_cor(quote: dict[str, Any], requested_machine: str, quote_ref: str) -> str:
-    options = _extract_main_machine_names_for_quote(quote_ref)
+def _resolve_machine_for_cor(
+    quote: dict[str, Any],
+    requested_machine: str,
+    quote_ref: str,
+    current_user: dict[str, Any],
+) -> str:
+    options = _extract_main_machine_names_for_quote(quote_ref, current_user)
     requested = requested_machine.strip()
     if requested and requested in options:
         return requested
@@ -78,7 +82,12 @@ def _resolve_machine_for_cor(quote: dict[str, Any], requested_machine: str, quot
     return str(quote.get("machine_model") or requested).strip()
 
 
-def _normalize_cor_client_info(cor_data: dict[str, Any], quote: dict[str, Any], quote_ref: str) -> dict[str, Any]:
+def _normalize_cor_client_info(
+    cor_data: dict[str, Any],
+    quote: dict[str, Any],
+    quote_ref: str,
+    current_user: dict[str, Any],
+) -> dict[str, Any]:
     raw_client = cor_data.get("client")
     client = raw_client if isinstance(raw_client, dict) else {}
     source = str(cor_data.get("initiatorOfChange") or "").strip().lower()
@@ -88,6 +97,7 @@ def _normalize_cor_client_info(cor_data: dict[str, Any], quote: dict[str, Any], 
         quote=quote,
         requested_machine=str(client.get("machine") or ""),
         quote_ref=quote_ref,
+        current_user=current_user,
     )
     cor_data["client"] = {
         "company": _company_from_quote(quote),
@@ -103,8 +113,11 @@ def _normalize_cor_client_info(cor_data: dict[str, Any], quote: dict[str, Any], 
 
 
 @router.get("/{quote_id}/prefill", response_model=CorPrefillResponse)
-def get_cor_prefill(quote_id: int) -> dict[str, Any]:
-    quote = _load_quote_or_404(quote_id)
+def get_cor_prefill(
+    quote_id: int,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    quote = load_quote_or_404(quote_id, current_user)
     cor_data = _prefill_state_for_quote(quote)
     return {
         "quote_id": quote_id,
@@ -114,8 +127,11 @@ def get_cor_prefill(quote_id: int) -> dict[str, Any]:
 
 
 @router.get("/{quote_id}/revisions", response_model=CorRevisionListResponse)
-def list_cor_revisions(quote_id: int) -> dict[str, Any]:
-    quote = _load_quote_or_404(quote_id)
+def list_cor_revisions(
+    quote_id: int,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    quote = load_quote_or_404(quote_id, current_user)
     quote_ref = str(quote.get("quote_ref") or "")
     revisions = list_cor_documents(quote_ref)
 
@@ -137,14 +153,18 @@ def list_cor_revisions(quote_id: int) -> dict[str, Any]:
 
 
 @router.post("/{quote_id}/save", response_model=CorSaveResponse)
-def save_cor_state(quote_id: int, payload: CorSaveRequest) -> dict[str, Any]:
-    quote = _load_quote_or_404(quote_id)
+def save_cor_state(
+    quote_id: int,
+    payload: CorSaveRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    quote = load_quote_or_404(quote_id, current_user)
     quote_ref = str(quote.get("quote_ref") or "")
 
     cor_data = dict(payload.cor_data or {})
     cor_data["quoteId"] = quote_id
     cor_data["quoteRef"] = quote_ref
-    cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref)
+    cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref, current_user=current_user)
     if payload.cor_no is not None:
         cor_data["corNo"] = payload.cor_no
     if payload.description is not None:
@@ -164,17 +184,7 @@ def save_cor_state(quote_id: int, payload: CorSaveRequest) -> dict[str, Any]:
             detail="Failed to save COR state.",
         )
 
-    try:
-        mark_project_task_done_for_quote(
-            quote_ref,
-            "COR Completion",
-            notes="Auto-advanced from cor.save",
-        )
-    except Exception as exc:
-        print(
-            "Warning: failed to auto-advance PM task 'COR Completion' "
-            f"for quote_ref='{quote_ref}': {exc}"
-        )
+    try_advance_pm_task(quote_ref, "COR Completion", "cor.save", current_user)
 
     return {
         "quote_id": quote_id,
@@ -188,20 +198,24 @@ def save_cor_state(quote_id: int, payload: CorSaveRequest) -> dict[str, Any]:
 
 
 @router.get("/{quote_id}/load", response_model=CorLoadResponse)
-def load_cor_state(quote_id: int, cor_document_id: int | None = None) -> dict[str, Any]:
-    quote = _load_quote_or_404(quote_id)
+def load_cor_state(
+    quote_id: int,
+    cor_document_id: int | None = None,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    quote = load_quote_or_404(quote_id, current_user)
     quote_ref = str(quote.get("quote_ref") or "")
 
     saved_row = load_cor_document(quote_ref, cor_document_id=cor_document_id)
-    if not saved_row:
-        if cor_document_id is None:
-            detail = "No saved COR state found."
-        else:
-            detail = f"No saved COR state found for cor_document_id={cor_document_id}."
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    detail = (
+        "No saved COR state found."
+        if cor_document_id is None
+        else f"No saved COR state found for cor_document_id={cor_document_id}."
+    )
+    saved_row = require(saved_row, detail)
 
     cor_data = dict(saved_row.get("cor_data") or {})
-    cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref)
+    cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref, current_user=current_user)
 
     return {
         "quote_id": quote_id,
@@ -216,15 +230,19 @@ def load_cor_state(quote_id: int, cor_document_id: int | None = None) -> dict[st
 
 
 @router.post("/{quote_id}/generate")
-def generate_cor_docs(quote_id: int, payload: CorGenerateRequest) -> FileResponse:
-    quote = _load_quote_or_404(quote_id)
+def generate_cor_docs(
+    quote_id: int,
+    payload: CorGenerateRequest,
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> FileResponse:
+    quote = load_quote_or_404(quote_id, current_user)
     quote_ref = str(quote.get("quote_ref") or "")
 
     if payload.cor_data is not None:
         cor_data = dict(payload.cor_data)
         cor_data["quoteId"] = quote_id
         cor_data["quoteRef"] = quote_ref
-        cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref)
+        cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref, current_user=current_user)
         if payload.cor_document_id is not None:
             save_cor_document(
                 quote_ref,
@@ -242,25 +260,14 @@ def generate_cor_docs(quote_id: int, payload: CorGenerateRequest) -> FileRespons
                 detail=f"No saved COR state found for cor_document_id={payload.cor_document_id}.",
             )
         cor_data = dict(saved_row.get("cor_data") or {}) if saved_row else _prefill_state_for_quote(quote)
-        cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref)
+        cor_data = _normalize_cor_client_info(cor_data, quote=quote, quote_ref=quote_ref, current_user=current_user)
 
-    try:
-        artifact = generate_cor_document(
-            cor_data=cor_data,
-            quote_ref=quote_ref,
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate COR document: {exc}",
-        ) from exc
+    artifact = handle_doc_generation(
+        generate_cor_document,
+        cor_data=cor_data,
+        quote_ref=quote_ref,
+        failure_detail="Failed to generate COR document: {error}",
+    )
 
     return FileResponse(
         path=str(artifact.path),

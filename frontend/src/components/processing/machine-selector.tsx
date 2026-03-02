@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2 } from "lucide-react";
 import type { LineItem } from "@/lib/types";
+import { toggleSetItem } from "@/lib/utils";
 
 interface MachineSelectorProps {
   items: LineItem[];
@@ -36,12 +37,7 @@ export function MachineSelector({
   }, [initialSelectedIndices]);
 
   const toggle = (idx: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
+    setSelected((prev) => toggleSetItem(prev, idx));
   };
 
   const autoIdentify = async () => {

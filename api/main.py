@@ -6,13 +6,15 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 if os.getenv("GEMINI_API_KEY") and not os.getenv("GOOGLE_API_KEY"):
     os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 
+from api.dependencies.auth import require_authenticated_user
+from api.routers.auth import router as auth_router
 from api.routers.machines import router as machines_router
 from api.routers.processing import direct_router as processing_direct_router
 from api.routers.processing import router as processing_router
@@ -34,8 +36,10 @@ def _parse_cors_origins(raw_origins: str | None) -> list[str]:
 async def lifespan(_: FastAPI):
     """Initialize runtime dependencies once on startup."""
     from src.utils.db import init_db
+    from api.services.auth_service import bootstrap_admin_user
 
     init_db()
+    bootstrap_admin_user()
     yield
 
 
@@ -62,11 +66,12 @@ async def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-app.include_router(quotes_router)
-app.include_router(machines_router)
-app.include_router(processing_router)
-app.include_router(processing_direct_router)
-app.include_router(reports_router)
-app.include_router(shipping_router)
-app.include_router(cor_router)
-app.include_router(pm_dashboard_router)
+app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+app.include_router(quotes_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(machines_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(processing_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(processing_direct_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(reports_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(shipping_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(cor_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(pm_dashboard_router, dependencies=[Depends(require_authenticated_user)])

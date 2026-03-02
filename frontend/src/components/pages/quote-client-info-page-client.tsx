@@ -9,6 +9,10 @@ import {
   type QuoteDetail,
   type QuoteWorkflowStatus,
 } from "@/lib/api";
+import {
+  formatStatusTimestamp,
+  workflowQuoteBadgeConfig,
+} from "@/lib/doc-utils";
 import { QuoteClientInfo } from "@/components/quotes/quote-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,25 +21,6 @@ import { ArrowLeft, Save, TableProperties } from "lucide-react";
 
 interface QuoteClientInfoPageClientProps {
   id: string;
-}
-
-function formatStatusTimestamp(value: string | null): string {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString();
-}
-
-function workflowQuoteBadgeConfig(
-  status: QuoteWorkflowStatus["quoteStatus"] | null | undefined
-): { label: string; className: string } {
-  if (status === "ready") {
-    return { label: "Ready", className: "bg-green-100 text-green-800" };
-  }
-  if (status === "processed") {
-    return { label: "Processed", className: "bg-yellow-100 text-yellow-800" };
-  }
-  return { label: "Draft", className: "bg-neutral-200 text-neutral-700" };
 }
 
 export default function QuoteClientInfoPageClient({ id }: QuoteClientInfoPageClientProps) {

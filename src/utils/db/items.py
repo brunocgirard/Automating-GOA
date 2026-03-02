@@ -6,7 +6,7 @@ import sqlite3
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from .base import DB_PATH
+from .base import DB_PATH, connection_context, rows_to_dicts
 from .utils import parse_price_string
 
 
@@ -29,44 +29,43 @@ def save_priced_items(client_quote_ref: str, line_items_data: List[Dict[str, Opt
     if not client_quote_ref or not line_items_data:
         return False
 
-    conn = None
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM priced_items WHERE client_quote_ref = ?", (client_quote_ref,))
+        with connection_context(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM priced_items WHERE client_quote_ref = ?", (client_quote_ref,))
 
-        items_to_insert = []
-        for item_dict in line_items_data:
-            full_description = item_dict.get("description")
-            quantity_text = item_dict.get("quantity_text")
-            selection_cell_content = item_dict.get("selection_text")
+            items_to_insert = []
+            for item_dict in line_items_data:
+                full_description = item_dict.get("description")
+                quantity_text = item_dict.get("quantity_text")
+                selection_cell_content = item_dict.get("selection_text")
 
-            parsed_price_info = parse_price_string(selection_cell_content)
+                parsed_price_info = parse_price_string(selection_cell_content)
 
-            description_to_store = ""
-            if isinstance(full_description, str):
-                description_to_store = full_description.strip()
-            elif full_description is not None:
-                description_to_store = str(full_description).strip()
+                description_to_store = ""
+                if isinstance(full_description, str):
+                    description_to_store = full_description.strip()
+                elif full_description is not None:
+                    description_to_store = str(full_description).strip()
 
-            if description_to_store:  # Only save if we have a description
-                items_to_insert.append((
-                    client_quote_ref,
-                    description_to_store,
-                    quantity_text,
-                    parsed_price_info["price_str"],
-                    parsed_price_info["price_numeric"]
-                ))
+                if description_to_store:  # Only save if we have a description
+                    items_to_insert.append((
+                        client_quote_ref,
+                        description_to_store,
+                        quantity_text,
+                        parsed_price_info["price_str"],
+                        parsed_price_info["price_numeric"]
+                    ))
 
-        if items_to_insert:
-            cursor.executemany(
-                "INSERT INTO priced_items (client_quote_ref, item_description, item_quantity, item_price_str, item_price_numeric) VALUES (?, ?, ?, ?, ?)",
-                items_to_insert
-            )
-            conn.commit()
-            print(f"Saved/Updated {len(items_to_insert)} priced items for quote: {client_quote_ref}")
-        else:
-            print(f"No valid items to insert for priced_items for quote: {client_quote_ref}")
+            if items_to_insert:
+                cursor.executemany(
+                    "INSERT INTO priced_items (client_quote_ref, item_description, item_quantity, item_price_str, item_price_numeric) VALUES (?, ?, ?, ?, ?)",
+                    items_to_insert
+                )
+                conn.commit()
+                print(f"Saved/Updated {len(items_to_insert)} priced items for quote: {client_quote_ref}")
+            else:
+                print(f"No valid items to insert for priced_items for quote: {client_quote_ref}")
         return True
     except sqlite3.Error as e:
         print(f"Database error in save_priced_items for quote {client_quote_ref}: {e}")
@@ -76,10 +75,6 @@ def save_priced_items(client_quote_ref: str, line_items_data: List[Dict[str, Opt
         import traceback
         traceback.print_exc()
         return False
-    finally:
-        if conn:
-            conn.close()
-
 
 def load_priced_items_for_quote(client_quote_ref: str, db_path: str = DB_PATH) -> List[Dict]:
     """
@@ -93,26 +88,20 @@ def load_priced_items_for_quote(client_quote_ref: str, db_path: str = DB_PATH) -
         List of dictionaries containing item data with keys:
         - id, item_description, item_quantity, item_price_str, item_price_numeric
     """
-    conn = None
     items = []
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute("""
-        SELECT id, item_description, item_quantity, item_price_str, item_price_numeric
-        FROM priced_items
-        WHERE client_quote_ref = ?
-        ORDER BY id
-        """, (client_quote_ref,))
-        rows = cursor.fetchall()
-        for row in rows:
-            items.append(dict(row))
+        with connection_context(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+            SELECT id, item_description, item_quantity, item_price_str, item_price_numeric
+            FROM priced_items
+            WHERE client_quote_ref = ?
+            ORDER BY id
+            """, (client_quote_ref,))
+            items = rows_to_dicts(cursor.fetchall())
     except sqlite3.Error as e:
         print(f"Database error loading priced items for quote {client_quote_ref}: {e}")
-    finally:
-        if conn:
-            conn.close()
     return items
 
 
@@ -135,37 +124,36 @@ def update_single_priced_item(item_id: int, new_data: Dict[str, Any], db_path: s
         print("Error: Item ID or new_data missing for priced item update.")
         return False
 
-    conn = None
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+        with connection_context(db_path) as conn:
+            cursor = conn.cursor()
 
-        # Re-parse the price_str to ensure price_numeric is consistent
-        parsed_price = parse_price_string(new_data.get('item_price_str'))
+            # Re-parse the price_str to ensure price_numeric is consistent
+            parsed_price = parse_price_string(new_data.get('item_price_str'))
 
-        sql = """
-        UPDATE priced_items
-        SET item_description = ?,
-            item_quantity = ?,
-            item_price_str = ?,
-            item_price_numeric = ?
-        WHERE id = ?
-        """
-        params = (
-            new_data.get('item_description'),
-            new_data.get('item_quantity'),
-            parsed_price['price_str'],
-            parsed_price['price_numeric'],
-            item_id
-        )
-        cursor.execute(sql, params)
-        conn.commit()
-        if cursor.rowcount > 0:
-            print(f"Successfully updated priced_item ID: {item_id}")
-            return True
-        else:
-            print(f"Warning: No priced_item found with ID: {item_id} to update.")
-            return False
+            sql = """
+            UPDATE priced_items
+            SET item_description = ?,
+                item_quantity = ?,
+                item_price_str = ?,
+                item_price_numeric = ?
+            WHERE id = ?
+            """
+            params = (
+                new_data.get('item_description'),
+                new_data.get('item_quantity'),
+                parsed_price['price_str'],
+                parsed_price['price_numeric'],
+                item_id
+            )
+            cursor.execute(sql, params)
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"Successfully updated priced_item ID: {item_id}")
+                return True
+            else:
+                print(f"Warning: No priced_item found with ID: {item_id} to update.")
+                return False
 
     except sqlite3.Error as e:
         print(f"Database error updating priced_item ID {item_id}: {e}")
@@ -175,10 +163,6 @@ def update_single_priced_item(item_id: int, new_data: Dict[str, Any], db_path: s
         import traceback
         traceback.print_exc()
         return False
-    finally:
-        if conn:
-            conn.close()
-
 
 def calculate_common_items_price(common_items: List[Dict]) -> float:
     """
