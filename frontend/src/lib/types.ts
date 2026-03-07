@@ -200,3 +200,19 @@ export interface ProjectInsight {
   phase: string | null;
   days_stalled: number | null;
 }
+
+export type UserTaskPriority = "low" | "normal" | "high" | "urgent";
+export type UserTaskStatus = "pending" | "done";
+
+export interface UserTask {
+  id: number;
+  title: string;
+  description: string | null;
+  client_tag: string | null;
+  priority: UserTaskPriority;
+  status: UserTaskStatus;
+  due_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  modified_at: string;
+}

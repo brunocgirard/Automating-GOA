@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from api.dependencies.auth import require_authenticated_user
 from api.models.schemas import (
+    CorDashboardResponse,
     CorGenerateRequest,
     CorLoadResponse,
     CorPrefillResponse,
@@ -27,6 +28,7 @@ from api.routers._helpers import (
 from api.services.cor_doc_service import build_cor_prefill_data, generate_cor_document
 from src.utils.db import (
     list_cor_documents,
+    load_all_clients,
     load_machines_for_quote,
     load_cor_document,
     save_cor_document,
@@ -112,6 +114,11 @@ def _normalize_cor_client_info(
     return cor_data
 
 
+def _dashboard_sort_key(entry: dict[str, Any]) -> tuple[str, int]:
+    timestamp = str(entry.get("modified_date") or entry.get("created_date") or "")
+    return timestamp, int(entry.get("cor_document_id") or 0)
+
+
 @router.get("/{quote_id}/prefill", response_model=CorPrefillResponse)
 def get_cor_prefill(
     quote_id: int,
@@ -124,6 +131,43 @@ def get_cor_prefill(
         "quote_ref": quote.get("quote_ref", ""),
         "cor_data": cor_data,
     }
+
+
+@router.get("/dashboard", response_model=CorDashboardResponse)
+def cor_dashboard(
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    quotes = load_all_clients(**scope_kwargs(current_user))
+    entries: list[dict[str, Any]] = []
+
+    for quote in quotes:
+        quote_id = int(quote.get("id") or 0)
+        quote_ref = str(quote.get("quote_ref") or "").strip()
+        if quote_id <= 0 or not quote_ref:
+            continue
+
+        client_name = _company_from_quote(quote)
+        revisions = list_cor_documents(quote_ref)
+        for row in revisions:
+            cor_document_id = int(row.get("id") or 0)
+            if cor_document_id <= 0:
+                continue
+            entries.append(
+                {
+                    "cor_document_id": cor_document_id,
+                    "quote_id": quote_id,
+                    "quote_ref": quote_ref,
+                    "client_name": client_name,
+                    "cor_no": str(row.get("cor_no") or ""),
+                    "cor_status": str(row.get("cor_status") or ""),
+                    "description": str(row.get("description") or ""),
+                    "created_date": row.get("created_date"),
+                    "modified_date": row.get("modified_date"),
+                }
+            )
+
+    entries.sort(key=_dashboard_sort_key, reverse=True)
+    return {"entries": entries}
 
 
 @router.get("/{quote_id}/revisions", response_model=CorRevisionListResponse)

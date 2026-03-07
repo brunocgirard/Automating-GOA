@@ -23,6 +23,7 @@ from api.routers.reports import router as reports_router
 from api.routers.shipping import router as shipping_router
 from api.routers.cor import router as cor_router
 from api.routers.pm_dashboard import router as pm_dashboard_router
+from api.routers.user_tasks import router as user_tasks_router
 
 
 def _parse_cors_origins(raw_origins: str | None) -> list[str]:
@@ -75,3 +76,4 @@ app.include_router(reports_router, dependencies=[Depends(require_authenticated_u
 app.include_router(shipping_router, dependencies=[Depends(require_authenticated_user)])
 app.include_router(cor_router, dependencies=[Depends(require_authenticated_user)])
 app.include_router(pm_dashboard_router, dependencies=[Depends(require_authenticated_user)])
+app.include_router(user_tasks_router, dependencies=[Depends(require_authenticated_user)])

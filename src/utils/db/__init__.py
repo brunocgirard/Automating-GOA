@@ -122,6 +122,16 @@ from .projects import (
     detect_stalls,
 )
 
+# Personal task board operations
+from .user_tasks import (
+    create_user_task,
+    list_user_tasks,
+    update_user_task,
+    toggle_user_task,
+    delete_user_task,
+    list_client_tags,
+)
+
 # Auth and session operations
 from .auth import (
     count_users,
@@ -226,6 +236,14 @@ __all__ = [
     'save_gantt_data',
     'get_at_risk_summary',
     'detect_stalls',
+
+    # Personal task board operations
+    'create_user_task',
+    'list_user_tasks',
+    'update_user_task',
+    'toggle_user_task',
+    'delete_user_task',
+    'list_client_tags',
 
     # Auth/session operations
     'count_users',

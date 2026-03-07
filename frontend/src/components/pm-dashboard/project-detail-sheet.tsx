@@ -16,7 +16,6 @@ import {
 import { InsightsPanel } from "@/components/pm-dashboard/insights-panel";
 import { PhaseProgress } from "@/components/pm-dashboard/phase-progress";
 import { TaskChecklist } from "@/components/pm-dashboard/task-checklist";
-import { GanttDetail } from "@/components/pm-dashboard/gantt-detail";
 
 interface ProjectDetailSheetProps {
   open: boolean;
@@ -24,7 +23,6 @@ interface ProjectDetailSheetProps {
   project: ProjectDetail | null;
   updatingTaskId?: number | null;
   onTaskStatusChange: (taskId: number, status: TaskStatus) => Promise<void> | void;
-  onRefreshProject: () => Promise<void> | void;
 }
 
 function toDate(value: string | null | undefined): Date | null {
@@ -51,7 +49,6 @@ export function ProjectDetailSheet({
   project,
   updatingTaskId,
   onTaskStatusChange,
-  onRefreshProject,
 }: ProjectDetailSheetProps) {
   const [quoteId, setQuoteId] = useState<number | null>(null);
 
@@ -186,14 +183,6 @@ export function ProjectDetailSheet({
               tasks={project.tasks}
               updatingTaskId={updatingTaskId}
               onStatusChange={onTaskStatusChange}
-            />
-
-            <GanttDetail
-              projectId={project.id}
-              ganttData={project.gantt_data}
-              onRefresh={() => {
-                void onRefreshProject();
-              }}
             />
           </div>
         )}

@@ -26,7 +26,9 @@ def test_existing_routes_return_401_when_unauthenticated() -> None:
     assert client.get("/api/quotes").status_code == 401
     assert client.get("/api/machines").status_code == 401
     assert client.get("/api/cor/1/prefill").status_code == 401
+    assert client.get("/api/cor/dashboard").status_code == 401
     assert client.get("/api/shipping/1/prefill").status_code == 401
+    assert client.get("/api/user-tasks").status_code == 401
 
 
 def test_existing_routes_work_with_authenticated_session(auth_client) -> None:

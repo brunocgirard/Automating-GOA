@@ -439,6 +439,33 @@ def init_db(db_path: str = DB_PATH):
             """
         )
 
+        # Personal PM task board items scoped to a user.
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                client_tag TEXT,
+                priority TEXT NOT NULL DEFAULT 'normal',
+                status TEXT NOT NULL DEFAULT 'pending',
+                due_date TEXT,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                modified_at TEXT NOT NULL,
+                FOREIGN KEY (owner_user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_user_tasks_owner_status
+            ON user_tasks (owner_user_id, status)
+            """
+        )
+
         cursor.execute("PRAGMA table_info(cor_documents)")
         cor_columns = [row[1] for row in cursor.fetchall()]
         cor_new_columns = {

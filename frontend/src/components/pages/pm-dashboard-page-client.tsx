@@ -12,6 +12,7 @@ import { AlertStrip } from "@/components/pm-dashboard/alert-strip";
 import { KanbanBoard } from "@/components/pm-dashboard/kanban-board";
 import { ProjectDetailSheet } from "@/components/pm-dashboard/project-detail-sheet";
 import { CreateProjectDialog } from "@/components/pm-dashboard/create-project-dialog";
+import { PersonalTaskBoard } from "@/components/pm-dashboard/personal-task-board";
 import { UploadDialog } from "@/components/dashboard/upload-dialog";
 
 export default function PmDashboardPageClient() {
@@ -111,6 +112,8 @@ export default function PmDashboardPageClient() {
 
       <AlertStrip atRisk={atRisk} loading={loading} />
 
+      <PersonalTaskBoard />
+
       {loading ? (
         <div className="rounded-md border bg-white p-8 text-sm text-muted-foreground">
           Loading projects...
@@ -139,9 +142,6 @@ export default function PmDashboardPageClient() {
           }
         }}
         onTaskStatusChange={handleTaskStatusChange}
-        onRefreshProject={async () => {
-          await Promise.all([refreshSelectedProject(), loadSurface()]);
-        }}
       />
     </div>
   );

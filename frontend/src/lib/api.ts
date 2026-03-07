@@ -12,6 +12,9 @@ import type {
   ResetPasswordRequest,
   StallAlert,
   TaskStatus,
+  UserTask,
+  UserTaskPriority,
+  UserTaskStatus,
   User,
 } from "@/lib/types";
 
@@ -355,6 +358,23 @@ export interface GoaFormSchemaResponse {
   fieldCount: number;
 }
 
+export interface UserTaskCreateInput {
+  title: string;
+  description?: string | null;
+  client_tag?: string | null;
+  priority?: UserTaskPriority;
+  due_date?: string | null;
+}
+
+export interface UserTaskUpdateInput {
+  title?: string | null;
+  description?: string | null;
+  client_tag?: string | null;
+  priority?: UserTaskPriority;
+  status?: UserTaskStatus;
+  due_date?: string | null;
+}
+
 export type ShippingDocumentType =
   | "packing_slip"
   | "commercial_invoice"
@@ -396,6 +416,22 @@ interface ApiCorRevisionListEnvelope {
   quote_id: number;
   quote_ref: string;
   revisions: ApiCorRevisionSummary[];
+}
+
+interface ApiCorDashboardEntry {
+  cor_document_id: number;
+  quote_id: number;
+  quote_ref: string;
+  client_name?: string | null;
+  cor_no?: string | null;
+  cor_status?: string | null;
+  description?: string | null;
+  created_date?: string | null;
+  modified_date?: string | null;
+}
+
+interface ApiCorDashboardEnvelope {
+  entries: ApiCorDashboardEntry[];
 }
 
 interface ApiCorLoadEnvelope extends ApiCorEnvelope {
@@ -472,6 +508,19 @@ interface ApiInsight {
   message?: string | null;
   phase?: string | null;
   days_stalled?: number | null;
+}
+
+interface ApiUserTask {
+  id: number;
+  title: string;
+  description?: string | null;
+  client_tag?: string | null;
+  priority?: string | null;
+  status?: string | null;
+  due_date?: string | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+  modified_at?: string | null;
 }
 
 export interface ShippingCrate {
@@ -619,6 +668,19 @@ export interface CorRevisionListResult {
   quoteId: number;
   quoteRef: string;
   revisions: CorRevisionSummary[];
+}
+
+export interface CorDashboardEntry {
+  corDocumentId: number;
+  quoteId: number;
+  quoteRef: string;
+  clientId: string;
+  clientName: string;
+  corNo: string;
+  corStatus: string;
+  description: string;
+  createdDate: string | null;
+  modifiedDate: string | null;
 }
 
 export interface CorLoadResult {
@@ -873,6 +935,33 @@ function normalizeProjectInsight(value: ApiInsight): ProjectInsight {
       typeof value.days_stalled === "number" && Number.isFinite(value.days_stalled)
         ? value.days_stalled
         : null,
+  };
+}
+
+function normalizeUserTaskPriority(value: string | null | undefined): UserTaskPriority {
+  const normalized = asString(value).trim().toLowerCase();
+  if (normalized === "low" || normalized === "high" || normalized === "urgent") {
+    return normalized;
+  }
+  return "normal";
+}
+
+function normalizeUserTaskStatus(value: string | null | undefined): UserTaskStatus {
+  return asString(value).trim().toLowerCase() === "done" ? "done" : "pending";
+}
+
+function normalizeUserTask(task: ApiUserTask): UserTask {
+  return {
+    id: Number(task.id) || 0,
+    title: asString(task.title),
+    description: task.description ?? null,
+    client_tag: task.client_tag ?? null,
+    priority: normalizeUserTaskPriority(task.priority),
+    status: normalizeUserTaskStatus(task.status),
+    due_date: task.due_date ?? null,
+    completed_at: task.completed_at ?? null,
+    created_at: asString(task.created_at),
+    modified_at: asString(task.modified_at),
   };
 }
 
@@ -1630,6 +1719,62 @@ export async function fetchPmInsights(projectId?: number): Promise<ProjectInsigh
   return response.map((insight) => normalizeProjectInsight(insight));
 }
 
+export async function fetchUserTasks(
+  status?: UserTaskStatus,
+  clientTag?: string
+): Promise<UserTask[]> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (clientTag && clientTag.trim()) params.set("client_tag", clientTag.trim());
+  const query = params.toString();
+  const path = query ? `/api/user-tasks?${query}` : "/api/user-tasks";
+  const response = (await fetchJson<ApiUserTask[]>(path)) ?? [];
+  return response.map((row) => normalizeUserTask(row));
+}
+
+export async function createUserTask(data: UserTaskCreateInput): Promise<UserTask> {
+  const response = await fetchJson<ApiUserTask>("/api/user-tasks", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!response) {
+    throw new Error("Failed to create user task.");
+  }
+  return normalizeUserTask(response);
+}
+
+export async function updateUserTask(taskId: number, data: UserTaskUpdateInput): Promise<UserTask> {
+  const response = await fetchJson<ApiUserTask>(`/api/user-tasks/${taskId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response) {
+    throw new Error("Failed to update user task.");
+  }
+  return normalizeUserTask(response);
+}
+
+export async function toggleUserTask(taskId: number): Promise<UserTask> {
+  const response = await fetchJson<ApiUserTask>(`/api/user-tasks/${taskId}/toggle`, {
+    method: "PUT",
+  });
+  if (!response) {
+    throw new Error("Failed to toggle user task.");
+  }
+  return normalizeUserTask(response);
+}
+
+export async function deleteUserTask(taskId: number): Promise<void> {
+  await fetchJson(`/api/user-tasks/${taskId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchUserTaskTags(): Promise<string[]> {
+  const response = (await fetchJson<string[]>("/api/user-tasks/tags")) ?? [];
+  return response.map((value) => asString(value).trim()).filter((value) => value.length > 0);
+}
+
 export async function fetchShippingPrefill(
   quoteId: number
 ): Promise<ShippingDocumentState> {
@@ -1777,6 +1922,38 @@ export async function fetchCorRevisions(
       }))
       .filter((entry) => entry.corDocumentId > 0),
   };
+}
+
+export async function fetchCorDashboard(): Promise<CorDashboardEntry[]> {
+  const response = await fetchJson<ApiCorDashboardEnvelope>("/api/cor/dashboard");
+  if (!response) {
+    throw new Error("Failed to load COR dashboard.");
+  }
+
+  return (response.entries ?? [])
+    .map((entry) => {
+      const quoteId =
+        typeof entry.quote_id === "number" && Number.isFinite(entry.quote_id)
+          ? entry.quote_id
+          : 0;
+      const clientName = asString(entry.client_name).trim() || "Unknown Client";
+      return {
+        corDocumentId:
+          typeof entry.cor_document_id === "number" && Number.isFinite(entry.cor_document_id)
+            ? entry.cor_document_id
+            : 0,
+        quoteId,
+        quoteRef: asString(entry.quote_ref),
+        clientId: createClientId(clientName, String(quoteId || "0")),
+        clientName,
+        corNo: asString(entry.cor_no),
+        corStatus: asString(entry.cor_status),
+        description: asString(entry.description),
+        createdDate: entry.created_date ?? null,
+        modifiedDate: entry.modified_date ?? null,
+      };
+    })
+    .filter((entry) => entry.corDocumentId > 0 && entry.quoteId > 0);
 }
 
 export async function loadCorState(

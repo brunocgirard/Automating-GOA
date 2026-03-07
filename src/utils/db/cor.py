@@ -68,6 +68,7 @@ def list_cor_documents(client_quote_ref: str, db_path: str = DB_PATH) -> list[di
                     "cor_no": to_text(payload.get("cor_no")) or to_text(cor_data.get("corNo")),
                     "description": to_text(payload.get("description"))
                     or to_text(cor_data.get("revisionDescription")),
+                    "cor_status": to_text(cor_data.get("corStatus")),
                     "created_date": payload.get("created_date"),
                     "modified_date": payload.get("modified_date"),
                 }

@@ -4,19 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Download, Plus, Save, Trash2 } from "lucide-react";
 import {
+  fetchCorDashboard,
   fetchCorPrefill,
   fetchCorRevisions,
   fetchQuotes,
   generateCorDoc,
   loadCorState,
   saveCorState,
+  type CorDashboardEntry,
   type CorDocumentState,
   type CorLineItem,
   type CorRevisionSummary,
   type QuoteRow,
 } from "@/lib/api";
 import { uid } from "@/lib/doc-utils";
-import { useClientFilter } from "@/components/layout/client-filter-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type QuoteOption = { id: string; label: string };
+type ClientOption = { id: string; name: string; corCount: number };
+type SelectQuoteOptions = {
+  corDocumentId?: number | null;
+  startNewDraft?: boolean;
+};
 
 function getMachineNamesForQuote(rows: QuoteRow[], quoteId: number): string[] {
   if (!Number.isFinite(quoteId)) return [];
@@ -60,6 +66,42 @@ function nextCorNumber(revisions: CorRevisionSummary[]): string {
     .map((entry) => Number(entry.corNo))
     .filter((value) => Number.isFinite(value) && value > 0);
   return numbers.length > 0 ? String(Math.max(...numbers) + 1) : "1";
+}
+
+function buildNewCorDraft(
+  baseState: CorDocumentState,
+  quoteId: number,
+  machineNames: string[],
+  revisions: CorRevisionSummary[]
+): CorDocumentState {
+  const corNo = nextCorNumber(revisions);
+  const sourceLines =
+    baseState.lineItems.length > 0
+      ? baseState.lineItems
+      : [{ id: "cor-line-1", qty: "", reqDescription: "", unitCost: "", selectedItems: "" }];
+
+  return {
+    ...baseState,
+    quoteId,
+    client: {
+      ...baseState.client,
+      machine: baseState.client.machine || machineNames[0] || "",
+    },
+    corNo,
+    revisionDescription: "",
+    corStatus: "",
+    capmaticPM: "",
+    initiatorOfChange: "contact_person",
+    salesRep: "",
+    contactPerson: baseState.contactPerson,
+    impactDeliverables: "",
+    impactDeliveryDate: "",
+    paymentTerms: "",
+    currency: "",
+    approvalDate: todayDateValue(),
+    comments: "",
+    lineItems: sourceLines.map((line) => ({ ...line, id: uid("cor-line") })),
+  };
 }
 
 const COR_STATUS_OPTIONS = [
@@ -114,14 +156,16 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function CorDocumentsPageClient() {
-  const { selectedClientId } = useClientFilter();
   const searchParams = useSearchParams();
   const [quotes, setQuotes] = useState<QuoteRow[]>([]);
+  const [dashboardEntries, setDashboardEntries] = useState<CorDashboardEntry[]>([]);
+  const [dashboardClientFilter, setDashboardClientFilter] = useState<string>("__all__");
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [revisions, setRevisions] = useState<CorRevisionSummary[]>([]);
   const [selectedCorDocumentId, setSelectedCorDocumentId] = useState("");
   const [state, setState] = useState<CorDocumentState | null>(null);
   const [loadingQuotes, setLoadingQuotes] = useState(true);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [loadingState, setLoadingState] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -133,7 +177,7 @@ export default function CorDocumentsPageClient() {
     let active = true;
     setLoadingQuotes(true);
     setError(null);
-    void fetchQuotes(selectedClientId ?? undefined)
+    void fetchQuotes()
       .then((rows) => {
         if (active) setQuotes(rows);
       })
@@ -146,7 +190,29 @@ export default function CorDocumentsPageClient() {
     return () => {
       active = false;
     };
-  }, [selectedClientId]);
+  }, []);
+
+  const refreshDashboard = useCallback(async () => {
+    const rows = await fetchCorDashboard();
+    setDashboardEntries(rows);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingDashboard(true);
+    void refreshDashboard()
+      .catch((err) => {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Failed to load COR dashboard.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingDashboard(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [refreshDashboard]);
 
   const quoteOptions = useMemo<QuoteOption[]>(() => {
     const map = new Map<number, QuoteOption>();
@@ -158,10 +224,43 @@ export default function CorDocumentsPageClient() {
     return Array.from(map.values());
   }, [quotes]);
 
+  const dashboardClientOptions = useMemo<ClientOption[]>(() => {
+    const map = new Map<string, ClientOption>();
+    for (const entry of dashboardEntries) {
+      const existing = map.get(entry.clientId);
+      if (existing) {
+        existing.corCount += 1;
+      } else {
+        map.set(entry.clientId, {
+          id: entry.clientId,
+          name: entry.clientName,
+          corCount: 1,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [dashboardEntries]);
+
+  const filteredDashboardEntries = useMemo(() => {
+    if (dashboardClientFilter === "__all__") return dashboardEntries;
+    return dashboardEntries.filter((entry) => entry.clientId === dashboardClientFilter);
+  }, [dashboardClientFilter, dashboardEntries]);
+
   const quoteIdFromQuery = useMemo(() => {
     const raw = searchParams.get("quote");
     const parsed = Number(raw);
     return Number.isFinite(parsed) ? String(parsed) : null;
+  }, [searchParams]);
+
+  const corIdFromQuery = useMemo(() => {
+    const raw = searchParams.get("cor");
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+
+  const startNewFromQuery = useMemo(() => {
+    const raw = searchParams.get("new");
+    return raw === "1" || raw === "true";
   }, [searchParams]);
 
   const machineOptions = useMemo<string[]>(() => {
@@ -185,10 +284,16 @@ export default function CorDocumentsPageClient() {
     return list.revisions;
   }, []);
 
-  const selectQuote = useCallback(async (rawId: string) => {
+  const selectQuote = useCallback(async (rawId: string, options?: SelectQuoteOptions) => {
     if (!rawId) return;
     const quoteId = Number(rawId);
     if (!Number.isFinite(quoteId)) return;
+    const requestedCorDocumentId =
+      typeof options?.corDocumentId === "number" && Number.isFinite(options.corDocumentId)
+        ? options.corDocumentId
+        : null;
+    const startNewDraft = Boolean(options?.startNewDraft);
+
     latestQuote.current = rawId;
     setSelectedQuoteId(rawId);
     setSelectedCorDocumentId("");
@@ -201,30 +306,50 @@ export default function CorDocumentsPageClient() {
       const machineNames = getMachineNamesForQuote(quotes, quoteId);
       const [revisionList, loaded] = await Promise.all([
         refreshRevisions(quoteId),
-        loadCorState(quoteId),
+        loadCorState(quoteId, requestedCorDocumentId ?? undefined),
       ]);
       if (latestQuote.current !== rawId) return;
+
+      let baseState: CorDocumentState;
       if (loaded) {
         const selectedMachine = loaded.corData.client.machine || machineNames[0] || "";
-        setState({
+        baseState = {
           ...loaded.corData,
           approvalDate: todayDateValue(),
           client: {
             ...loaded.corData.client,
             machine: selectedMachine,
           },
-        });
-        setSelectedCorDocumentId(String(loaded.corDocumentId));
-        setStatus(`Loaded draft ${loaded.modifiedDate ?? loaded.createdDate ?? ""}.`);
+        };
       } else {
+        if (requestedCorDocumentId != null) {
+          throw new Error("Selected COR record was not found.");
+        }
         const prefill = await fetchCorPrefill(quoteId);
         if (latestQuote.current !== rawId) return;
         prefill.corNo = nextCorNumber(revisionList);
         prefill.revisionDescription = "";
         prefill.approvalDate = todayDateValue();
         prefill.client.machine = prefill.client.machine || machineNames[0] || "";
-        setState(prefill);
+        baseState = prefill;
+      }
+
+      if (startNewDraft) {
+        setState(buildNewCorDraft(baseState, quoteId, machineNames, revisionList));
         setSelectedCorDocumentId("");
+        setStatus("Started a new COR draft. Save to create it.");
+      } else {
+        setState(baseState);
+        if (loaded) {
+          setSelectedCorDocumentId(String(loaded.corDocumentId));
+          setStatus(
+            requestedCorDocumentId != null
+              ? `Loaded COR ${loaded.corNo || loaded.corDocumentId}.`
+              : `Loaded draft ${loaded.modifiedDate ?? loaded.createdDate ?? ""}.`
+          );
+        } else {
+          setSelectedCorDocumentId("");
+        }
       }
     } catch (err) {
       if (latestQuote.current !== rawId) return;
@@ -240,8 +365,19 @@ export default function CorDocumentsPageClient() {
   useEffect(() => {
     if (!quoteIdFromQuery || selectedQuoteId || loadingQuotes) return;
     if (!quoteOptions.some((option) => option.id === quoteIdFromQuery)) return;
-    void selectQuote(quoteIdFromQuery);
-  }, [loadingQuotes, quoteIdFromQuery, quoteOptions, selectedQuoteId, selectQuote]);
+    void selectQuote(quoteIdFromQuery, {
+      corDocumentId: corIdFromQuery,
+      startNewDraft: corIdFromQuery == null && startNewFromQuery,
+    });
+  }, [
+    corIdFromQuery,
+    loadingQuotes,
+    quoteIdFromQuery,
+    quoteOptions,
+    selectedQuoteId,
+    selectQuote,
+    startNewFromQuery,
+  ]);
 
   function patchState(fn: (prev: CorDocumentState) => CorDocumentState) {
     setState((prev) => (prev ? fn(prev) : prev));
@@ -278,82 +414,19 @@ export default function CorDocumentsPageClient() {
     }));
   }
 
-  async function createNewCorDraft() {
-    if (!selectedQuoteId) return;
-    const quoteId = Number(selectedQuoteId);
-    if (!Number.isFinite(quoteId)) return;
-    setLoadingState(true);
-    setError(null);
-    setStatus(null);
-    try {
-      let baseState = state;
-      if (!baseState || baseState.quoteId !== quoteId) {
-        baseState = await fetchCorPrefill(quoteId);
-      }
-      if (latestQuote.current !== selectedQuoteId) return;
-
-      const corNo = nextCorNumber(revisions);
-      const machineNames = getMachineNamesForQuote(quotes, quoteId);
-      const sourceLines =
-        baseState.lineItems.length > 0
-          ? baseState.lineItems
-          : [{ id: "cor-line-1", qty: "", reqDescription: "", unitCost: "", selectedItems: "" }];
-
-      setState({
-        ...baseState,
-        quoteId,
-        client: {
-          ...baseState.client,
-          machine: baseState.client.machine || machineNames[0] || "",
-        },
-        corNo,
-        revisionDescription: "",
-        corStatus: "",
-        capmaticPM: "",
-        initiatorOfChange: "contact_person",
-        salesRep: "",
-        contactPerson: baseState.contactPerson,
-        impactDeliverables: "",
-        impactDeliveryDate: "",
-        paymentTerms: "",
-        currency: "",
-        approvalDate: todayDateValue(),
-        comments: "",
-        lineItems: sourceLines.map((line) => ({ ...line, id: uid("cor-line") })),
-      });
-      setSelectedCorDocumentId("");
-      setStatus("Started a new COR draft. Save to create it.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start a new COR draft.");
-    } finally {
-      setLoadingState(false);
-    }
-  }
-
   function editRevision(corDocumentId: number) {
     if (!selectedQuoteId) return;
-    const quoteId = Number(selectedQuoteId);
-    if (!Number.isFinite(quoteId) || corDocumentId <= 0) return;
-    setLoadingState(true);
-    setError(null);
-    setStatus(null);
-    void loadCorState(quoteId, corDocumentId)
-      .then((loaded) => {
-        if (latestQuote.current !== selectedQuoteId) return;
-        if (!loaded) {
-          throw new Error("Selected COR record was not found.");
-        }
-        setState({
-          ...loaded.corData,
-          approvalDate: todayDateValue(),
-        });
-        setSelectedCorDocumentId(String(loaded.corDocumentId));
-        setStatus(`Loaded COR ${loaded.corNo || loaded.corDocumentId}.`);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load selected COR.");
-      })
-      .finally(() => setLoadingState(false));
+    if (corDocumentId <= 0) return;
+    void selectQuote(selectedQuoteId, { corDocumentId });
+  }
+
+  function editDashboardEntry(entry: CorDashboardEntry) {
+    void selectQuote(String(entry.quoteId), { corDocumentId: entry.corDocumentId });
+  }
+
+  function startNewCorDraft(quoteId: number) {
+    if (!Number.isFinite(quoteId) || quoteId <= 0) return;
+    void selectQuote(String(quoteId), { startNewDraft: true });
   }
 
   function saveDraft() {
@@ -373,6 +446,7 @@ export default function CorDocumentsPageClient() {
             : `Updated COR ${saved.corNo || saved.corDocumentId} at ${saved.savedAt}.`
         );
         void refreshRevisions(state.quoteId).catch(() => undefined);
+        void refreshDashboard().catch(() => undefined);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to save COR draft."))
       .finally(() => setSaving(false));
@@ -404,6 +478,94 @@ export default function CorDocumentsPageClient() {
 
       {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       {status ? <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700">{status}</div> : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>COR Dashboard</CardTitle>
+          <CardDescription>
+            All saved COR entries across clients. Filter by client, then use Edit to open the selected COR below.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="max-w-sm space-y-1.5">
+            <label className="text-sm font-medium">Client Filter</label>
+            <Select value={dashboardClientFilter} onValueChange={setDashboardClientFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All clients" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All clients</SelectItem>
+                {dashboardClientOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.name} ({option.corCount})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {loadingDashboard ? (
+            <div className="rounded-md border bg-neutral-50 p-3 text-sm text-muted-foreground">
+              Loading COR dashboard...
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Quote</TableHead>
+                    <TableHead>COR No.</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Updated</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredDashboardEntries.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-16 text-center text-muted-foreground">
+                        No COR entries found for this filter.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredDashboardEntries.map((entry) => {
+                      const isSelected =
+                        selectedQuoteId === String(entry.quoteId) &&
+                        selectedCorDocumentId === String(entry.corDocumentId);
+                      const corLabel = entry.corNo.trim() || String(entry.corDocumentId);
+                      return (
+                        <TableRow key={`${entry.quoteId}:${entry.corDocumentId}`} data-state={isSelected ? "selected" : undefined}>
+                          <TableCell>{entry.clientName}</TableCell>
+                          <TableCell>{entry.quoteRef}</TableCell>
+                          <TableCell className="font-semibold">COR {corLabel}</TableCell>
+                          <TableCell>{entry.corStatus.trim() || "-"}</TableCell>
+                          <TableCell>{entry.description.trim() || "-"}</TableCell>
+                          <TableCell>{entry.modifiedDate ?? entry.createdDate ?? "-"}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {isSelected ? <Badge variant="secondary">Editing</Badge> : null}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => editDashboardEntry(entry)}
+                                disabled={loadingState}
+                              >
+                                Edit
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -439,8 +601,14 @@ export default function CorDocumentsPageClient() {
                   All COR entries for the selected quote. Use Edit to open one below.
                 </CardDescription>
               </div>
-              <Button type="button" variant="outline" onClick={() => void createNewCorDraft()} disabled={loadingState}>
-                <Plus className="mr-2 h-4 w-4" />New COR
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => startNewCorDraft(Number(selectedQuoteId))}
+                disabled={loadingState}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                New COR
               </Button>
             </div>
           </CardHeader>

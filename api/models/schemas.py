@@ -345,6 +345,22 @@ class CorRevisionListResponse(BaseModel):
     revisions: list[CorRevisionSummaryResponse] = Field(default_factory=list)
 
 
+class CorDashboardEntryResponse(BaseModel):
+    cor_document_id: int
+    quote_id: int
+    quote_ref: str
+    client_name: str
+    cor_no: str = ""
+    cor_status: str = ""
+    description: str = ""
+    created_date: str | None = None
+    modified_date: str | None = None
+
+
+class CorDashboardResponse(BaseModel):
+    entries: list[CorDashboardEntryResponse] = Field(default_factory=list)
+
+
 class CorSaveRequest(BaseModel):
     cor_data: dict[str, Any] = Field(default_factory=dict)
     cor_document_id: int | None = None
@@ -513,3 +529,33 @@ class InsightResponse(BaseModel):
     message: str
     phase: str | None = None
     days_stalled: int | None = None
+
+
+class UserTaskCreateRequest(BaseModel):
+    title: str
+    description: str | None = None
+    client_tag: str | None = None
+    priority: Literal["low", "normal", "high", "urgent"] = "normal"
+    due_date: str | None = None
+
+
+class UserTaskUpdateRequest(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    client_tag: str | None = None
+    priority: Literal["low", "normal", "high", "urgent"] | None = None
+    status: Literal["pending", "done"] | None = None
+    due_date: str | None = None
+
+
+class UserTaskResponse(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    client_tag: str | None = None
+    priority: Literal["low", "normal", "high", "urgent"]
+    status: Literal["pending", "done"]
+    due_date: str | None = None
+    completed_at: str | None = None
+    created_at: str
+    modified_at: str

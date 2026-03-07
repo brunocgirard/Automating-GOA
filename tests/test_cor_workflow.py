@@ -209,6 +209,63 @@ def test_cor_revisions_endpoint_returns_numbered_entries(monkeypatch, auth_clien
     assert payload["revisions"][0]["description"] == "Rev B"
 
 
+def test_cor_dashboard_returns_rows_across_quotes(monkeypatch, auth_client):
+    monkeypatch.setattr(
+        cor_router,
+        "load_all_clients",
+        lambda **_kwargs: [
+            {"id": 11, "quote_ref": "Q-11", "customer_name": "Client A", "company": "Client A"},
+            {"id": 12, "quote_ref": "Q-12", "customer_name": "Client B", "company": "Client B"},
+        ],
+    )
+    monkeypatch.setattr(
+        cor_router,
+        "list_cor_documents",
+        lambda quote_ref: [
+            {
+                "id": 3,
+                "cor_no": "3",
+                "cor_status": "Approved",
+                "description": "Rev C",
+                "created_date": "2026-02-20 08:00:00",
+                "modified_date": "2026-02-20 09:00:00",
+            }
+        ]
+        if quote_ref == "Q-12"
+        else [
+            {
+                "id": 2,
+                "cor_no": "2",
+                "cor_status": "Waiting for approval",
+                "description": "Rev B",
+                "created_date": "2026-02-18 08:00:00",
+                "modified_date": "2026-02-18 09:00:00",
+            },
+            {
+                "id": 1,
+                "cor_no": "1",
+                "cor_status": "Not Submitted",
+                "description": "Initial",
+                "created_date": "2026-02-17 08:00:00",
+                "modified_date": "2026-02-17 08:00:00",
+            },
+        ],
+    )
+
+    response = auth_client.get("/api/cor/dashboard")
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert len(payload["entries"]) == 3
+    assert payload["entries"][0]["quote_id"] == 12
+    assert payload["entries"][0]["quote_ref"] == "Q-12"
+    assert payload["entries"][0]["client_name"] == "Client B"
+    assert payload["entries"][0]["cor_no"] == "3"
+    assert payload["entries"][0]["cor_status"] == "Approved"
+    assert payload["entries"][1]["quote_id"] == 11
+    assert payload["entries"][2]["cor_document_id"] == 1
+
+
 def _build_test_cor_template(path: Path) -> None:
     doc = Document()
     doc.add_paragraph("COR Number: {{COR NO. #}}")

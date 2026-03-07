@@ -46,6 +46,13 @@ function isTaskComplete(status: TaskStatus): boolean {
   return status === "done" || status === "skipped";
 }
 
+function formatDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString();
+}
+
 export function TaskChecklist({ tasks, onStatusChange, updatingTaskId }: TaskChecklistProps) {
   const [collapsed, setCollapsed] = useState(true);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -131,6 +138,7 @@ export function TaskChecklist({ tasks, onStatusChange, updatingTaskId }: TaskChe
                     const isUpdating = updatingTaskId === task.id;
                     const showOutOfOrder = outOfOrder(task, phaseTasks);
                     const menuOpen = contextMenu?.taskId === task.id;
+                    const completedDate = task.status === "done" ? formatDate(task.actual_date) : null;
 
                     return (
                       <div
@@ -175,6 +183,11 @@ export function TaskChecklist({ tasks, onStatusChange, updatingTaskId }: TaskChe
                           <Badge variant="secondary" className={statusBadgeClass[task.status]}>
                             {task.status.replace("_", " ")}
                           </Badge>
+                          {completedDate ? (
+                            <Badge variant="outline" className="text-green-700">
+                              Done {completedDate}
+                            </Badge>
+                          ) : null}
                           {showOutOfOrder ? (
                             <Badge variant="outline" className="text-amber-700">
                               Out of order
