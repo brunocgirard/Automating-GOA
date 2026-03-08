@@ -9,7 +9,6 @@ This project automates the generation of General Offer Arrangement (GOA) documen
 - Shared business logic: `src/`
 
 Deployment instructions: `docs/NEXTJS_DEPLOYMENT.md`
-Git workflow playbook: `docs/GIT_CHANGE_PLAYBOOK.md`
 
 ## Features
 - **Automated Data Extraction:** Parses text and tables from PDF quotes and uses a Large Language Model (LLM) to identify key information.

@@ -1,0 +1,37 @@
+{
+  "_template": {
+    "aliases": [],
+    "positive_evidence": [],
+    "negative_evidence": [],
+    "related_terms": [],
+    "machine_families": [],
+    "notes": ""
+  },
+  "el_0369_check": {
+    "aliases": [
+      "stack light",
+      "tower light",
+      "status beacon light",
+      "beacon light"
+    ],
+    "positive_evidence": [
+      "audible alarm",
+      "with buzzer",
+      "with audible alarm",
+      "three colour status beacon light with audible alarm"
+    ],
+    "negative_evidence": [
+      "without buzzer",
+      "no audible alarm"
+    ],
+    "related_terms": [
+      "signal light",
+      "tri-color beacon",
+      "status light"
+    ],
+    "machine_families": [
+      "sortstar"
+    ],
+    "notes": "Draft example only. Replace or expand with confirmed business terminology."
+  }
+}

@@ -1,0 +1,115 @@
+"""Shipping document persistence utilities."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from typing import Any
+
+from .base import DB_PATH, get_connection, row_to_dict, safe_json_loads, timestamp
+
+
+def load_shipping_document(client_quote_ref: str, db_path: str = DB_PATH) -> dict[str, Any] | None:
+    """Load the latest saved shipping state for a quote reference."""
+    if not client_quote_ref:
+        return None
+
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, client_quote_ref, shipping_data_json, created_date, modified_date
+            FROM shipping_documents
+            WHERE client_quote_ref = ?
+            ORDER BY modified_date DESC, id DESC
+            LIMIT 1
+            """,
+            (client_quote_ref,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        payload = row_to_dict(row) or {}
+        shipping_data = safe_json_loads(payload.get("shipping_data_json"), {})
+        if not isinstance(shipping_data, dict):
+            shipping_data = {}
+
+        return {
+            "id": payload.get("id"),
+            "client_quote_ref": payload.get("client_quote_ref", ""),
+            "shipping_data": shipping_data,
+            "created_date": payload.get("created_date"),
+            "modified_date": payload.get("modified_date"),
+        }
+    except Exception as exc:
+        print(f"Error loading shipping document for quote '{client_quote_ref}': {exc}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def save_shipping_document(
+    client_quote_ref: str,
+    shipping_data: dict[str, Any],
+    db_path: str = DB_PATH,
+) -> dict[str, Any] | None:
+    """Insert or update shipping state for a quote reference."""
+    if not client_quote_ref:
+        print("Error: Missing quote reference for save_shipping_document.")
+        return None
+
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        now = timestamp()
+        serialized = json.dumps(shipping_data or {})
+
+        cursor.execute(
+            """
+            SELECT id, created_date
+            FROM shipping_documents
+            WHERE client_quote_ref = ?
+            ORDER BY modified_date DESC, id DESC
+            LIMIT 1
+            """,
+            (client_quote_ref,),
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            cursor.execute(
+                """
+                UPDATE shipping_documents
+                SET shipping_data_json = ?, modified_date = ?
+                WHERE id = ?
+                """,
+                (serialized, now, existing[0]),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO shipping_documents (
+                    client_quote_ref,
+                    shipping_data_json,
+                    created_date,
+                    modified_date
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (client_quote_ref, serialized, now, now),
+            )
+
+        conn.commit()
+    except Exception as exc:
+        print(f"Error saving shipping document for quote '{client_quote_ref}': {exc}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+    return load_shipping_document(client_quote_ref, db_path)

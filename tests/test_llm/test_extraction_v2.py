@@ -6,6 +6,7 @@ from typing import Any
 
 from src.llm.extraction import (
     ExtractionPassOptions,
+    _parse_main_item_subitems,
     extract_machine_fields_with_options,
     select_repair_field_contexts,
 )
@@ -22,6 +23,43 @@ class _FakeModel:
 
     def generate_content(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
         return _FakeResponse(self._response_text)
+
+
+class _CapturingModel(_FakeModel):
+    def __init__(self, response_text: str = "{}"):
+        super().__init__(response_text)
+        self.prompts: list[str] = []
+
+    def generate_content(self, prompt: str, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        self.prompts.append(prompt)
+        return super().generate_content(prompt, *_args, **_kwargs)
+
+
+def test_parse_main_item_subitems_with_symbol_bullets() -> None:
+    description = "Main conveyor system\n• Integrated container hopper\n• Low level hopper sensor"
+
+    assert _parse_main_item_subitems(description) == [
+        "Integrated container hopper",
+        "Low level hopper sensor",
+    ]
+
+
+def test_parse_main_item_subitems_with_dash_bullets() -> None:
+    description = "Main conveyor system\n- Integrated container hopper\n- Low level hopper sensor"
+
+    assert _parse_main_item_subitems(description) == [
+        "Integrated container hopper",
+        "Low level hopper sensor",
+    ]
+
+
+def test_parse_main_item_subitems_without_bullets_returns_empty_list() -> None:
+    assert _parse_main_item_subitems("Main conveyor system with integrated hopper") == []
+
+
+def test_parse_main_item_subitems_empty_values_return_empty_list() -> None:
+    assert _parse_main_item_subitems("") == []
+    assert _parse_main_item_subitems(None) == []  # type: ignore[arg-type]
 
 
 def test_select_repair_field_contexts_uses_thresholds_and_suggestions() -> None:
@@ -185,3 +223,49 @@ def test_extract_machine_fields_with_options_keeps_comment_fields_empty(monkeypa
     assert data["customer"] == "ACME"
     assert data["ce_csa_check"] == "YES"
     assert data["rj_comm"] == ""
+
+
+def test_extract_machine_fields_with_options_structures_main_item_subitems(monkeypatch) -> None:
+    from src.llm import extraction as extraction_module
+
+    model = _CapturingModel('{"hopper_check":"YES"}')
+    monkeypatch.setattr(extraction_module, "get_generative_model", lambda *_args, **_kwargs: model)
+    monkeypatch.setattr(extraction_module, "configure_gemini_client", lambda: True)
+    monkeypatch.setattr(extraction_module, "get_quote_library_context", lambda **_kwargs: ("", []))
+
+    contexts = {
+        "hopper_check": {
+            "type": "boolean",
+            "description": "Integrated hopper included",
+            "section": "Machine Options",
+        }
+    }
+
+    extract_machine_fields_with_options(
+        machine_data={
+            "machine_name": "SortStar",
+            "main_item": {
+                "description": (
+                    "Main conveyor system\n"
+                    "• Integrated container hopper\n"
+                    "• Low level hopper sensor"
+                )
+            },
+        },
+        common_items=[],
+        template_placeholder_contexts=contexts,
+        full_pdf_text="",
+        pass_options=ExtractionPassOptions(
+            pass_name="test_subitems",
+            enable_few_shot=False,
+            enable_quote_library=False,
+            compact_prompt=False,
+        ),
+    )
+
+    assert len(model.prompts) == 1
+    prompt = model.prompts[0]
+    assert "- Main item: Main conveyor system" in prompt
+    assert "- Main item includes:" in prompt
+    assert "  • Integrated container hopper" in prompt
+    assert "  • Low level hopper sensor" in prompt
