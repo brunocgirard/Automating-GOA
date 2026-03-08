@@ -11,7 +11,6 @@ import type { AtRiskSummary, ProjectDetail, ProjectListItem, TaskStatus } from "
 import { AlertStrip } from "@/components/pm-dashboard/alert-strip";
 import { KanbanBoard } from "@/components/pm-dashboard/kanban-board";
 import { ProjectDetailSheet } from "@/components/pm-dashboard/project-detail-sheet";
-import { CreateProjectDialog } from "@/components/pm-dashboard/create-project-dialog";
 import { PersonalTaskBoard } from "@/components/pm-dashboard/personal-task-board";
 import { UploadDialog } from "@/components/dashboard/upload-dialog";
 
@@ -101,11 +100,8 @@ export default function PmDashboardPageClient() {
             onUploaded={() => {
               void loadSurface();
             }}
-          />
-          <CreateProjectDialog
-            onCreated={async () => {
-              await loadSurface();
-            }}
+            triggerLabel="New Project"
+            triggerIcon="plus"
           />
         </div>
       </div>
@@ -124,8 +120,7 @@ export default function PmDashboardPageClient() {
         </div>
       ) : projects.length === 0 ? (
         <div className="rounded-md border bg-white p-8 text-sm text-muted-foreground">
-          No projects available yet. Upload a quote to auto-create a PM project, or create one
-          manually.
+          No projects available yet. Use New Project to upload a quote and create the PM project.
         </div>
       ) : (
         <KanbanBoard projects={projects} onSelectProject={setSelectedProjectId} />

@@ -48,7 +48,7 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
     const trimmed = apiKeyInput.trim();
     if (!trimmed) {
       setStatusError(true);
-      setStatusMessage("Enter a Gemini API key before saving.");
+      setStatusMessage("Enter an API key before saving.");
       return;
     }
 
@@ -59,10 +59,10 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
       onUserChange(updated);
       setApiKeyInput("");
       setStatusError(false);
-      setStatusMessage("Gemini API key saved.");
+      setStatusMessage("API key saved.");
     } catch (error) {
       setStatusError(true);
-      setStatusMessage(error instanceof Error ? error.message : "Failed to save Gemini API key.");
+      setStatusMessage(error instanceof Error ? error.message : "Failed to save API key.");
     } finally {
       setBusyAction(null);
     }
@@ -74,10 +74,10 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
     try {
       const result = await testMyGeminiKey();
       setStatusError(!result.valid);
-      setStatusMessage(result.valid ? "Gemini API key is valid." : result.error ?? "Gemini API key test failed.");
+      setStatusMessage(result.valid ? "API key is valid." : result.error ?? "API key test failed.");
     } catch (error) {
       setStatusError(true);
-      setStatusMessage(error instanceof Error ? error.message : "Failed to test Gemini API key.");
+      setStatusMessage(error instanceof Error ? error.message : "Failed to test API key.");
     } finally {
       setBusyAction(null);
     }
@@ -91,10 +91,10 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
       onUserChange(updated);
       setApiKeyInput("");
       setStatusError(false);
-      setStatusMessage("Gemini API key removed.");
+      setStatusMessage("API key removed.");
     } catch (error) {
       setStatusError(true);
-      setStatusMessage(error instanceof Error ? error.message : "Failed to remove Gemini API key.");
+      setStatusMessage(error instanceof Error ? error.message : "Failed to remove API key.");
     } finally {
       setBusyAction(null);
     }
@@ -125,7 +125,7 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
               {currentUser?.display_name || currentUser?.username || "Unknown User"}
             </p>
             <p className="text-xs text-neutral-500">
-              {currentUser?.has_gemini_key ? "Key set" : "No Gemini key"}
+              {currentUser?.has_gemini_key ? "Key set" : "No key"}
             </p>
           </div>
           <Button
@@ -137,7 +137,7 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
               setSettingsOpen(true);
             }}
           >
-            Gemini Key
+            API Key
           </Button>
           <Button
             variant="ghost"
@@ -153,16 +153,16 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Gemini API Key</DialogTitle>
+            <DialogTitle>API Key</DialogTitle>
             <DialogDescription>
-              Save your personal Gemini key for extraction and generation.
+              Save your personal API key for extraction and generation.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <Input
               type="password"
-              placeholder="Paste Gemini API key"
+              placeholder="Paste API key"
               value={apiKeyInput}
               onChange={(event) => setApiKeyInput(event.target.value)}
             />

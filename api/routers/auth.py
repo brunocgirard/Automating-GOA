@@ -328,7 +328,7 @@ def set_my_gemini_key(
     current_user_id = user_id(current_user)
     api_key = str(payload.api_key or "").strip()
     if not api_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Gemini API key is required.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="API key is required.")
 
     try:
         encrypted_key = encrypt_gemini_key(api_key)
@@ -338,7 +338,7 @@ def set_my_gemini_key(
     if not update_user_gemini_key(current_user_id, encrypted_key):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to store Gemini API key.",
+            detail="Failed to store API key.",
         )
 
     invalidate_user_client_cache(current_user_id)
@@ -362,7 +362,7 @@ def remove_my_gemini_key(
     if not update_user_gemini_key(current_user_id, None):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to remove Gemini API key.",
+            detail="Failed to remove API key.",
         )
 
     invalidate_user_client_cache(current_user_id)
@@ -386,7 +386,7 @@ def test_my_gemini_key(
     if not encrypted_key:
         return {
             "valid": False,
-            "error": "No Gemini API key configured. Add your key in settings first.",
+            "error": "No API key configured. Add your key in settings first.",
         }
 
     try:

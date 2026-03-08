@@ -694,9 +694,10 @@ def extract_machine_fields(
             )
     except Exception as exc:
         detail = str(exc)
+        lowered_detail = detail.lower()
         status_code = (
             status.HTTP_400_BAD_REQUEST
-            if "Gemini API key" in detail
+            if "api key" in lowered_detail
             else status.HTTP_500_INTERNAL_SERVER_ERROR
         )
         raise HTTPException(

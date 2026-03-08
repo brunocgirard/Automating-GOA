@@ -184,7 +184,7 @@ def _load_fernet() -> Fernet:
 def encrypt_gemini_key(plain_key: str) -> str:
     normalized = str(plain_key or "").strip()
     if not normalized:
-        raise GeminiKeyError("Gemini API key cannot be empty.")
+        raise GeminiKeyError("API key cannot be empty.")
     fernet = _load_fernet()
     return fernet.encrypt(normalized.encode("utf-8")).decode("utf-8")
 
@@ -192,18 +192,18 @@ def encrypt_gemini_key(plain_key: str) -> str:
 def decrypt_gemini_key(encrypted_key: str) -> str:
     normalized = str(encrypted_key or "").strip()
     if not normalized:
-        raise GeminiKeyError("Encrypted Gemini API key is empty.")
+        raise GeminiKeyError("Encrypted API key is empty.")
     fernet = _load_fernet()
     try:
         return fernet.decrypt(normalized.encode("utf-8")).decode("utf-8")
     except InvalidToken as exc:
-        raise GeminiKeyError("Stored Gemini API key could not be decrypted.") from exc
+        raise GeminiKeyError("Stored API key could not be decrypted.") from exc
 
 
 def test_gemini_api_key(api_key: str) -> tuple[bool, str | None]:
     normalized = str(api_key or "").strip()
     if not normalized:
-        return False, "Gemini API key is empty."
+        return False, "API key is empty."
 
     try:
         client = google_genai.Client(api_key=normalized)

@@ -1281,7 +1281,7 @@ export async function setMyGeminiKey(apiKey: string): Promise<User> {
     body: JSON.stringify({ api_key: apiKey }),
   });
   if (!response) {
-    throw new Error("Failed to save Gemini API key.");
+    throw new Error("Failed to save API key.");
   }
   return normalizeUser(response);
 }
@@ -1291,7 +1291,7 @@ export async function removeMyGeminiKey(): Promise<User> {
     method: "DELETE",
   });
   if (!response) {
-    throw new Error("Failed to remove Gemini API key.");
+    throw new Error("Failed to remove API key.");
   }
   return normalizeUser(response);
 }
@@ -1301,7 +1301,7 @@ export async function testMyGeminiKey(): Promise<{ valid: boolean; error: string
     method: "POST",
   });
   if (!response) {
-    return { valid: false, error: "Unable to test Gemini API key." };
+    return { valid: false, error: "Unable to test API key." };
   }
   return {
     valid: Boolean(response.valid),

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Upload } from "lucide-react";
+import { Loader2, Plus, Search, Upload } from "lucide-react";
 import {
   fetchQuoteClientInfo,
   fetchProcessingArtifacts,
@@ -34,6 +34,8 @@ type UploadStep = "upload" | "client-info" | "identify" | "options" | "done";
 
 interface UploadDialogProps {
   onUploaded?: () => void;
+  triggerLabel?: string;
+  triggerIcon?: "upload" | "plus";
 }
 
 interface OptionCandidate {
@@ -211,7 +213,11 @@ function SelectedSummary({
   );
 }
 
-export function UploadDialog({ onUploaded }: UploadDialogProps) {
+export function UploadDialog({
+  onUploaded,
+  triggerLabel = "Upload + Identify",
+  triggerIcon = "upload",
+}: UploadDialogProps) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<UploadStep>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -415,8 +421,12 @@ export function UploadDialog({ onUploaded }: UploadDialogProps) {
     >
       <DialogTrigger asChild>
         <Button>
-          <Upload className="mr-2 size-4" />
-          Upload + Identify
+          {triggerIcon === "plus" ? (
+            <Plus className="mr-2 size-4" />
+          ) : (
+            <Upload className="mr-2 size-4" />
+          )}
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent

@@ -528,7 +528,7 @@ def _run_extraction_legacy(
     user_id: int | None = None,
 ) -> dict[str, Any]:
     if not configure_gemini_client(user_id=user_id):
-        raise RuntimeError("Please set your Gemini API key in settings before processing.")
+        raise RuntimeError("Please set your API key in settings before processing.")
 
     contexts = template_contexts or {}
     if not contexts:
@@ -597,7 +597,7 @@ def run_extraction_v2_full_prefill(
 ) -> dict[str, Any]:
     """Two-pass full-template prefill (fast pass + auto-repair pass)."""
     if not configure_gemini_client(user_id=user_id):
-        raise RuntimeError("Please set your Gemini API key in settings before processing.")
+        raise RuntimeError("Please set your API key in settings before processing.")
 
     contexts = template_contexts or {}
     if not contexts:

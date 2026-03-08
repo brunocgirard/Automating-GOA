@@ -122,12 +122,12 @@ class _GenAICompatNamespace:
 
     def _get_client(self) -> _google_genai.Client:
         if not self._api_key:
-            raise RuntimeError("Gemini API key was not configured.")
+            raise RuntimeError("API key was not configured.")
         return _google_genai.Client(api_key=self._api_key)
 
     def GenerativeModel(self, model_name: str) -> _CompatGenerativeModel:
         if not self._api_key:
-            raise RuntimeError("Gemini API key was not configured.")
+            raise RuntimeError("API key was not configured.")
         return _CompatGenerativeModel(self._api_key, model_name)
 
     def list_models(self):
@@ -170,17 +170,17 @@ def _resolve_user_api_key(user_id: int) -> str:
     encrypted_key = get_user_gemini_key(user_id)
     if not encrypted_key:
         raise MissingUserGeminiKeyError(
-            "Please set your Gemini API key in settings before processing."
+            "Please set your API key in settings before processing."
         )
     try:
         api_key = decrypt_gemini_key(encrypted_key)
     except Exception as exc:
         raise MissingUserGeminiKeyError(
-            "Stored Gemini API key could not be decrypted. Please set it again."
+            "Stored API key could not be decrypted. Please set it again."
         ) from exc
     if not str(api_key or "").strip():
         raise MissingUserGeminiKeyError(
-            "Please set your Gemini API key in settings before processing."
+            "Please set your API key in settings before processing."
         )
     return api_key
 
