@@ -116,20 +116,28 @@ def test_workspace_isolation_with_admin_override() -> None:
     user1_project_ids = {int(row["id"]) for row in user1_projects.json()}
     assert project_1_id in user1_project_ids
     assert project_2_id not in user1_project_ids
+    assert user1_client.delete(f"/api/pm/projects/{project_2_id}").status_code == 404
+
+    user1_delete_own = user1_client.delete(f"/api/pm/projects/{project_1_id}")
+    assert user1_delete_own.status_code == 200
+    assert user1_client.get(f"/api/pm/projects/{project_1_id}").status_code == 404
 
     admin_quotes = admin_client.get("/api/quotes")
     assert admin_quotes.status_code == 200
     admin_quote_refs = {row["quote_ref"] for row in admin_quotes.json()}
-    assert quote_ref_1 in admin_quote_refs
+    assert quote_ref_1 not in admin_quote_refs
     assert quote_ref_2 in admin_quote_refs
 
-    assert admin_client.get(f"/api/machines/{machine_1_id}").status_code == 200
+    assert admin_client.get(f"/api/machines/{machine_1_id}").status_code == 404
     assert admin_client.get(f"/api/machines/{machine_2_id}").status_code == 200
-    assert admin_client.get(f"/api/shipping/{quote_1_id}/prefill").status_code == 200
+    assert admin_client.get(f"/api/shipping/{quote_1_id}/prefill").status_code == 404
     assert admin_client.get(f"/api/shipping/{quote_2_id}/prefill").status_code == 200
 
     admin_projects = admin_client.get("/api/pm/projects")
     assert admin_projects.status_code == 200
     admin_project_ids = {int(row["id"]) for row in admin_projects.json()}
-    assert project_1_id in admin_project_ids
     assert project_2_id in admin_project_ids
+
+    admin_delete_user2 = admin_client.delete(f"/api/pm/projects/{project_2_id}")
+    assert admin_delete_user2.status_code == 200
+    assert admin_client.get(f"/api/pm/projects/{project_2_id}").status_code == 404

@@ -106,7 +106,7 @@ def delete_project_record(
     project_id: int,
     current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> dict[str, Any]:
-    deleted = delete_project(project_id, **scope_kwargs(current_user))
+    deleted = delete_project(project_id, delete_linked_quote=True, **scope_kwargs(current_user))
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
     return {"deleted": True, "id": project_id}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  deleteProjectRecord,
   fetchAtRiskSummary,
   fetchProject,
   fetchProjects,
@@ -22,6 +23,7 @@ export default function PmDashboardPageClient() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectDetail | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<number | null>(null);
 
   const loadSurface = useCallback(async () => {
     setError(null);
@@ -86,6 +88,30 @@ export default function PmDashboardPageClient() {
     }
   }
 
+  async function handleDeleteProject(projectId: number) {
+    if (
+      !window.confirm(
+        "Delete this project and its linked quote/client record? This action cannot be undone."
+      )
+    )
+      return;
+
+    setDeletingProjectId(projectId);
+    setError(null);
+    try {
+      await deleteProjectRecord(projectId);
+      if (selectedProjectId === projectId) {
+        setSelectedProjectId(null);
+        setSelectedProject(null);
+      }
+      await loadSurface();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete project.");
+    } finally {
+      setDeletingProjectId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -130,6 +156,7 @@ export default function PmDashboardPageClient() {
         open={selectedProjectId != null}
         project={selectedProject}
         updatingTaskId={updatingTaskId}
+        deletingProjectId={deletingProjectId}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedProjectId(null);
@@ -137,6 +164,7 @@ export default function PmDashboardPageClient() {
           }
         }}
         onTaskStatusChange={handleTaskStatusChange}
+        onDeleteProject={handleDeleteProject}
       />
     </div>
   );

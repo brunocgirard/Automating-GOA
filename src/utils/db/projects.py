@@ -783,10 +783,14 @@ def delete_project(
     db_path: str = DB_PATH,
     owner_user_id: int | None = None,
     include_all_for_admin: bool = False,
+    delete_linked_quote: bool = False,
 ) -> bool:
-    """Delete a project and all related project tasks/transitions."""
+    """Delete a project and optionally remove its linked quote/client record."""
     if not isinstance(project_id, int) or project_id <= 0:
         return False
+
+    linked_quote_ref: str | None = None
+    should_try_delete_quote = False
 
     conn = None
     try:
@@ -798,17 +802,57 @@ def delete_project(
             table_alias="projects",
         )
         cursor.execute(
+            f"SELECT quote_ref FROM projects WHERE id = ?{scope_sql} LIMIT 1",
+            (project_id, *scope_params),
+        )
+        row = cursor.fetchone()
+        linked_quote_ref = str(row[0]).strip() if row and row[0] else None
+        cursor.execute(
             f"DELETE FROM projects WHERE id = ?{scope_sql}",
             (project_id, *scope_params),
         )
         conn.commit()
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+        if not deleted:
+            return False
+
+        if delete_linked_quote and linked_quote_ref:
+            cursor.execute(
+                f"""
+                SELECT COUNT(1)
+                FROM projects
+                WHERE quote_ref = ?{scope_sql}
+                """,
+                (linked_quote_ref, *scope_params),
+            )
+            remaining_projects_row = cursor.fetchone()
+            remaining_projects = int(remaining_projects_row[0]) if remaining_projects_row else 0
+            should_try_delete_quote = remaining_projects == 0
     except Exception as exc:
         print(f"Error deleting project {project_id}: {exc}")
         return False
     finally:
         if conn:
             conn.close()
+
+    if should_try_delete_quote and linked_quote_ref:
+        # Import lazily to avoid circular imports in db package initialization.
+        from .clients import delete_client_record, get_client_by_quote_ref
+
+        linked_client = get_client_by_quote_ref(
+            linked_quote_ref,
+            db_path=db_path,
+            owner_user_id=owner_user_id,
+            include_all_for_admin=include_all_for_admin,
+        )
+        if linked_client and linked_client.get("id"):
+            delete_client_record(
+                int(linked_client["id"]),
+                db_path=db_path,
+                owner_user_id=owner_user_id,
+                include_all_for_admin=include_all_for_admin,
+            )
+    return True
 
 
 def update_task_status(

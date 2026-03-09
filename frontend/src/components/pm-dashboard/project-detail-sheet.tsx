@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 import { fetchQuotes } from "@/lib/api";
 import type { ProjectDetail, TaskStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -22,7 +23,9 @@ interface ProjectDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   project: ProjectDetail | null;
   updatingTaskId?: number | null;
+  deletingProjectId?: number | null;
   onTaskStatusChange: (taskId: number, status: TaskStatus) => Promise<void> | void;
+  onDeleteProject?: (projectId: number) => Promise<void> | void;
 }
 
 function toDate(value: string | null | undefined): Date | null {
@@ -48,7 +51,9 @@ export function ProjectDetailSheet({
   onOpenChange,
   project,
   updatingTaskId,
+  deletingProjectId,
   onTaskStatusChange,
+  onDeleteProject,
 }: ProjectDetailSheetProps) {
   const [quoteId, setQuoteId] = useState<number | null>(null);
 
@@ -111,20 +116,36 @@ export function ProjectDetailSheet({
               <SheetDescription>{project.customer_name}</SheetDescription>
             </SheetHeader>
 
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{project.status}</Badge>
-              <Badge
-                variant="secondary"
-                className={
-                  project.risk_level === "overdue"
-                    ? "bg-red-100 text-red-800"
-                    : project.risk_level === "at_risk"
-                      ? "bg-yellow-100 text-yellow-800"
-                      : "bg-green-100 text-green-800"
-                }
-              >
-                {project.risk_level.replace("_", " ")}
-              </Badge>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{project.status}</Badge>
+                <Badge
+                  variant="secondary"
+                  className={
+                    project.risk_level === "overdue"
+                      ? "bg-red-100 text-red-800"
+                      : project.risk_level === "at_risk"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-green-100 text-green-800"
+                  }
+                >
+                  {project.risk_level.replace("_", " ")}
+                </Badge>
+              </div>
+              {onDeleteProject ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={deletingProjectId === project.id}
+                  onClick={() => {
+                    void onDeleteProject(project.id);
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                  {deletingProjectId === project.id ? "Deleting..." : "Delete Project"}
+                </Button>
+              ) : null}
             </div>
 
             <InsightsPanel projectId={project.id} />
