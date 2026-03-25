@@ -64,6 +64,9 @@ validation_output/
 # Backup files
 *.backup
 
+# Git worktrees
+.worktrees/
+
 # AI tool configs
 .adal/
 .agent/
