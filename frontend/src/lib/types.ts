@@ -19,6 +19,7 @@ export interface User {
   role: "admin" | "standard" | string;
   is_active: boolean;
   has_gemini_key: boolean;
+  sign_in_disabled: boolean;
 }
 
 export interface LoginRequest {

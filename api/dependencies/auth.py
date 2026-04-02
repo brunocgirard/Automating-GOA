@@ -6,7 +6,13 @@ from typing import Any
 
 from fastapi import Depends, HTTPException, Request, status
 
-from api.services.auth_service import COOKIE_NAME, hash_session_token, is_session_expired
+from api.services.auth_service import (
+    COOKIE_NAME,
+    get_sign_in_disabled_user,
+    hash_session_token,
+    is_session_expired,
+    is_sign_in_disabled,
+)
 from src.utils.db import find_session_by_token_hash, revoke_session, touch_session
 
 
@@ -19,6 +25,20 @@ def is_admin_user(user: dict[str, Any] | None) -> bool:
 
 async def get_current_user(request: Request) -> dict[str, Any] | None:
     """Extract session cookie, validate session, and return user payload or None."""
+    if is_sign_in_disabled():
+        user_row = get_sign_in_disabled_user()
+        user_payload = {
+            "id": int(user_row.get("id") or 0),
+            "username": str(user_row.get("username") or ""),
+            "display_name": str(user_row.get("display_name") or "").strip() or None,
+            "role": str(user_row.get("role") or "admin").strip().lower() or "admin",
+            "is_active": bool(int(user_row.get("is_active") or 0)),
+            "gemini_api_key_encrypted": user_row.get("gemini_api_key_encrypted"),
+        }
+        request.state.current_user = user_payload
+        request.state.current_session = None
+        return user_payload
+
     raw_token = request.cookies.get(COOKIE_NAME)
     if not raw_token:
         request.state.current_user = None

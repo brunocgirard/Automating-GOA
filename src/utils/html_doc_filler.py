@@ -386,6 +386,102 @@ def _field_is_populated(label_element) -> bool:
     return False
 
 
+def _toggle_class(element: Any, class_name: str, enabled: bool) -> None:
+    if element is None:
+        return
+    classes = list(element.get('class', []))
+    if enabled and class_name not in classes:
+        classes.append(class_name)
+    if not enabled:
+        classes = [name for name in classes if name != class_name]
+    if classes:
+        element['class'] = classes
+    else:
+        element.attrs.pop('class', None)
+
+
+def _ensure_group_blocks(soup: BeautifulSoup) -> None:
+    for group in soup.select('.group'):
+        direct_children = [child for child in group.children if getattr(child, 'name', None)]
+        if not direct_children:
+            continue
+        if any('group-block' in (child.get('class') or []) for child in direct_children):
+            continue
+
+        blocks: list[Any] = []
+        current_block = None
+        for child in direct_children:
+            child_classes = child.get('class', [])
+            if 'group-title' in child_classes or current_block is None:
+                current_block = soup.new_tag('div')
+                current_block['class'] = ['group-block']
+                blocks.append(current_block)
+            current_block.append(child.extract())
+
+        for block in blocks:
+            group.append(block)
+
+
+def _ensure_print_value_node(soup: BeautifulSoup, label_element: Any) -> Any | None:
+    if label_element is None:
+        return None
+    if 'checkbox' in label_element.get('class', []):
+        return None
+    if label_element.find(class_='formatted-list') is not None:
+        return None
+
+    existing = label_element.find(class_='field-value-print')
+    if existing is not None:
+        return existing
+
+    mirror = soup.new_tag('div')
+    mirror['class'] = ['field-value-print']
+    token = label_element.find(class_='token')
+    if token is not None:
+        token.insert_before(mirror)
+    else:
+        label_element.append(mirror)
+    return mirror
+
+
+def _sync_layout_state(soup: BeautifulSoup) -> None:
+    _ensure_group_blocks(soup)
+
+    for label_element in soup.select('label.field'):
+        checkbox = label_element.find('input', attrs={'type': 'checkbox'})
+        formatted = label_element.find(class_='formatted-list')
+
+        if checkbox is not None:
+            _toggle_class(label_element, 'is-checked', checkbox.has_attr('checked'))
+            _toggle_class(label_element, 'has-value', False)
+            continue
+
+        field_value = ""
+        if formatted is not None:
+            field_value = str(formatted.get('data-field-value', '')) or formatted.get_text("\n", strip=True)
+        else:
+            input_elem = label_element.find('input')
+            textarea = label_element.find('textarea')
+            if input_elem is not None:
+                field_value = str(input_elem.get('value', ''))
+            elif textarea is not None:
+                field_value = textarea.get_text()
+
+        has_value = _has_text_value(field_value)
+        _toggle_class(label_element, 'has-value', has_value)
+        _toggle_class(label_element, 'is-checked', False)
+
+        mirror = _ensure_print_value_node(soup, label_element)
+        if mirror is not None:
+            mirror.clear()
+            if field_value:
+                mirror.append(field_value)
+
+    for group in soup.select('.group'):
+        has_content = any(_field_is_populated(field) for field in group.select('label.field'))
+        _toggle_class(group, 'has-content', has_content)
+
+
 def _prune_empty_content(
     soup: BeautifulSoup,
     *,
@@ -659,20 +755,76 @@ def _inject_pdf_quality_styles(soup: BeautifulSoup) -> None:
                 word-break: break-word;
             }
             .page .section {
-                break-before: page !important;
-                page-break-before: always !important;
-            }
-            .page .section:first-of-type {
                 break-before: auto !important;
                 page-break-before: auto !important;
+                break-inside: auto !important;
+                page-break-inside: auto !important;
+                box-shadow: none !important;
+            }
+            .page .section-header {
+                break-after: avoid !important;
+                page-break-after: avoid !important;
+                page-break-inside: avoid !important;
+            }
+            .page .group {
+                break-inside: auto !important;
+                page-break-inside: auto !important;
+            }
+            .page .group-block {
+                break-inside: avoid-page !important;
+                page-break-inside: avoid !important;
+            }
+            .page .group-title {
+                break-after: avoid !important;
+                page-break-after: avoid !important;
+                background: #dce3ee !important;
+                color: #1e2d3d !important;
+            }
+            .page .group.has-content .group-title {
+                background: #ffe6d7 !important;
+                color: #7f1d1d !important;
+                border-left: 6px solid #c00000 !important;
+                font-size: 12px !important;
+                padding: 6px 12px !important;
+                box-shadow: inset 0 0 0 1px #f3c3b0 !important;
             }
             .page .field-grid {
-                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) !important;
-                gap: 10px 12px !important;
+                grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)) !important;
+                gap: 0 !important;
+                border-top: 1px solid #ccc !important;
+                border-left: 1px solid #ccc !important;
             }
             .page .checkbox-grid {
-                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
-                gap: 8px 10px !important;
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+                gap: 0 !important;
+                border-top: 1px solid #ccc !important;
+                border-left: 1px solid #ccc !important;
+            }
+            .page .field {
+                display: grid !important;
+                grid-template-columns: 130px 1fr !important;
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+                border-right: 1px solid #ccc !important;
+                border-bottom: 1px solid #ccc !important;
+            }
+            .page .field .label {
+                background: #edf0f5 !important;
+                border-right: 1px solid #ccc !important;
+            }
+            .page .field.checkbox.is-checked {
+                background: #fff3cd !important;
+                border-left: 3px solid #c00000 !important;
+                padding-left: 7px !important;
+            }
+            .page .field.has-value .label {
+                color: #c00000 !important;
+                font-weight: 700 !important;
+            }
+            .page .field-value-print {
+                display: block !important;
+                white-space: pre-wrap !important;
+                overflow-wrap: anywhere !important;
             }
             .page .field .label {
                 font-size: 11px !important;
@@ -683,6 +835,11 @@ def _inject_pdf_quality_styles(soup: BeautifulSoup) -> None:
                 font-size: 11px !important;
                 line-height: 1.3 !important;
             }
+            .page .field input[type="text"],
+            .page .field input[type="number"],
+            .page .field textarea {
+                display: none !important;
+            }
         }
     """
     soup.head.append(style_tag)
@@ -691,6 +848,7 @@ def _inject_pdf_quality_styles(soup: BeautifulSoup) -> None:
 def _prepare_html_for_pdf(html_content: str) -> tuple[str, dict[str, str]]:
     soup = BeautifulSoup(html_content, 'html.parser')
     metadata = _extract_pdf_metadata_from_soup(soup)
+    _sync_layout_state(soup)
     _inject_pdf_cover_page(soup, metadata)
     _inject_pdf_quality_styles(soup)
     return str(soup), metadata
@@ -809,6 +967,7 @@ def fill_html_template(
         hide_empty_sections=hide_empty_sections,
         hide_empty_fields=hide_empty_fields,
     )
+    _sync_layout_state(soup)
 
     # Add consistent checkbox and list styling
     style_tag = soup.new_tag('style')

@@ -139,14 +139,18 @@ export function Header({ onToggleSidebar, currentUser, onUserChange }: HeaderPro
           >
             API Key
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void handleLogout()}
-            disabled={busyAction === "logout"}
-          >
-            Logout
-          </Button>
+          {currentUser?.sign_in_disabled ? (
+            <p className="hidden text-xs text-neutral-500 sm:block">Sign-in disabled</p>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleLogout()}
+              disabled={busyAction === "logout"}
+            >
+              Logout
+            </Button>
+          )}
         </div>
       </header>
 

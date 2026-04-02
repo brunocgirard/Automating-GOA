@@ -23,6 +23,13 @@ def _is_checkbox_field(field_key: str) -> bool:
     return field_key.endswith("_check")
 
 
+def _to_text_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
 def _mapping_for_machine(is_sortstar: bool) -> dict[str, str]:
     return SORTSTAR_EXPLICIT_MAPPINGS if is_sortstar else DEFAULT_EXPLICIT_MAPPINGS
 
@@ -44,27 +51,34 @@ def _normalize_section_name(section_name: str) -> str:
 
 
 @lru_cache(maxsize=1)
-def _goa_checkbox_field_order() -> list[dict[str, str]]:
+def _goa_fields_from_utility_onward() -> list[dict[str, str]]:
     rows = load_rows()
     ordered: list[dict[str, str]] = []
     seen: set[str] = set()
+    started = False
 
     for row in rows:
+        section = _normalize_section_name(str(row.get("section", "")))
+        if section.lower() == "utility specifications":
+            started = True
+        if not started:
+            continue
+        if section.lower() == "revision log":
+            continue
+
         placeholder = str(row.get("placeholder", "")).strip()
         if not placeholder or placeholder in seen:
             continue
-        if str(row.get("type", "")).strip().lower() != "checkbox":
-            continue
 
         seen.add(placeholder)
-        section = _normalize_section_name(str(row.get("section", "")))
         subsection = display_label(str(row.get("subsection", "")).strip())
         subsub = display_label(str(row.get("subsub", "")).strip())
         label = display_label(str(row.get("field", "")).strip()) or placeholder
         item_parts = [part for part in (subsection, subsub, label) if part]
         item = " - ".join(item_parts) if item_parts else label
+        field_type = str(row.get("type", "")).strip().lower() or "text"
 
-        ordered.append({"key": placeholder, "section": section, "item": item})
+        ordered.append({"key": placeholder, "section": section, "item": item, "type": field_type})
 
     return ordered
 
@@ -82,12 +96,23 @@ def _to_checklist_rows(template_data: dict[str, Any], is_sortstar: bool) -> list
     seen: set[str] = set()
     mapping = _mapping_for_machine(is_sortstar)
 
-    # First: GOA schema-driven checkbox order (fXXXX placeholders).
-    for field in _goa_checkbox_field_order():
+    # First: GOA schema-driven fields from Utility Specifications onward (fXXXX placeholders).
+    for field in _goa_fields_from_utility_onward():
         key = field["key"]
-        if not _is_yes_checkbox(key, template_data.get(key)):
-            continue
-        rows.append({"key": key, "section": field["section"], "item": field["item"]})
+        field_value = template_data.get(key)
+        field_type = field.get("type", "")
+
+        if field_type == "checkbox":
+            if not _is_yes_checkbox(key, field_value):
+                continue
+            item = field["item"]
+        else:
+            text_value = _to_text_value(field_value)
+            if text_value is None:
+                continue
+            item = f"{field['item']}: {text_value}"
+
+        rows.append({"key": key, "section": field["section"], "item": item})
         seen.add(key)
 
     # Second: legacy mapped checkbox keys in explicit GOA order.

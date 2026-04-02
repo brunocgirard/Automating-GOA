@@ -9,12 +9,16 @@ from typing import Dict, List, Any
 
 from openpyxl import load_workbook
 
+from src.utils.goa_semantic_overrides import merge_semantic_overrides_into_schema
+
 # Define constants
 TEMPLATE_DIR = Path("templates")
 EXCEL_FILENAME = "GOA_template.xlsx"
 EXCEL_PATH = TEMPLATE_DIR / EXCEL_FILENAME
 OUTPUT_HTML_FILENAME = "goa_form.html"
 OUTPUT_HTML_PATH = TEMPLATE_DIR / OUTPUT_HTML_FILENAME
+FORM_BODY_START_MARKER = "<!-- GOA_FORM_BODY_START -->"
+FORM_BODY_END_MARKER = "<!-- GOA_FORM_BODY_END -->"
 
 def load_rows(excel_path: Path = EXCEL_PATH) -> List[Dict[str, str]]:
     """
@@ -141,9 +145,11 @@ def render_group(title: str, items: list[dict]) -> str:
     fields_html = "\n".join(render_input(it) for it in items)
     return f"""
     <div class="group">
-      {heading}
-      <div class="{grid_class}">
-        {fields_html}
+      <div class="group-block">
+        {heading}
+        <div class="{grid_class}">
+          {fields_html}
+        </div>
       </div>
     </div>
     """
@@ -192,6 +198,19 @@ def build_html(rows):
             seen.add(row["section"])
 
     body = "\n".join(render_section(name, sections[name]) for name in section_order)
+
+    template = OUTPUT_HTML_PATH.read_text(encoding="utf-8")
+    pattern = rf"({re.escape(FORM_BODY_START_MARKER)})(.*)({re.escape(FORM_BODY_END_MARKER)})"
+    updated_html, replacements = re.subn(
+        pattern,
+        rf"\1\n{body}\n\3",
+        template,
+        count=1,
+        flags=re.DOTALL,
+    )
+    if replacements != 1:
+        raise ValueError(f"Could not locate GOA form body markers in {OUTPUT_HTML_PATH}.")
+    return updated_html
 
     template = r"""<!doctype html>
 <html lang="en">
@@ -252,34 +271,13 @@ def build_html(rows):
       border-bottom: 1px solid var(--border);
       border-top-left-radius: 10px;
       border-top-right-radius: 10px;
-      cursor: pointer;
-      user-select: none;
     }
     .section-header.active + .section-content {
         /* styles when open */
     }
-    .section.collapsed > .section-header {
-        border-bottom-color: transparent;
-    }
-    .toggle-icon {
-        transition: transform 0.3s ease;
-        font-weight: bold;
-        font-size: 20px;
-        color: var(--muted);
-    }
-    .section-header.active .toggle-icon {
-        transform: rotate(45deg);
-    }
     .section-content {
         padding: 16px 14px;
         overflow: hidden;
-        max-height: 10000px; /* A large enough value to not clip content */
-        transition: max-height 0.4s ease-in-out, padding 0.3s ease-in-out;
-    }
-    .section.collapsed > .section-content {
-        max-height: 0;
-        padding-top: 0;
-        padding-bottom: 0;
     }
     .section h2 {
       margin: 0;
@@ -296,81 +294,165 @@ def build_html(rows):
       font-weight: 700;
       border: 1px solid var(--border);
     }
-    .group { margin: 10px 14px 0 14px; }
-    .group-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--muted);
-      margin: 6px 0 4px;
+    .group { margin: 8px 14px 0 14px; }
+    .group:last-child { margin-bottom: 10px; }
+    .group-block {
+      display: block;
     }
+    .group-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #1e2d3d;
+      background: #dce3ee;
+      border-left: 4px solid var(--accent);
+      padding: 5px 10px;
+      margin: 8px 0 0 0;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border-radius: 0 3px 3px 0;
+      transition: background-color 160ms ease, color 160ms ease, border-left-width 160ms ease, padding 160ms ease, font-size 160ms ease;
+    }
+    .group.has-content .group-title {
+      font-size: 12px;
+      color: #7f1d1d;
+      background: #ffe6d7;
+      border-left-width: 6px;
+      padding: 6px 12px;
+      box-shadow: inset 0 0 0 1px #f3c3b0;
+    }
+    /* TABLE-GRID LAYOUT: capped at 3 cols max for predictable row alignment */
     .field-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+      border-radius: 0 0 6px 6px;
+      overflow: hidden;
     }
     .checkbox-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 10px;
-    }
-    .field-grid > .field {
-      flex: 1 1 calc((100% - 36px) / 4);
-      max-width: calc((100% - 36px) / 4);
-      min-width: 260px;
-    }
-    .checkbox-grid > .field {
-      flex: 1 1 calc((100% - 30px) / 4);
-      max-width: calc((100% - 30px) / 4);
-      min-width: 220px;
-    }
-    @supports (display: grid) {
-      .field-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      }
-      .checkbox-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      }
-      .field-grid > .field,
-      .checkbox-grid > .field {
-        max-width: none;
-        min-width: 0;
-      }
-    }
-    .field {
-      border-left: 3px solid #f3f3f3;
       display: grid;
-      grid-template-rows: auto auto auto;
-      gap: 4px;
-      padding: 10px;
-      border: 1px solid #cdd4e0;
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+      border-radius: 0 0 6px 6px;
+      overflow: hidden;
+    }
+    /* Horizontal label | value layout — matches height of checkbox fields */
+    .field {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      grid-template-rows: auto;
+      gap: 0;
+      padding: 0;
+      border: none;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
       background: #fff;
+      position: relative;
+      min-height: 36px;
+      transition: background-color 160ms ease, border-color 160ms ease;
     }
     .field.checkbox {
-      grid-template-columns: auto 1fr auto;
-      grid-template-rows: auto;
+      display: flex;
+      flex-direction: row;
       align-items: center;
       gap: 8px;
-      background: #f8f9fc;
-      border-color: #d5dbe7;
+      padding: 7px 10px;
+      background: #f8f9fb;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
     }
-    .field.checkbox .label { font-weight: 600; color: var(--ink); }
-    .label { font-size: 13px; color: var(--ink); font-weight: 600; }
+    .field.checkbox:has(input:checked),
+    .field.checkbox.is-checked {
+      background: #fff3cd;
+      border-left: 3px solid #c00000;
+      padding-left: 7px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .field.checkbox:has(input:checked) .label,
+    .field.checkbox.is-checked .label {
+      font-weight: 700;
+      color: #1f2430;
+    }
+    /* Side label: left column with separator line */
+    .label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #374151;
+      padding: 7px 9px;
+      background: #edf0f5;
+      border-right: 1px solid var(--border);
+      line-height: 1.4;
+      white-space: normal;
+      overflow: visible;
+      display: flex;
+      align-items: center;
+      align-self: stretch;
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .field.checkbox .label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      padding: 0;
+      background: transparent;
+      border-right: none;
+      white-space: normal;
+      overflow: visible;
+      display: inline;
+      align-self: auto;
+    }
     input[type="text"], input[type="number"], textarea {
       width: 100%;
       padding: 7px 9px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-      background: #fdfdff;
-      font-size: 14px;
+      border-radius: 0;
+      border: none;
+      background: transparent;
+      font-size: 13px;
       color: var(--ink);
       font-family: inherit;
+      grid-column: 2;
+      grid-row: 1;
+      align-self: center;
+      min-width: 0;
     }
-    textarea { resize: vertical; }
-    input:focus { outline: 2px solid #b5c7e3; }
+    textarea {
+      min-height: 36px;
+      line-height: 1.35;
+      resize: none;
+      overflow: hidden;
+      align-self: stretch;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .field.has-value .label {
+      color: #c00000;
+      font-weight: 700;
+    }
+    .field.has-value input,
+    .field.has-value textarea {
+      font-weight: 600;
+      color: #1f2430;
+    }
+    .field-value-print {
+      display: none;
+      grid-column: 2;
+      grid-row: 1;
+      padding: 7px 9px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--ink);
+      min-height: 36px;
+      align-self: stretch;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    input:focus, textarea:focus { outline: none; background: #fffbf0 !important; box-shadow: inset 0 0 0 2px #c9a82088; }
     .token {
       font-size: 12px;
       color: var(--muted);
@@ -402,9 +484,13 @@ def build_html(rows):
         /* Custom styling for checked box in print mode? Or just keep browser default */
     }
     body.readonly .field {
-        border: 1px solid transparent; /* Hide border or make lighter */
         box-shadow: none;
+    }
+    body.readonly input,
+    body.readonly textarea {
+        border: none;
         background: transparent;
+        pointer-events: none;
     }
     body.readonly .section {
         box-shadow: none;
@@ -560,20 +646,8 @@ def build_html(rows):
     .btn-edit.is-active {
       background: #dc2626;
     }
-    .btn-download {
-      background: #059669;
-    }
     .btn-save {
       background: #0891b2;
-    }
-    .btn-print {
-      background: #c00000;
-    }
-    .btn-expand {
-      background: #10b981;
-    }
-    .btn-collapse {
-      background: #6b7280;
     }
     .btn-neutral {
       background: #475569;
@@ -678,8 +752,7 @@ def build_html(rows):
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
       backdrop-filter: blur(2px);
     }
-    .search-controls,
-    .quick-controls {
+    .search-controls {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -702,32 +775,6 @@ def build_html(rows):
       font-weight: 700;
       padding: 5px 10px;
       white-space: nowrap;
-    }
-    .legend-chip {
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 4px 9px;
-      border: 1px solid transparent;
-      white-space: nowrap;
-    }
-    .legend-filled {
-      background: #dcfce7;
-      border-color: #86efac;
-      color: #166534;
-    }
-    .legend-optional {
-      background: #fef9c3;
-      border-color: #fde047;
-      color: #854d0e;
-    }
-    .legend-required {
-      background: #fee2e2;
-      border-color: #fca5a5;
-      color: #991b1b;
-    }
-    .autosave-status {
-      color: #0f172a;
     }
     .required-badge {
       color: #b91c1c;
@@ -803,16 +850,90 @@ def build_html(rows):
     @media print {
         .no-print { display: none !important; }
         body {
-            background: #fff;
+            background: white;
+            padding: 0;
+            margin: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            color-adjust: exact;
+        }
+        .page { max-width: 100%; margin: 0; width: 100%; }
+        .layout-shell { display: block !important; }
+        .toc-sidebar { display: none !important; }
+        .section,
+        .section-content,
+        .field-grid,
+        .checkbox-grid {
+            overflow: visible !important;
+        }
+        .section {
+            border: 1px solid #ccc;
+            page-break-inside: auto;
+            margin-bottom: 10px;
+            box-shadow: none;
+        }
+        .section-header {
+            page-break-after: avoid;
+            break-after: avoid;
+            page-break-inside: avoid;
+            background: #e5e5e5 !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
-        .section.collapsed > .section-content {
-            max-height: none !important;
-            padding: 16px 14px !important;
+        .group {
+            page-break-inside: auto;
+            break-inside: auto;
+            margin-bottom: 8px;
         }
-        .section-header .toggle-icon {
-            display: none !important;
+        .group-block {
+            page-break-inside: avoid;
+            break-inside: avoid-page;
+        }
+        .group-title {
+            page-break-after: avoid;
+            break-after: avoid;
+            background: #dce3ee !important;
+            color: #1e2d3d !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .group.has-content .group-title {
+            background: #ffe6d7 !important;
+            color: #7f1d1d !important;
+            border-left: 6px solid #c00000 !important;
+            font-size: 12px !important;
+            padding: 6px 12px !important;
+            box-shadow: inset 0 0 0 1px #f3c3b0;
+        }
+        .field {
+            display: grid !important;
+            grid-template-columns: 130px 1fr !important;
+            border-right: 1px solid #ccc !important;
+            border-bottom: 1px solid #ccc !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .field-grid, .checkbox-grid {
+            page-break-inside: auto;
+            border-top: 1px solid #ccc !important;
+            border-left: 1px solid #ccc !important;
+        }
+        .field .label {
+            background: #edf0f5 !important;
+            border-right: 1px solid #ccc !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        input, textarea {
+            background: transparent;
+            border: none;
+            color: #000;
+        }
+        .field textarea { display: none !important; }
+        .field-value-print { display: block !important; color: #000 !important; }
+        h1, h2, .section-header, .group-title {
+            orphans: 3;
+            widows: 3;
         }
     }
 
@@ -847,9 +968,7 @@ def build_html(rows):
         </div>
         <div class="toolbar-actions">
           <button id="editModeBtn" onclick="toggleEditMode()" class="toolbar-btn btn-edit">Enable Edit Mode</button>
-          <button id="downloadBtn" onclick="downloadModifiedHTML()" class="toolbar-btn btn-download" style="display: none;">Download Modified Form</button>
           <button onclick="saveFilledFormHTML()" class="toolbar-btn btn-save">Save Filled Form (HTML)</button>
-          <button onclick="generatePDF()" class="toolbar-btn btn-print">Print to PDF</button>
         </div>
       </header>
       <div class="divider"></div>
@@ -869,16 +988,6 @@ def build_html(rows):
               <input id="fieldSearchInput" type="text" placeholder="Search fields, values, or field keys..." />
               <button type="button" onclick="clearFieldSearch()" class="toolbar-btn btn-neutral compact-btn">Clear</button>
               <span id="searchSummary" class="status-pill">Showing all fields</span>
-            </div>
-            <div class="quick-controls">
-              <span id="overallProgress" class="status-pill status-progress">0 of 0 fields filled</span>
-              <span class="legend-chip legend-filled">Filled</span>
-              <span class="legend-chip legend-optional">Optional Empty</span>
-              <span class="legend-chip legend-required">Required Empty</span>
-              <span id="autosaveStatus" class="status-pill autosave-status">Autosave ready</span>
-              <button onclick="expandAllSections()" class="toolbar-btn btn-expand compact-btn">Expand All Sections</button>
-              <button onclick="collapseAllSections()" class="toolbar-btn btn-collapse compact-btn">Collapse All Sections</button>
-              <button onclick="clearAutoSavedDraft()" class="toolbar-btn btn-neutral compact-btn">Clear Local Draft</button>
             </div>
           </div>
 
@@ -935,7 +1044,7 @@ __FORM_BODY__
 
       function setupSections() {
           const sections = document.querySelectorAll(".section");
-          sections.forEach((section, index) => {
+          sections.forEach((section) => {
               const header = section.querySelector(".section-header");
               if (!header) return;
 
@@ -958,27 +1067,7 @@ __FORM_BODY__
                   header.appendChild(progress);
               }
 
-              if (!header.querySelector(".toggle-icon")) {
-                  const icon = document.createElement("span");
-                  icon.className = "toggle-icon";
-                  icon.textContent = "+";
-                  header.appendChild(icon);
-              }
-
-              if (!header.dataset.toggleBound) {
-                  header.addEventListener("click", (event) => {
-                      if (event.target.closest(".delete-btn")) return;
-                      section.classList.toggle("collapsed");
-                      header.classList.toggle("active");
-                  });
-                  header.dataset.toggleBound = "1";
-              }
-
-              if (index > 0) {
-                  section.classList.add("collapsed");
-              } else {
-                  header.classList.add("active");
-              }
+              header.classList.add("active");
           });
       }
 
@@ -1024,7 +1113,6 @@ __FORM_BODY__
               link.appendChild(countEl);
               link.addEventListener("click", (event) => {
                   event.preventDefault();
-                  expandSection(section);
                   section.scrollIntoView({ behavior: "smooth", block: "start" });
                   setActiveTocLink(section.id);
               });
@@ -1062,12 +1150,6 @@ __FORM_BODY__
               }
           });
           setActiveTocLink(active.id);
-      }
-
-      function expandSection(section) {
-          section.classList.remove("collapsed");
-          const header = section.querySelector(".section-header");
-          if (header) header.classList.add("active");
       }
 
       function getFieldInput(field) {
@@ -1173,8 +1255,6 @@ __FORM_BODY__
           });
 
           const overallText = `${overallFilled} of ${overallTotal} fields filled`;
-          const overallEl = document.getElementById("overallProgress");
-          if (overallEl) overallEl.textContent = overallText;
           const tocOverallEl = document.getElementById("tocOverallProgress");
           if (tocOverallEl) tocOverallEl.textContent = overallText;
       }
@@ -1216,9 +1296,6 @@ __FORM_BODY__
               const tocLink = document.querySelector(`.toc-link[data-section-id="${section.id}"]`);
               if (tocLink) {
                   tocLink.classList.toggle("hidden", !sectionHasVisibleFields);
-              }
-              if (query && sectionHasVisibleFields) {
-                  expandSection(section);
               }
               if (sectionHasVisibleFields) visibleSections += 1;
           });
@@ -1283,7 +1360,6 @@ __FORM_BODY__
       }
 
       function queueAutoSave() {
-          updateAutosaveStatus("Autosave pending...");
           window.clearTimeout(autoSaveTimerId);
           autoSaveTimerId = window.setTimeout(saveDraftToLocalStorage, AUTO_SAVE_DEBOUNCE_MS);
       }
@@ -1325,11 +1401,7 @@ __FORM_BODY__
                   data: collectCurrentData(),
               };
               localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(payload));
-              const stamp = new Date(payload.savedAt).toLocaleTimeString();
-              updateAutosaveStatus(`Autosaved at ${stamp}`);
-          } catch {
-              updateAutosaveStatus("Autosave unavailable");
-          }
+          } catch {}
       }
 
       function applyDataToForm(data) {
@@ -1348,53 +1420,23 @@ __FORM_BODY__
       function restoreAutoSavedDraft() {
           try {
               const raw = localStorage.getItem(AUTO_SAVE_KEY);
-              if (!raw) {
-                  updateAutosaveStatus("Autosave ready");
-                  return;
-              }
+              if (!raw) return;
 
               const parsed = JSON.parse(raw);
-              if (!parsed || typeof parsed !== "object" || !parsed.data || typeof parsed.data !== "object") {
-                  updateAutosaveStatus("Autosave ready");
-                  return;
-              }
+              if (!parsed || typeof parsed !== "object" || !parsed.data || typeof parsed.data !== "object") return;
 
               const hasMeaningfulData = Object.values(parsed.data).some((value) => isMeaningfulValue(value));
-              if (!hasMeaningfulData) {
-                  updateAutosaveStatus("Autosave ready");
-                  return;
-              }
+              if (!hasMeaningfulData) return;
 
               const savedAt = parsed.savedAt ? new Date(parsed.savedAt) : null;
               const promptText = savedAt
                   ? `Restore autosaved draft from ${savedAt.toLocaleString()}?`
                   : "Restore autosaved draft?";
-              if (!window.confirm(promptText)) {
-                  updateAutosaveStatus(savedAt ? `Draft available (${savedAt.toLocaleTimeString()})` : "Draft available");
-                  return;
-              }
+              if (!window.confirm(promptText)) return;
 
               applyDataToForm(parsed.data);
               refreshFormState();
-              updateAutosaveStatus(savedAt ? `Restored draft (${savedAt.toLocaleTimeString()})` : "Restored draft");
-          } catch {
-              updateAutosaveStatus("Autosave ready");
-          }
-      }
-
-      function clearAutoSavedDraft() {
-          try {
-              localStorage.removeItem(AUTO_SAVE_KEY);
-              updateAutosaveStatus("Local draft cleared");
-          } catch {
-              updateAutosaveStatus("Unable to clear local draft");
-          }
-      }
-
-      function updateAutosaveStatus(text) {
-          const statusEl = document.getElementById("autosaveStatus");
-          if (!statusEl) return;
-          statusEl.textContent = text;
+          } catch {}
       }
 
       function bindEditableChangeHandlers() {
@@ -1449,7 +1491,6 @@ __FORM_BODY__
       function toggleEditMode() {
           const body = document.body;
           const editBtn = document.getElementById("editModeBtn");
-          const downloadBtn = document.getElementById("downloadBtn");
 
           body.classList.toggle("edit-mode");
           const isEditMode = body.classList.contains("edit-mode");
@@ -1457,12 +1498,10 @@ __FORM_BODY__
           if (isEditMode) {
               editBtn.textContent = "Disable Edit Mode";
               editBtn.classList.add("is-active");
-              downloadBtn.style.display = "inline-block";
               enableEditing();
           } else {
               editBtn.textContent = "Enable Edit Mode";
               editBtn.classList.remove("is-active");
-              downloadBtn.style.display = "none";
               disableEditing();
           }
       }
@@ -1517,30 +1556,6 @@ __FORM_BODY__
           root.querySelectorAll(".toc-link.active").forEach((el) => el.classList.remove("active"));
       }
 
-      function downloadModifiedHTML() {
-          const clone = document.documentElement.cloneNode(true);
-          const cloneBody = clone.querySelector("body");
-          cloneBody.classList.remove("edit-mode");
-          clone.querySelectorAll('[contenteditable="true"]').forEach((el) => {
-              el.removeAttribute("contenteditable");
-              el.removeAttribute("title");
-          });
-          clone.querySelectorAll(".delete-btn").forEach((button) => button.remove());
-          stripTransientClasses(clone);
-
-          const htmlString = "<!DOCTYPE html>\n" + clone.outerHTML;
-          const blob = new Blob([htmlString], { type: "text/html" });
-          const url = URL.createObjectURL(blob);
-          const anchor = document.createElement("a");
-          anchor.href = url;
-          anchor.download = "goa_form_modified.html";
-          document.body.appendChild(anchor);
-          anchor.click();
-          document.body.removeChild(anchor);
-          URL.revokeObjectURL(url);
-          alert("Modified form downloaded.");
-      }
-
       function saveFilledFormHTML() {
           saveDraftToLocalStorage();
           const clone = document.documentElement.cloneNode(true);
@@ -1589,68 +1604,6 @@ __FORM_BODY__
           URL.revokeObjectURL(url);
           alert("Filled form saved as HTML.");
       }
-
-      function generatePDF() {
-          const wasInEditMode = document.body.classList.contains("edit-mode");
-          if (wasInEditMode) {
-              document.body.classList.remove("edit-mode");
-          }
-
-          const searchInput = document.getElementById("fieldSearchInput");
-          const previousQuery = searchInput ? searchInput.value : "";
-          if (searchInput && previousQuery.trim()) {
-              searchInput.value = "";
-              applySearchFilter("");
-          }
-
-          const sections = document.querySelectorAll(".section");
-          const collapsedSections = [];
-          sections.forEach((section, index) => {
-              if (section.classList.contains("collapsed")) {
-                  collapsedSections.push(index);
-                  section.classList.remove("collapsed");
-                  const header = section.querySelector(".section-header");
-                  if (header) header.classList.add("active");
-              }
-          });
-
-          setTimeout(() => {
-              window.print();
-              setTimeout(() => {
-                  collapsedSections.forEach((index) => {
-                      sections[index].classList.add("collapsed");
-                      const header = sections[index].querySelector(".section-header");
-                      if (header) header.classList.remove("active");
-                  });
-
-                  if (searchInput && previousQuery.trim()) {
-                      searchInput.value = previousQuery;
-                      applySearchFilter(previousQuery);
-                  }
-
-                  if (wasInEditMode) {
-                      document.body.classList.add("edit-mode");
-                  }
-                 updateActiveSectionFromScroll();
-              }, 100);
-          }, 300);
-      }
-
-      function expandAllSections() {
-          document.querySelectorAll(".section:not(.section-hidden-by-search)").forEach((section) => {
-              section.classList.remove("collapsed");
-              const header = section.querySelector(".section-header");
-              if (header) header.classList.add("active");
-          });
-      }
-
-      function collapseAllSections() {
-          document.querySelectorAll(".section:not(.section-hidden-by-search)").forEach((section) => {
-              section.classList.add("collapsed");
-              const header = section.querySelector(".section-header");
-              if (header) header.classList.remove("active");
-          });
-      }
 </script>
   </body>
 </html>
@@ -1676,7 +1629,12 @@ def generate_goa_form(excel_path: Path = EXCEL_PATH, output_path: Path = OUTPUT_
         traceback.print_exc()
         return False
 
-def extract_schema_from_excel(excel_path: Path = EXCEL_PATH) -> Dict[str, Dict]:
+def extract_schema_from_excel(
+    excel_path: Path = EXCEL_PATH,
+    *,
+    machine_family: str | None = None,
+    semantic_overrides_path: Path | str | None = None,
+) -> Dict[str, Dict]:
     """
     Extracts a schema dictionary from the Excel template for use by the LLM.
     
@@ -1699,7 +1657,13 @@ def extract_schema_from_excel(excel_path: Path = EXCEL_PATH) -> Dict[str, Dict]:
         stat = resolved_path.stat()
         cached_schema = _extract_schema_from_excel_cached(str(resolved_path.resolve()), stat.st_mtime_ns)
         # Return a copy so callers can safely mutate without polluting cache.
-        return copy.deepcopy(cached_schema)
+        schema = copy.deepcopy(cached_schema)
+        return merge_semantic_overrides_into_schema(
+            schema,
+            template_scope="default",
+            machine_family=machine_family,
+            overrides_path=semantic_overrides_path,
+        )
     except Exception as e:
         print(f"Error extracting schema from Excel: {e}")
         return {}

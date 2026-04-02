@@ -170,6 +170,7 @@ interface ApiUser {
   role: string;
   is_active: boolean;
   has_gemini_key: boolean;
+  sign_in_disabled?: boolean;
 }
 
 interface ApiGeminiKeyTestResponse {
@@ -733,6 +734,7 @@ function normalizeUser(payload: ApiUser): User {
     role: asString(payload.role) || "standard",
     is_active: Boolean(payload.is_active),
     has_gemini_key: Boolean(payload.has_gemini_key),
+    sign_in_disabled: Boolean(payload.sign_in_disabled),
   };
 }
 

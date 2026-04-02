@@ -1,0 +1,1340 @@
+{
+  "fields": {
+    "cpp_2axis_check": {
+      "template_scope": "sortstar",
+      "machine_families": [
+        "sortstar"
+      ],
+      "option_group": "OPTIONAL SYSTEMS > Control Specifications > Control Panel Post 2 Axis \u2013 U-shaped",
+      "aliases": [],
+      "positive_evidence": [
+        "Machine controlled with B & R Industrial P.L.C."
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Control Panel Post | 1 Axis | 2 Axis \u2013 U-shaped",
+        "2 Axis \u2013 U-shaped"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0029": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping"
+      ],
+      "option_group": "Change Part Quantities and Construction Materials | Bottle",
+      "aliases": [],
+      "positive_evidence": [
+        "Automatic fallen/Inverted bottle detection system with recirculation of the rejected bottles",
+        "Automatic Bottle Unscrambler Model: SortStar Includes:"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bottle | 3 | HDPE | Color | white | Other",
+        "HDPE"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0039": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling"
+      ],
+      "option_group": "Change Part Quantities and Construction Materials | Cap",
+      "aliases": [],
+      "positive_evidence": [
+        "One automatic screw capping station"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Cap | 3 | SS 304 | SS 316 | Urethane Insert",
+        "SS 304"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0075": {
+      "template_scope": "default",
+      "machine_families": [
+        "sortstar",
+        "filling"
+      ],
+      "option_group": "Change Part Quantities and Construction Materials | Product Metal Contact Parts",
+      "aliases": [],
+      "positive_evidence": [
+        "One set of cap change parts",
+        "One set of bottle change parts"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Product Metal Contact Parts | x | SS 304 | SS 316L",
+        "SS 304 | SS 316L"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0076": {
+      "template_scope": "default",
+      "machine_families": [
+        "sortstar",
+        "filling"
+      ],
+      "option_group": "Change Part Quantities and Construction Materials | Product Metal Contact Parts",
+      "aliases": [],
+      "positive_evidence": [
+        "One set of cap change parts",
+        "One set of bottle change parts"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Product Metal Contact Parts | x | SS 304 | SS 316L",
+        "SS 304 | SS 316L"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0083": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Change Part Quantities and Construction Materials | Tooling ID",
+      "aliases": [],
+      "positive_evidence": [
+        "Local transport should be supported by the client or the agent Note: Any extra day required to finalize the start-up, commissioning, training validation support, etc. will be charged at current list price showing in this offer Considering the worldwide COVID 19 pandemic certain restrictions may apply for traveling and / or to perform any duties mention in this offer"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Tooling ID | Bx,Cx,Lx etc\u2026. | Customer Code",
+        "Bx,Cx,Lx etc\u2026."
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0097": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | PLC",
+      "aliases": [],
+      "positive_evidence": [
+        "Machine controlled with B & R Industrial P.L.C."
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "PLC | B & R",
+        "B & R",
+        "PLC | B & R | Allen Bradley"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0105": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI",
+      "aliases": [],
+      "positive_evidence": [
+        "Machine controlled with B & R Industrial P.L.C."
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | B & R | PV + 600",
+        "B & R",
+        "HMI | B & R | PC Upgrade",
+        "B & R | PC Upgrade"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0106": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI",
+      "aliases": [],
+      "positive_evidence": [
+        "255mm (10\u2019\u2019) multi-colour touch screen control interface",
+        "Machine controlled with B&R Industrial P.L.C."
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | B & R | PC Upgrade",
+        "B & R | PC Upgrade"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0107": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI | Size",
+      "aliases": [],
+      "positive_evidence": [
+        "255mm (10\u2019\u2019) multi-colour touch screen control interface",
+        "255mm (10\u2019\u2019) multi-color touch screen control interface"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | Size | 5.7\u201d n/a for vision | 10\u201d | 15\u201d",
+        "10\u201d | 15\u201d | 5.7\u201d n/a for vision | Size"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0108": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI | Size",
+      "aliases": [],
+      "positive_evidence": [
+        "255mm (10\u2019\u2019) multi-colour touch screen control interface",
+        "255mm (10\u2019\u2019) multi-color touch screen control interface"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | Size | 5.7\u201d n/a for vision | 10\u201d | 15\u201d",
+        "10\u201d | 15\u201d | 5.7\u201d n/a for vision | Size"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0109": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI | Size",
+      "aliases": [],
+      "positive_evidence": [
+        "255mm (10\u2019\u2019) multi-colour touch screen control interface",
+        "255mm (10\u2019\u2019) multi-color touch screen control interface"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | Size | 5.7\u201d n/a for vision | 10\u201d | 15\u201d",
+        "10\u201d | 15\u201d | 5.7\u201d n/a for vision | Size"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0112": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI | HMI Location",
+      "aliases": [],
+      "positive_evidence": [
+        "Multi-color touch screen interface",
+        "255mm (10\u2019\u2019) multi-color touch screen control interface"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | Infeed Side | Outfeed Side",
+        "Infeed Side | Outfeed Side"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0113": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI | HMI Location",
+      "aliases": [],
+      "positive_evidence": [
+        "Multi-color touch screen interface",
+        "255mm (10\u2019\u2019) multi-color touch screen control interface"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | Infeed Side | Outfeed Side",
+        "Infeed Side | Outfeed Side"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0114": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI | HMI Location",
+      "aliases": [],
+      "positive_evidence": [
+        "Motorized Automatic Adjustment System Designed to automatically adjust mechanical setting according to pre-set recipes from the HMI. Includes:",
+        "Multi-color touch screen interface",
+        "255mm (10\u2019\u2019) multi-color touch screen control interface"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | Operator side | Rear",
+        "Operator side",
+        "Operator side | Rear"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0115": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | HMI | HMI Location",
+      "aliases": [],
+      "positive_evidence": [
+        "Multi-color touch screen interface",
+        "255mm (10\u2019\u2019) multi-color touch screen control interface"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "HMI | Operator side | Rear",
+        "Operator side | Rear"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0120": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar"
+      ],
+      "option_group": "Control & Programming Specifications | Control Panel Post",
+      "aliases": [],
+      "positive_evidence": [
+        "Twin axis swivel panel control",
+        "Machine controlled with B&R Industrial P.L.C."
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Control Panel Post | 1 Axis | 2 Axis",
+        "2 Axis"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0122": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | Beacon Light Tower",
+      "aliases": [],
+      "positive_evidence": [
+        "Status beacon light",
+        "Euroguarding system with interlock tempered glass doors"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Beacon Light Tower | Red | Green | Yellow",
+        "Green | Red | Yellow"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0123": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | Beacon Light Tower",
+      "aliases": [],
+      "positive_evidence": [
+        "Status beacon light",
+        "Euroguarding system with interlock tempered glass doors"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Beacon Light Tower | Red | Green | Yellow",
+        "Green | Red | Yellow"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0124": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Control & Programming Specifications | Beacon Light Tower",
+      "aliases": [],
+      "positive_evidence": [
+        "Status beacon light",
+        "Euroguarding system with interlock tempered glass doors"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Beacon Light Tower | Red | Green | Yellow",
+        "Green | Red | Yellow"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0168": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling"
+      ],
+      "option_group": "Bottle Handling System Specifications | Vial / Bottle",
+      "aliases": [],
+      "positive_evidence": [
+        "One set of bottle change parts",
+        "3657 mm (12 ft) section of motorized conveyor"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Vial / Bottle | None | Full Conveyor",
+        "Full Conveyor"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0196": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar"
+      ],
+      "option_group": "Bottle Handling System Specifications | Index / Motion",
+      "aliases": [],
+      "positive_evidence": [
+        "Inline Continuous Motion Volumetric Filling Machine Model: FlowStar-16- CWB",
+        "Automatic Cap Elevator Hopper Feeder"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Index / Motion | Feed Screw | Rake | Starwheel | Gating",
+        "Feed Screw | Gating | Rake | Starwheel"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0197": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar"
+      ],
+      "option_group": "Bottle Handling System Specifications | Index / Motion",
+      "aliases": [],
+      "positive_evidence": [
+        "Inline Continuous Motion Volumetric Filling Machine Model: FlowStar-16- CWB",
+        "Automatic Cap Elevator Hopper Feeder"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Index / Motion | Feed Screw | Rake | Starwheel | Gating",
+        "Feed Screw | Gating | Rake | Starwheel"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0198": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar"
+      ],
+      "option_group": "Bottle Handling System Specifications | Index / Motion",
+      "aliases": [],
+      "positive_evidence": [
+        "Inline Continuous Motion Volumetric Filling Machine Model: FlowStar-16- CWB",
+        "Automatic Cap Elevator Hopper Feeder"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Index / Motion | Feed Screw | Rake | Starwheel | Gating",
+        "Feed Screw | Gating | Rake | Starwheel"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0199": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar"
+      ],
+      "option_group": "Bottle Handling System Specifications | Index / Motion",
+      "aliases": [],
+      "positive_evidence": [
+        "Inline Continuous Motion Volumetric Filling Machine Model: FlowStar-16- CWB",
+        "Automatic Cap Elevator Hopper Feeder"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Index / Motion | Feed Screw | Rake | Starwheel | Gating",
+        "Feed Screw | Gating | Rake | Starwheel"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0206": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Reject / Inspection System | Reject Method",
+      "aliases": [],
+      "positive_evidence": [
+        "Automatic Reject Station"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Reject / inspect for | Chute | Track | Conveyor | Tray",
+        "Conveyor | Track | Tray"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0208": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Reject / Inspection System | Reject Method",
+      "aliases": [],
+      "positive_evidence": [
+        "Automatic Reject Station"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Reject / inspect for | Chute | Track | Conveyor | Tray",
+        "Conveyor | Track | Tray"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0209": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Reject / Inspection System | Reject Method",
+      "aliases": [],
+      "positive_evidence": [
+        "Automatic Reject Station"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Reject / inspect for | Chute | Track | Conveyor | Tray",
+        "Conveyor | Track | Tray"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0214": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling"
+      ],
+      "option_group": "Reject / Inspection System | Reject Reasons",
+      "aliases": [],
+      "positive_evidence": [
+        "Automatic Reject Station"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Reject / inspect for | Cap Prs. | Stem Prs | High/Cross THRD | No Foil",
+        "Cap Prs. | High/Cross THRD"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0219": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling"
+      ],
+      "option_group": "Reject / Inspection System | Reject Reasons",
+      "aliases": [],
+      "positive_evidence": [
+        "Automatic Reject Station"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Reject / inspect for | Cap Prs. | Stem Prs | High/Cross THRD | No Foil",
+        "Cap Prs. | High/Cross THRD"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0221": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling"
+      ],
+      "option_group": "Reject / Inspection System | Reject Reasons",
+      "aliases": [],
+      "positive_evidence": [
+        "Automatic Reject Station"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Reject / inspect for | Pintle Prs | Overcap Prs | Plug Prs | Torque",
+        "* | *Overcap Prs | Plug Prs | Torque"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0251": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling"
+      ],
+      "option_group": "Liquid Filling System Specifications | Type",
+      "aliases": [],
+      "positive_evidence": [
+        "Programmable Servo driven volumetric pistons",
+        "Programmable Servo driven bottom-up fill"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Pump type | Servo Bottom Up fill | Positive Displacement",
+        "Servo Bottom Up fill"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0357": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling"
+      ],
+      "option_group": "Capping System Specifications | Cap Placement",
+      "aliases": [],
+      "positive_evidence": [
+        "One set of cap change parts",
+        "Pick & Place system"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Cap Placement | Push Through | Pick & Place | Rotary",
+        "Pick & Place"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0360": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling"
+      ],
+      "option_group": "Capping System Specifications | Cap Placement",
+      "aliases": [],
+      "positive_evidence": [
+        "One set of cap change parts"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Cap Placement | Rotation | Air | Servo",
+        "Air | Servo"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0361": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling"
+      ],
+      "option_group": "Capping System Specifications | Cap Placement",
+      "aliases": [],
+      "positive_evidence": [
+        "One set of cap change parts"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Cap Placement | Rotation | Air | Servo",
+        "Air | Servo"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0378": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling"
+      ],
+      "option_group": "Capping System Specifications | Cap Sorting",
+      "aliases": [],
+      "positive_evidence": [
+        "Electronic parts: A period of six (X 6) months, 30 days following equipment leaving Capmatic premises, or up to a maximum of 1,000 hours of operations"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Cap Sorting | Mechanical",
+        "Mechanical"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0383": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling"
+      ],
+      "option_group": "Capping System Specifications | Centering Device",
+      "aliases": [],
+      "positive_evidence": [
+        "One automatic cap sorting device"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Centering Device | None | Cone | Tube | Neck",
+        "Cone | Neck | Tube"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0388": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping"
+      ],
+      "option_group": "Capping System Specifications | Tube Aligner",
+      "aliases": [],
+      "positive_evidence": [
+        "\u2018\u2019Grip & Dive\u2019\u2019 Flexible Tube Alignment System"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Tube Aligner | None | Cone | Grip & Dive",
+        "Grip & Dive"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0413": {
+      "template_scope": "default",
+      "machine_families": [
+        "labeling"
+      ],
+      "option_group": "Labeling System Specifications | Label HD model",
+      "aliases": [],
+      "positive_evidence": [
+        "Labelling head set up directly from the touch screen control"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Label HD model | LS100 | LS200",
+        "LS100 | LS200"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0414": {
+      "template_scope": "default",
+      "machine_families": [
+        "labeling"
+      ],
+      "option_group": "Labeling System Specifications | Label HD model",
+      "aliases": [],
+      "positive_evidence": [
+        "Labelling head set up directly from the touch screen control"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Label HD model | LS100 | LS200",
+        "LS100 | LS200"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0428": {
+      "template_scope": "default",
+      "machine_families": [
+        "labeling"
+      ],
+      "option_group": "Labeling System Specifications | Application SYS",
+      "aliases": [],
+      "positive_evidence": [
+        "In exchange of normal photo stop sensor",
+        "Detects paper, low-contrast transparent plastic labels and metallic labels"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Low Label Sense | Eagle Eye Sensor (CLR label)",
+        "Eagle Eye Sensor (CLR label) | Low Label Sense"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0532": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Height",
+      "aliases": [],
+      "positive_evidence": [
+        "3657 mm (12-ft) section of motorized conveyor",
+        "3657 mm (12 ft) section of motorized conveyor"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Height | 36\u201d | Other",
+        "36\u201d"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0534": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Shape",
+      "aliases": [],
+      "positive_evidence": [
+        "For special hard shape bottle",
+        "Electrical Swivel Panel With Double Axis (\u201cU\u201d Shape)"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Shape | Straight | U | 90\u00b0",
+        "90\u00b0 | Straight"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0536": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Shape",
+      "aliases": [],
+      "positive_evidence": [
+        "For special hard shape bottle",
+        "Electrical Swivel Panel With Double Axis (\u201cU\u201d Shape)"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Shape | Straight | U | 90\u00b0",
+        "90\u00b0 | Straight"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0537": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Chain Type",
+      "aliases": [],
+      "positive_evidence": [
+        "Estimation only a more precise price will be presented after FAT and analysis of the type and quantity of product to recycle Should you choose not to selected this option, all materials will be shipped back to you at cost"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Chain Type | STD | Anti-Static | High Temp",
+        "STD"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0540": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Bed Type",
+      "aliases": [],
+      "positive_evidence": [
+        "Estimation only a more precise price will be presented after FAT and analysis of the type and quantity of product to recycle Should you choose not to selected this option, all materials will be shipped back to you at cost",
+        "Canadian Standard Association (CSA) Certificate"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bed Type | Standard | Raised Bed",
+        "Raised Bed | Standard"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0541": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Bed Type",
+      "aliases": [],
+      "positive_evidence": [
+        "Estimation only a more precise price will be presented after FAT and analysis of the type and quantity of product to recycle Should you choose not to selected this option, all materials will be shipped back to you at cost",
+        "Canadian Standard Association (CSA) Certificate"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bed Type | Standard | Raised Bed",
+        "Raised Bed | Standard"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0552": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling"
+      ],
+      "option_group": "Conveyor Specifications | Bottle Transfer | Conveyor Infeed",
+      "aliases": [],
+      "positive_evidence": [
+        "250 Liter Transfer Tank",
+        "Machine controlled with B&R Industrial P.L.C."
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bottle Transfer | Conveyor Infeed | End | Machine Side | Oper. Side",
+        "End | Machine Side"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0553": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling"
+      ],
+      "option_group": "Conveyor Specifications | Bottle Transfer | Conveyor Infeed",
+      "aliases": [],
+      "positive_evidence": [
+        "250 Liter Transfer Tank",
+        "Machine controlled with B&R Industrial P.L.C."
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bottle Transfer | Conveyor Infeed | End | Machine Side | Oper. Side",
+        "End | Machine Side"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0555": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Bottle Transfer | Conveyor Outfeed",
+      "aliases": [],
+      "positive_evidence": [
+        "Machine controlled with B&R Industrial P.L.C.",
+        "250 Liter Transfer Tank"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bottle Transfer | Conveyor Outfeed | End | Machine Side | Oper. Side",
+        "End | Machine Side | Oper. Side"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0556": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Bottle Transfer | Conveyor Outfeed",
+      "aliases": [],
+      "positive_evidence": [
+        "Machine controlled with B&R Industrial P.L.C.",
+        "250 Liter Transfer Tank"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bottle Transfer | Conveyor Outfeed | End | Machine Side | Oper. Side",
+        "End | Machine Side | Oper. Side"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0557": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "labeling",
+        "sortstar"
+      ],
+      "option_group": "Conveyor Specifications | Bottle Transfer | Conveyor Outfeed",
+      "aliases": [],
+      "positive_evidence": [
+        "Machine controlled with B&R Industrial P.L.C.",
+        "250 Liter Transfer Tank"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Bottle Transfer | Conveyor Outfeed | End | Machine Side | Oper. Side",
+        "End | Machine Side | Oper. Side"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0560": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Euro Guarding | Panel material",
+      "aliases": [],
+      "positive_evidence": [
+        "Euroguarding system with interlock Lexan doors",
+        "Twin axis swivel panel control"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Panel material | Lexan | Tempered glass",
+        "Lexan | Tempered glass"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0561": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Euro Guarding | Panel material",
+      "aliases": [],
+      "positive_evidence": [
+        "Euroguarding system with interlock Lexan doors",
+        "Twin axis swivel panel control"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Panel material | Lexan | Tempered glass",
+        "Lexan | Tempered glass"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0563": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar"
+      ],
+      "option_group": "Euro Guarding | Switch type",
+      "aliases": [],
+      "positive_evidence": [
+        "Each Magnetic Slip Clutch Torque Control (for Air driven motor)",
+        "Each Interchangeable Magnetic Tightening Head"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Switch type | Key switch | Magnetic | Other",
+        "Magnetic | Other"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0564": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar"
+      ],
+      "option_group": "Euro Guarding | Switch type",
+      "aliases": [],
+      "positive_evidence": [
+        "Each Magnetic Slip Clutch Torque Control (for Air driven motor)",
+        "Each Interchangeable Magnetic Tightening Head"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Switch type | Key switch | Magnetic | Other",
+        "Magnetic | Other"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0600": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Packaging & Transport | Transport charges",
+      "aliases": [],
+      "positive_evidence": [
+        "Local transport should be supported by the client or the agent Note: Any extra day required to finalize the start-up, commissioning, training validation support, etc. will be charged at current list price showing in this offer Considering the worldwide COVID 19 pandemic certain restrictions may apply for traveling and / or to perform any duties mention in this offer",
+        "Excludes: Air fare, hotel, food, and local transport"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Transport charges | Capmatic | Customer",
+        "Capmatic | Customer"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0601": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Packaging & Transport | Transport charges",
+      "aliases": [],
+      "positive_evidence": [
+        "Local transport should be supported by the client or the agent Note: Any extra day required to finalize the start-up, commissioning, training validation support, etc. will be charged at current list price showing in this offer Considering the worldwide COVID 19 pandemic certain restrictions may apply for traveling and / or to perform any duties mention in this offer",
+        "Excludes: Air fare, hotel, food, and local transport"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Transport charges | Capmatic | Customer",
+        "Capmatic | Customer"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0602": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Packaging & Transport | Packaging by:",
+      "aliases": [],
+      "positive_evidence": [
+        "Does not include the execution or support",
+        "Electronic parts: A period of six (X 6) months, 30 days following equipment leaving Capmatic premises, or up to a maximum of 1,000 hours of operations"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Packaging by: | Capmatic | Customer / Not Incl.",
+        "Capmatic | Customer / Not Incl."
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0603": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Packaging & Transport | Packaging by:",
+      "aliases": [],
+      "positive_evidence": [
+        "Does not include the execution or support",
+        "Electronic parts: A period of six (X 6) months, 30 days following equipment leaving Capmatic premises, or up to a maximum of 1,000 hours of operations"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Packaging by: | Capmatic | Customer / Not Incl.",
+        "Capmatic | Customer / Not Incl."
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0604": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Packaging & Transport | Packaging type",
+      "aliases": [],
+      "positive_evidence": [
+        "Crate & Packing (For the selected Items only)"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Packaging type | Skid | Crate | Sea Worthy",
+        "Crate | Skid"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0605": {
+      "template_scope": "default",
+      "machine_families": [
+        "filling",
+        "capping",
+        "sortstar",
+        "labeling"
+      ],
+      "option_group": "Packaging & Transport | Packaging type",
+      "aliases": [],
+      "positive_evidence": [
+        "Crate & Packing (For the selected Items only)"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Packaging type | Skid | Crate | Sea Worthy",
+        "Crate | Skid"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "f0614": {
+      "template_scope": "default",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar"
+      ],
+      "option_group": "Warranty & Install & Spares | Remote Tech. Service",
+      "aliases": [],
+      "positive_evidence": [
+        "Remote Technical Service starter pack (Secomea)",
+        "Remote Technical Services"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Remote Tech. Service | None | Yes",
+        "Yes"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    },
+    "rts_secomea_check": {
+      "template_scope": "sortstar",
+      "machine_families": [
+        "capping",
+        "filling",
+        "sortstar"
+      ],
+      "option_group": "OPTIONAL SYSTEMS > Remote Technical Service (Secomea)",
+      "aliases": [],
+      "positive_evidence": [
+        "Remote Technical Service starter pack (Secomea)",
+        "Remote Technical Services"
+      ],
+      "negative_evidence": [],
+      "related_terms": [
+        "Remote Technical Service (Secomea) (1 per line) | None | Connection Only",
+        "Remote Technical Service (Secomea) (1 per line)"
+      ],
+      "notes": "",
+      "review_status": "approved"
+    }
+  }
+}

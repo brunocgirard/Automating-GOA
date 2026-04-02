@@ -38,6 +38,7 @@ try:
 except ValueError:
     SESSION_TTL_HOURS = 12
 SESSION_PEPPER = os.getenv("AUTH_SESSION_PEPPER", "")
+AUTH_DISABLE_SIGN_IN_ENV = "AUTH_DISABLE_SIGN_IN"
 
 _DEFAULT_ROLE = "standard"
 _ADMIN_ROLE = "admin"
@@ -157,7 +158,12 @@ def user_to_response_payload(user_row: dict[str, Any]) -> dict[str, Any]:
         "role": str(user_row.get("role") or _DEFAULT_ROLE),
         "is_active": bool(int(user_row.get("is_active") or 0)),
         "has_gemini_key": user_has_gemini_key(user_row),
+        "sign_in_disabled": is_sign_in_disabled(),
     }
+
+
+def is_sign_in_disabled() -> bool:
+    return str(os.getenv(AUTH_DISABLE_SIGN_IN_ENV) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _load_fernet() -> Fernet:
@@ -225,10 +231,12 @@ def bootstrap_admin_user() -> dict[str, Any] | None:
     display_name = str(os.getenv("AUTH_BOOTSTRAP_ADMIN_DISPLAY_NAME") or username).strip() or username
 
     if not password:
-        raise AuthBootstrapError(
-            "AUTH_BOOTSTRAP_ADMIN_PASSWORD is required when no users exist. "
-            "Set it in the environment before starting the API."
-        )
+        if not is_sign_in_disabled():
+            raise AuthBootstrapError(
+                "AUTH_BOOTSTRAP_ADMIN_PASSWORD is required when no users exist. "
+                "Set it in the environment before starting the API."
+            )
+        password = secrets.token_urlsafe(32)
 
     existing = find_user_by_username(username)
     if existing:
@@ -244,6 +252,27 @@ def bootstrap_admin_user() -> dict[str, Any] | None:
         raise AuthBootstrapError("Failed to bootstrap admin user.")
 
     backfill_ownership(int(created["id"]))
+    return created
+
+
+def get_sign_in_disabled_user() -> dict[str, Any]:
+    username = str(os.getenv("AUTH_BOOTSTRAP_ADMIN_USERNAME", "admin") or "admin").strip() or "admin"
+    display_name = str(os.getenv("AUTH_BOOTSTRAP_ADMIN_DISPLAY_NAME") or username).strip() or username
+
+    existing = find_user_by_username(username)
+    if existing:
+        return existing
+
+    created = create_user(
+        username=username,
+        display_name=display_name,
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        role=_ADMIN_ROLE,
+    )
+    if not created:
+        raise AuthBootstrapError("Failed to create local admin user for disabled sign-in mode.")
+    if count_users() == 1:
+        backfill_ownership(int(created["id"]))
     return created
 
 

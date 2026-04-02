@@ -288,12 +288,16 @@ def _build_group_field_lines(
                 if is_checkbox:
                     synonyms = [str(v).strip() for v in ctx.get("synonyms", []) if str(v).strip()]
                     indicators = [str(v).strip() for v in ctx.get("positive_indicators", []) if str(v).strip()]
+                    negative_indicators = [str(v).strip() for v in ctx.get("negative_indicators", []) if str(v).strip()]
                     syn_text = ", ".join(synonyms[:max_checkbox_synonyms])
                     ind_text = ", ".join(indicators[:max_checkbox_indicators])
+                    neg_text = ", ".join(negative_indicators[:max_checkbox_indicators])
                     if syn_text:
                         suffix += f" | alt={syn_text}"
                     if ind_text:
                         suffix += f" | +={ind_text}"
+                    if neg_text:
+                        suffix += f" | -={neg_text}"
                 elif is_comment:
                     suffix += " | user_entry=true | return_empty=true"
                 field_lines.append(f"- {key} | {field_type} | {label}{suffix}")
@@ -798,6 +802,8 @@ def select_repair_field_contexts(
     dependency_suggestions: Optional[List[Dict[str, Any]]] = None,
     force_critical_text_fields: bool = False,
     forced_semantic_tags: Optional[Sequence[str]] = None,
+    evidence_text: str | None = None,
+    enable_false_no_repair: bool = False,
 ) -> Dict[str, Any]:
     """
     Build a focused field subset for repair pass extraction.
@@ -809,6 +815,31 @@ def select_repair_field_contexts(
         for tag in (forced_semantic_tags or ("direction", "voltage", "hz", "phases"))
         if str(tag).strip()
     }
+    normalized_evidence = re.sub(r"\s+", " ", str(evidence_text or "").lower()).strip()
+
+    def _has_catalog_false_no_signal(field_context: Any) -> bool:
+        if not enable_false_no_repair or not normalized_evidence or not isinstance(field_context, dict):
+            return False
+
+        positive_evidence = [
+            str(value).strip().lower()
+            for value in field_context.get("approved_positive_evidence", [])
+            if str(value).strip()
+        ]
+        aliases = [
+            str(value).strip().lower()
+            for value in field_context.get("approved_aliases", [])
+            if str(value).strip()
+        ]
+        negative_evidence = [
+            str(value).strip().lower()
+            for value in field_context.get("approved_negative_evidence", [])
+            if str(value).strip()
+        ]
+
+        positive_match = any(phrase in normalized_evidence for phrase in [*positive_evidence, *aliases] if phrase)
+        negative_match = any(phrase in normalized_evidence for phrase in negative_evidence if phrase)
+        return positive_match and not negative_match
 
     def _resolve_semantic_tag(field_key: str, field_context: Any) -> str:
         if isinstance(field_context, dict):
@@ -836,6 +867,8 @@ def select_repair_field_contexts(
         if is_checkbox:
             normalized = str(value or "").strip().upper()
             if normalized == "YES" and confidence < checkbox_yes_confidence_threshold:
+                selected[field_key] = context
+            elif normalized == "NO" and _has_catalog_false_no_signal(context):
                 selected[field_key] = context
             elif normalized not in {"YES", "NO"}:
                 selected[field_key] = context

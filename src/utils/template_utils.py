@@ -3,6 +3,8 @@ from typing import List, Set, Dict, Optional
 from docx import Document
 import os # Added for __main__ example
 
+from src.utils.goa_semantic_overrides import merge_semantic_overrides_into_schema
+
 # Define explicit placeholder mappings for the default template
 DEFAULT_EXPLICIT_MAPPINGS = {
     # Euro Guarding specific mappings
@@ -704,7 +706,13 @@ def extract_placeholder_context_hierarchical(template_path: str,
         traceback.print_exc()
         return {}
 
-def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[Dict[str, str]] = None, is_sortstar: bool = False) -> Dict[str, Dict]:
+def extract_placeholder_schema(
+    template_path: str,
+    explicit_mappings: Optional[Dict[str, str]] = None,
+    is_sortstar: bool = False,
+    machine_family: str | None = None,
+    semantic_overrides_path: str | None = None,
+) -> Dict[str, Dict]:
     """
     Creates a structured JSON schema from the template with rich metadata about each field.
     
@@ -882,6 +890,12 @@ def extract_placeholder_schema(template_path: str, explicit_mappings: Optional[D
                     positive_indicators = generate_positive_indicators(ph, ph, synonyms)
                     schema[ph]["positive_indicators"] = positive_indicators
 
+        schema = merge_semantic_overrides_into_schema(
+            schema,
+            template_scope="sortstar" if is_sortstar else "default",
+            machine_family=machine_family,
+            overrides_path=semantic_overrides_path,
+        )
         print(f"Generated schema for {len(schema)} placeholders.")
         return schema
 

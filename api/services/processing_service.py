@@ -18,6 +18,7 @@ from api.services._env_helpers import (
     env_positive_int as _env_positive_int,
 )
 from src.utils import template_utils
+from src.utils.goa_semantic_overrides import merge_semantic_overrides_into_schema
 from src.utils.db import (
     DB_PATH,
     find_machines_by_name,
@@ -48,7 +49,7 @@ from src.llm import (
     select_repair_field_contexts,
     validate_field_dependencies,
 )
-from src.utils.machine_type import is_sortstar_machine
+from src.utils.machine_type import determine_machine_type, is_sortstar_machine
 from src.utils.pdf_utils import extract_full_pdf_text, extract_line_item_details, identify_machines_from_items
 
 DEFAULT_TEMPLATE_FILE = os.path.join("templates", "template.docx")
@@ -415,11 +416,13 @@ def extract_and_catalog(
 
 def get_contexts_for_machine(machine_record: dict[str, Any]) -> tuple[dict[str, Any], str, bool]:
     """Resolve template schema/contexts for machine extraction and generation."""
-    config = _template_config(machine_record.get("machine_name", ""))
+    machine_name = machine_record.get("machine_name", "")
+    machine_family = determine_machine_type(machine_name)
+    config = _template_config(machine_name)
     template_file = config["template_file"]
 
     if not config["is_sortstar"]:
-        contexts = extract_schema_from_excel()
+        contexts = extract_schema_from_excel(machine_family=machine_family)
         return contexts or {}, template_file, False
 
     if not os.path.exists(template_file):
@@ -430,6 +433,7 @@ def get_contexts_for_machine(machine_record: dict[str, Any]) -> tuple[dict[str, 
             template_path=template_file,
             explicit_mappings=config["explicit_mappings"],
             is_sortstar=True,
+            machine_family=machine_family,
         )
         if contexts:
             return contexts, template_file, True
@@ -445,6 +449,22 @@ def get_contexts_for_machine(machine_record: dict[str, Any]) -> tuple[dict[str, 
             is_sortstar=True,
         )
         if contexts:
+            if isinstance(next(iter(contexts.values()), ""), str):
+                contexts = {
+                    key: {
+                        "type": "boolean" if key.endswith("_check") else "string",
+                        "section": "",
+                        "subsection": "",
+                        "description": str(value or key).strip() or key,
+                        "location": "fallback_hierarchical",
+                    }
+                    for key, value in contexts.items()
+                }
+                contexts = merge_semantic_overrides_into_schema(
+                    contexts,
+                    template_scope="sortstar",
+                    machine_family=machine_family,
+                )
             return contexts, template_file, True
     except Exception:
         pass
@@ -606,9 +626,12 @@ def run_extraction_v2_full_prefill(
         raise RuntimeError("No template contexts could be loaded for machine extraction.")
 
     effective_common_items = common_items or machine_data.get("common_items", []) or []
+    selected_pdf_descriptions = _build_selected_pdf_descriptions(machine_data, effective_common_items)
+    repair_evidence_text = "\n".join([full_pdf_text, *selected_pdf_descriptions]).strip()
     total_start = time.time()
     weighted_hints_enabled = _env_flag("LLM_RAG_WEIGHTED_HINTS_ENABLED", default=True)
     force_critical_pass2 = _env_flag("LLM_FORCE_PASS2_CRITICAL_TEXT", default=True)
+    false_no_repair_enabled = _env_flag("LLM_FALSE_NO_REPAIR_ENABLED", default=True)
     critical_text_targets = _env_csv(
         "LLM_CRITICAL_TEXT_TAGS",
         ["direction", "voltage", "hz", "phases"],
@@ -673,6 +696,8 @@ def run_extraction_v2_full_prefill(
         text_confidence_threshold=0.72,
         checkbox_yes_confidence_threshold=0.80,
         dependency_suggestions=dependency_suggestions,
+        evidence_text=repair_evidence_text,
+        enable_false_no_repair=false_no_repair_enabled,
     )
     repair_contexts = baseline_repair_contexts
     if force_critical_pass2:
@@ -685,6 +710,8 @@ def run_extraction_v2_full_prefill(
             dependency_suggestions=dependency_suggestions,
             force_critical_text_fields=True,
             forced_semantic_tags=critical_text_targets,
+            evidence_text=repair_evidence_text,
+            enable_false_no_repair=false_no_repair_enabled,
         )
     forced_pass2_fields = set(repair_contexts.keys()) - set(baseline_repair_contexts.keys())
 
@@ -709,7 +736,6 @@ def run_extraction_v2_full_prefill(
     merged_data = dict(pass1_data)
     merged_data.update(pass2_data)
 
-    selected_pdf_descriptions = _build_selected_pdf_descriptions(machine_data, effective_common_items)
     post_processed_data = apply_post_processing_rules(
         merged_data,
         contexts,

@@ -74,6 +74,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     has_gemini_key: bool
+    sign_in_disabled: bool = False
 
 
 class CreateUserRequest(BaseModel):

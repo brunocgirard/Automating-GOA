@@ -25,8 +25,10 @@ from api.services.auth_service import (
     encrypt_gemini_key,
     generate_session_token,
     get_session_expiry_str,
+    get_sign_in_disabled_user,
     hash_password,
     hash_session_token,
+    is_sign_in_disabled,
     session_cookie_options,
     test_gemini_api_key,
     user_to_response_payload,
@@ -76,6 +78,12 @@ def _session_id_from_request(request: Request, fallback_cookie_value: str | None
 
 @router.post("/login", response_model=UserResponse)
 def login(payload: LoginRequest, request: Request, response: Response) -> dict[str, Any]:
+    if is_sign_in_disabled():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sign-in is disabled for this deployment.",
+        )
+
     try:
         bootstrap_admin_user()
     except Exception as exc:
@@ -144,6 +152,12 @@ def login(payload: LoginRequest, request: Request, response: Response) -> dict[s
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, request: Request, response: Response) -> dict[str, Any]:
+    if is_sign_in_disabled():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account registration is disabled for this deployment.",
+        )
+
     username = str(payload.username or "").strip()
     display_name = str(payload.display_name or "").strip() or username
     password = str(payload.password or "")
@@ -209,6 +223,10 @@ def logout(
     response: Response,
     current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> dict[str, bool]:
+    if is_sign_in_disabled():
+        response.delete_cookie(key=COOKIE_NAME, path="/")
+        return {"ok": True}
+
     ip_address, user_agent = _request_ip_and_agent(request)
 
     session_id = None
@@ -231,6 +249,8 @@ def logout(
 def me(current_user: dict[str, Any] = Depends(require_authenticated_user)) -> dict[str, Any]:
     user_row = find_user_by_id(user_id(current_user))
     if not user_row:
+        if is_sign_in_disabled():
+            return user_to_response_payload(get_sign_in_disabled_user())
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Authenticated user record not found.",

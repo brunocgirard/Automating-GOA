@@ -48,49 +48,43 @@
       overflow: hidden;
     }
     .section-header {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       gap: 10px;
-      padding: 10px 14px;
+      padding: 12px 88px 16px;
       background: var(--header-fill);
       border-bottom: 1px solid var(--border);
       border-top-left-radius: 10px;
       border-top-right-radius: 10px;
-      cursor: pointer;
-      user-select: none;
+      position: relative;
+    }
+    .section-header::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 8px;
+      height: 2px;
+      background: var(--accent);
     }
     .section-header.active + .section-content {
         /* styles when open */
     }
-    .section.collapsed > .section-header {
-        border-bottom-color: transparent;
-    }
-    .toggle-icon {
-        transition: transform 0.3s ease;
-        font-weight: bold;
-        font-size: 20px;
-        color: var(--muted);
-    }
-    .section-header.active .toggle-icon {
-        transform: rotate(45deg);
-    }
     .section-content {
         padding: 16px 14px;
         overflow: hidden;
-        max-height: 10000px; /* A large enough value to not clip content */
-        transition: max-height 0.4s ease-in-out, padding 0.3s ease-in-out;
-    }
-    .section.collapsed > .section-content {
-        max-height: 0;
-        padding-top: 0;
-        padding-bottom: 0;
     }
     .section h2 {
       margin: 0;
-      font-size: 18px;
+      grid-column: 2;
+      width: 100%;
+      font-size: 20px;
       color: var(--accent);
       font-weight: 700;
+      text-align: center;
+      letter-spacing: 0.03em;
     }
     .pill {
       background: var(--header-fill);
@@ -101,81 +95,165 @@
       font-weight: 700;
       border: 1px solid var(--border);
     }
-    .group { margin: 10px 14px 0 14px; }
+    .group { margin: 8px 14px 0 14px; }
+    .group:last-child { margin-bottom: 10px; }
+    .group-block {
+      display: block;
+    }
     .group-title {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 700;
-      color: var(--muted);
-      margin: 6px 0 4px;
+      color: #1e2d3d;
+      background: #dce3ee;
+      border-left: 4px solid var(--accent);
+      padding: 5px 10px;
+      margin: 8px 0 0 0;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border-radius: 0 3px 3px 0;
+      transition: background-color 160ms ease, color 160ms ease, border-left-width 160ms ease, padding 160ms ease, font-size 160ms ease;
+    }
+    .group.has-content .group-title {
+      font-size: 12px;
+      color: #7f1d1d;
+      background: #ffe6d7;
+      border-left-width: 6px;
+      padding: 6px 12px;
+      box-shadow: inset 0 0 0 1px #f3c3b0;
     }
     .field-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+      border-radius: 0 0 6px 6px;
+      overflow: hidden;
     }
     .checkbox-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 10px;
-    }
-    .field-grid > .field {
-      flex: 1 1 calc((100% - 36px) / 4);
-      max-width: calc((100% - 36px) / 4);
-      min-width: 260px;
-    }
-    .checkbox-grid > .field {
-      flex: 1 1 calc((100% - 30px) / 4);
-      max-width: calc((100% - 30px) / 4);
-      min-width: 220px;
-    }
-    @supports (display: grid) {
-      .field-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      }
-      .checkbox-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      }
-      .field-grid > .field,
-      .checkbox-grid > .field {
-        max-width: none;
-        min-width: 0;
-      }
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0;
+      border-top: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+      border-radius: 0 0 6px 6px;
+      overflow: hidden;
     }
     .field {
-      border-left: 3px solid #f3f3f3;
       display: grid;
-      grid-template-rows: auto auto auto;
-      gap: 4px;
-      padding: 10px;
-      border: 1px solid #cdd4e0;
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      grid-template-columns: 130px 1fr;
+      grid-template-rows: auto;
+      gap: 0;
+      padding: 0;
+      border: none;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
       background: #fff;
+      position: relative;
+      min-height: 36px;
     }
     .field.checkbox {
-      grid-template-columns: auto 1fr auto;
-      grid-template-rows: auto;
+      display: flex;
+      flex-direction: row;
       align-items: center;
       gap: 8px;
-      background: #f8f9fc;
-      border-color: #d5dbe7;
+      padding: 7px 10px;
+      background: #f8f9fb;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
     }
-    .field.checkbox .label { font-weight: 600; color: var(--ink); }
-    .label { font-size: 13px; color: var(--ink); font-weight: 600; }
+    .field.checkbox:has(input:checked),
+    .field.checkbox.is-checked {
+      background: #fff3cd;
+      border-left: 3px solid #c00000;
+      padding-left: 7px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .field.checkbox:has(input:checked) .label,
+    .field.checkbox.is-checked .label {
+      font-weight: 700;
+      color: #1f2430;
+    }
+    .label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #374151;
+      padding: 7px 9px;
+      background: #edf0f5;
+      border-right: 1px solid var(--border);
+      line-height: 1.4;
+      white-space: normal;
+      overflow: visible;
+      display: flex;
+      align-items: center;
+      align-self: stretch;
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .field.checkbox .label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      padding: 0;
+      background: transparent;
+      border-right: none;
+      white-space: normal;
+      overflow: visible;
+      display: inline;
+      align-self: auto;
+    }
     input[type="text"], input[type="number"], textarea {
       width: 100%;
       padding: 7px 9px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-      background: #fdfdff;
-      font-size: 14px;
+      border-radius: 0;
+      border: none;
+      background: transparent;
+      font-size: 13px;
       color: var(--ink);
       font-family: inherit;
+      grid-column: 2;
+      grid-row: 1;
+      align-self: center;
+      min-width: 0;
     }
-    textarea { resize: vertical; }
-    input:focus { outline: 2px solid #b5c7e3; }
+    textarea {
+      min-height: 36px;
+      line-height: 1.35;
+      resize: none;
+      overflow: hidden;
+      align-self: stretch;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .field.has-value .label {
+      color: #c00000;
+      font-weight: 700;
+    }
+    .field.has-value input,
+    .field.has-value textarea {
+      font-weight: 600;
+      color: #1f2430;
+    }
+    .field-value-print {
+      display: none;
+      grid-column: 2;
+      grid-row: 1;
+      padding: 7px 9px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--ink);
+      min-height: 36px;
+      align-self: stretch;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      background: #fffbf0 !important;
+      box-shadow: inset 0 0 0 2px #c9a82088;
+    }
     .token {
       font-size: 12px;
       color: var(--muted);
@@ -198,7 +276,8 @@
     }
     
     /* Styles for Read-Only / Filled View */
-    body.readonly input {
+    body.readonly input,
+    body.readonly textarea {
         border: none;
         background: transparent;
         pointer-events: none;
@@ -268,7 +347,12 @@
         opacity: 0.6;
     }
     .delete-section-btn {
-        margin-left: auto;
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        margin-left: 0;
+        z-index: 1;
     }
     .delete-field-btn {
         position: absolute;
@@ -365,20 +449,8 @@
     .btn-edit.is-active {
       background: #dc2626;
     }
-    .btn-download {
-      background: #059669;
-    }
     .btn-save {
       background: #0891b2;
-    }
-    .btn-print {
-      background: #c00000;
-    }
-    .btn-expand {
-      background: #10b981;
-    }
-    .btn-collapse {
-      background: #6b7280;
     }
     .btn-neutral {
       background: #475569;
@@ -483,8 +555,7 @@
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
       backdrop-filter: blur(2px);
     }
-    .search-controls,
-    .quick-controls {
+    .search-controls {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -508,40 +579,15 @@
       padding: 5px 10px;
       white-space: nowrap;
     }
-    .legend-chip {
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 4px 9px;
-      border: 1px solid transparent;
-      white-space: nowrap;
-    }
-    .legend-filled {
-      background: #dcfce7;
-      border-color: #86efac;
-      color: #166534;
-    }
-    .legend-optional {
-      background: #fef9c3;
-      border-color: #fde047;
-      color: #854d0e;
-    }
-    .legend-required {
-      background: #fee2e2;
-      border-color: #fca5a5;
-      color: #991b1b;
-    }
-    .autosave-status {
-      color: #0f172a;
-    }
     .required-badge {
       color: #b91c1c;
       margin-left: 4px;
       font-weight: 700;
     }
     .section-progress {
-      margin-left: auto;
-      margin-right: 6px;
+      grid-column: 3;
+      justify-self: end;
+      margin-right: 34px;
       padding: 3px 8px;
       border-radius: 999px;
       border: 1px solid var(--border);
@@ -566,21 +612,24 @@
     }
     .field.state-filled {
       border-color: #86efac;
-      border-left-color: #22c55e;
       background: #f0fdf4;
     }
     .field.state-empty-optional {
       border-color: #fde047;
-      border-left-color: #eab308;
       background: #fffbeb;
     }
     .field.state-empty-required {
       border-color: #fca5a5;
-      border-left-color: #ef4444;
       background: #fef2f2;
     }
     .field.field-match {
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.26);
+    }
+    .field.confidence-low {
+      box-shadow: inset 0 0 0 2px rgba(245, 158, 11, 0.9);
+    }
+    .field.confidence-medium {
+      box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.55);
     }
     .field.field-hidden-by-search,
     .group.group-hidden-by-search,
@@ -609,36 +658,146 @@
         .no-print { display: none !important; }
         body {
             background: #fff;
+            padding: 0;
+            margin: 0;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
-        .section.collapsed > .section-content {
-            max-height: none !important;
-            padding: 16px 14px !important;
+        .page {
+            max-width: 100%;
+            width: 100%;
+            margin: 0;
         }
-        .section-header .toggle-icon {
+        .layout-shell {
+            display: block !important;
+        }
+        .toc-sidebar {
             display: none !important;
+        }
+        .section,
+        .section-content,
+        .field-grid,
+        .checkbox-grid {
+            overflow: visible !important;
+        }
+        .section {
+            box-shadow: none;
+            break-inside: auto;
+            page-break-inside: auto;
+        }
+        .section-header {
+            break-after: avoid;
+            page-break-after: avoid;
+            page-break-inside: avoid;
+            background: #e5e5e5 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .section-progress {
+            display: none !important;
+        }
+        .group {
+            break-inside: auto;
+            page-break-inside: auto;
+        }
+        .group-block {
+            break-inside: avoid-page;
+            page-break-inside: avoid;
+        }
+        .group-title {
+            break-after: avoid;
+            page-break-after: avoid;
+            background: #dce3ee !important;
+            color: #1e2d3d !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .group.has-content .group-title {
+            background: #ffe6d7 !important;
+            color: #7f1d1d !important;
+            border-left: 6px solid #c00000 !important;
+            font-size: 12px !important;
+            padding: 6px 12px !important;
+            box-shadow: inset 0 0 0 1px #f3c3b0;
+        }
+        .field-grid,
+        .checkbox-grid {
+            border-top: 1px solid #ccc !important;
+            border-left: 1px solid #ccc !important;
+        }
+        .field {
+            display: grid !important;
+            grid-template-columns: 130px 1fr !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+            border-right: 1px solid #ccc !important;
+            border-bottom: 1px solid #ccc !important;
+        }
+        .field .label {
+            background: #edf0f5 !important;
+            border-right: 1px solid #ccc !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .field.checkbox.is-checked {
+            background: #fff3cd !important;
+            border-left: 3px solid #c00000 !important;
+            padding-left: 7px !important;
+        }
+        .field.has-value .label {
+            color: #c00000 !important;
+            font-weight: 700 !important;
+        }
+        .field input[type="text"],
+        .field input[type="number"],
+        .field textarea {
+            display: none !important;
+        }
+        .field-value-print {
+            display: block !important;
         }
     }
 
     @media (max-width: 480px) {
       body { padding: 12px; }
-      .section { padding: 12px; }
+      .section-header {
+        grid-template-columns: 1fr;
+        padding: 12px 18px 18px;
+      }
+      .section h2 {
+        grid-column: 1;
+      }
+      .section-progress,
+      .delete-section-btn {
+        position: static;
+        transform: none !important;
+        justify-self: center;
+        margin: 0;
+      }
+      .section-progress {
+        grid-column: 1;
+      }
       .field-grid,
       .checkbox-grid {
         grid-template-columns: 1fr;
       }
-      input[type="text"], input[type="number"] {
-        padding: 10px 12px;
-        font-size: 15px;
-      }
       .field {
-        gap: 6px;
+        grid-template-columns: 1fr;
+      }
+      .label,
+      input[type="text"],
+      input[type="number"],
+      textarea,
+      .field-value-print {
+        grid-column: 1;
+        grid-row: auto;
+      }
+      .label {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
       }
       .field.checkbox {
-        grid-template-columns: auto 1fr;
-        grid-template-rows: auto auto;
-        row-gap: 4px;
+        display: flex;
       }
     }
   </style>
@@ -652,9 +811,7 @@
         </div>
         <div class="toolbar-actions">
           <button id="editModeBtn" onclick="toggleEditMode()" class="toolbar-btn btn-edit">Enable Edit Mode</button>
-          <button id="downloadBtn" onclick="downloadModifiedHTML()" class="toolbar-btn btn-download" style="display: none;">Download Modified Form</button>
           <button onclick="saveFilledFormHTML()" class="toolbar-btn btn-save">Save Filled Form (HTML)</button>
-          <button onclick="generatePDF()" class="toolbar-btn btn-print">Print to PDF</button>
         </div>
       </header>
       <div class="divider"></div>
@@ -675,22 +832,8 @@
               <button type="button" onclick="clearFieldSearch()" class="toolbar-btn btn-neutral compact-btn">Clear</button>
               <span id="searchSummary" class="status-pill">Showing all fields</span>
             </div>
-            <div class="quick-controls">
-              <span id="overallProgress" class="status-pill status-progress">0 of 0 fields filled</span>
-              <span class="legend-chip legend-filled">Filled</span>
-              <span class="legend-chip legend-optional">Optional Empty</span>
-              <span class="legend-chip legend-required">Required Empty</span>
-              <span id="autosaveStatus" class="status-pill autosave-status">Autosave ready</span>
-              <button onclick="expandAllSections()" class="toolbar-btn btn-expand compact-btn">Expand All Sections</button>
-              <button onclick="collapseAllSections()" class="toolbar-btn btn-collapse compact-btn">Collapse All Sections</button>
-              <button onclick="clearAutoSavedDraft()" class="toolbar-btn btn-neutral compact-btn">Clear Local Draft</button>
-            </div>
           </div>
-
-      
-    
-
-    
+<!-- GOA_FORM_BODY_START -->
 
     <section class="section">
       <div class="section-header">
@@ -698,9 +841,10 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0001}}">
       <span class="label">Proj. #</span>
       <input type="text" name="f0001" data-placeholder="{{f0001}}" />
@@ -728,6 +872,7 @@
       <span class="token">{{f0004}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -740,9 +885,10 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0005}}">
       <span class="label">Purchase Order #</span>
       <input type="text" name="f0005" data-placeholder="{{f0005}}" />
@@ -812,6 +958,7 @@
       <span class="token">{{f0014}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -824,9 +971,10 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0015}}">
       <span class="label">Voltage</span>
       <input type="text" name="f0015" data-placeholder="{{f0015}}" />
@@ -847,13 +995,15 @@
       <span class="token">{{f0017}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Conformity</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Conformity</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0018}}">
           <input type="checkbox" name="f0018" data-placeholder="{{f0018}}" />
           <span class="label">CSA</span>
@@ -867,13 +1017,15 @@
       <span class="token">{{f0019}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Certification</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Certification</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0020}}">
           <input type="checkbox" name="f0020" data-placeholder="{{f0020}}" />
           <span class="label">None</span>
@@ -922,19 +1074,22 @@
       <span class="token">{{f0026}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0027}}">
       <span class="label">Comments</span>
       <input type="text" name="f0027" data-placeholder="{{f0027}}" />
       <span class="token">{{f0027}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -947,9 +1102,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Bottle</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bottle</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0028}}">
       <span class="label">Qty</span>
       <input type="text" name="f0028" data-placeholder="{{f0028}}" />
@@ -977,13 +1133,15 @@
       <span class="token">{{f0031}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Bottle / Linear Index</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bottle / Linear Index</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0032}}">
           <input type="checkbox" name="f0032" data-placeholder="{{f0032}}" />
           <span class="label">304SS / HDPE</span>
@@ -1004,13 +1162,15 @@
           <span class="token">{{f0034}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Plug</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Plug</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0035}}">
       <span class="label">Qty</span>
       <input type="text" name="f0035" data-placeholder="{{f0035}}" />
@@ -1031,13 +1191,15 @@
           <span class="token">{{f0037}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Cap</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cap</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0038}}">
       <span class="label">Qty</span>
       <input type="text" name="f0038" data-placeholder="{{f0038}}" />
@@ -1065,13 +1227,15 @@
           <span class="token">{{f0041}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Elevator Slats</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Elevator Slats</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0042}}">
       <span class="label">Qty</span>
       <input type="text" name="f0042" data-placeholder="{{f0042}}" />
@@ -1092,26 +1256,30 @@
           <span class="token">{{f0044}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Seal Mat&#x27;l</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Seal Mat&#x27;l</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0045}}">
       <span class="label">Qty</span>
       <input type="text" name="f0045" data-placeholder="{{f0045}}" />
       <span class="token">{{f0045}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Seal Mat&#x27;l / Selected by</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Seal Mat&#x27;l / Selected by</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0046}}">
           <input type="checkbox" name="f0046" data-placeholder="{{f0046}}" />
           <span class="label">Capmatic</span>
@@ -1125,13 +1293,15 @@
           <span class="token">{{f0047}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Seal Mat&#x27;l / Material</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Seal Mat&#x27;l / Material</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0048}}">
           <input type="checkbox" name="f0048" data-placeholder="{{f0048}}" />
           <span class="label">Viton</span>
@@ -1166,26 +1336,30 @@
           <span class="token">{{f0052}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tubing Mat&#x27;l</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tubing Mat&#x27;l</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0053}}">
       <span class="label">Qty</span>
       <input type="text" name="f0053" data-placeholder="{{f0053}}" />
       <span class="token">{{f0053}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tubing Mat&#x27;l / Selected by</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tubing Mat&#x27;l / Selected by</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0054}}">
           <input type="checkbox" name="f0054" data-placeholder="{{f0054}}" />
           <span class="label">Capmatic</span>
@@ -1199,13 +1373,15 @@
           <span class="token">{{f0055}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tubing Mat&#x27;l / Material</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tubing Mat&#x27;l / Material</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0056}}">
           <input type="checkbox" name="f0056" data-placeholder="{{f0056}}" />
           <span class="label">Polyethylene</span>
@@ -1233,13 +1409,15 @@
       <span class="token">{{f0059}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0060}}">
       <span class="label">Filling Nozzle</span>
       <input type="text" name="f0060" data-placeholder="{{f0060}}" />
@@ -1253,13 +1431,15 @@
       <span class="token">{{f0061}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tablet</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tablet</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0062}}">
       <span class="label">Qty</span>
       <input type="text" name="f0062" data-placeholder="{{f0062}}" />
@@ -1287,13 +1467,15 @@
       <span class="token">{{f0065}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Desiccant</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Desiccant</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0066}}">
       <span class="label">Qty</span>
       <input type="text" name="f0066" data-placeholder="{{f0066}}" />
@@ -1321,13 +1503,15 @@
       <span class="token">{{f0069}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Cotton</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cotton</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0070}}">
       <span class="label">Qty</span>
       <input type="text" name="f0070" data-placeholder="{{f0070}}" />
@@ -1355,13 +1539,15 @@
       <span class="token">{{f0073}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Product Metal Contact Parts</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Product Metal Contact Parts</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0074}}">
       <span class="label">Qty</span>
       <input type="text" name="f0074" data-placeholder="{{f0074}}" />
@@ -1382,13 +1568,15 @@
           <span class="token">{{f0076}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Label</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Label</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0077}}">
       <span class="label">Qty</span>
       <input type="text" name="f0077" data-placeholder="{{f0077}}" />
@@ -1430,13 +1618,15 @@
       <span class="token">{{f0082}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tooling ID</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tooling ID</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0083}}">
           <input type="checkbox" name="f0083" data-placeholder="{{f0083}}" />
           <span class="label">Bx, Cx, Lx, Etc...</span>
@@ -1450,13 +1640,15 @@
           <span class="token">{{f0084}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tooling Cart</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tooling Cart</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0085}}">
           <input type="checkbox" name="f0085" data-placeholder="{{f0085}}" />
           <span class="label">Yes</span>
@@ -1470,13 +1662,15 @@
           <span class="token">{{f0086}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Direct Product Contact</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Direct Product Contact</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0087}}">
           <input type="checkbox" name="f0087" data-placeholder="{{f0087}}" />
           <span class="label">Autoclavable</span>
@@ -1497,19 +1691,22 @@
           <span class="token">{{f0089}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0090}}">
       <span class="label">Comments</span>
       <input type="text" name="f0090" data-placeholder="{{f0090}}" />
       <span class="token">{{f0090}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -1522,15 +1719,17 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
         <label class="field textarea" data-placeholder="{{options_listing}}">
           <span class="label">Option Listing</span>
           <textarea name="options_listing" data-placeholder="{{options_listing}}" rows="5"></textarea>
           <span class="token">{{options_listing}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
@@ -1543,15 +1742,17 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0092}}">
       <span class="label">Remarks / Special Design</span>
       <input type="text" name="f0092" data-placeholder="{{f0092}}" />
       <span class="token">{{f0092}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -1564,15 +1765,17 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0093}}">
       <span class="label">Critical URS Compliance Points</span>
       <input type="text" name="f0093" data-placeholder="{{f0093}}" />
       <span class="token">{{f0093}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -1585,15 +1788,17 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0094}}">
       <span class="label">Productions Notes</span>
       <input type="text" name="f0094" data-placeholder="{{f0094}}" />
       <span class="token">{{f0094}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -1606,9 +1811,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Explosion proof</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Explosion proof</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0095}}">
           <input type="checkbox" name="f0095" data-placeholder="{{f0095}}" />
           <span class="label">Yes</span>
@@ -1622,13 +1828,15 @@
           <span class="token">{{f0096}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">PLC</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">PLC</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0097}}">
           <input type="checkbox" name="f0097" data-placeholder="{{f0097}}" />
           <span class="label">B &amp; R</span>
@@ -1663,13 +1871,15 @@
       <span class="token">{{f0101}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">HMI</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">HMI</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0102}}">
           <input type="checkbox" name="f0102" data-placeholder="{{f0102}}" />
           <span class="label">Allen Bradley</span>
@@ -1704,13 +1914,15 @@
           <span class="token">{{f0106}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">HMI / Size</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">HMI / Size</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0107}}">
           <input type="checkbox" name="f0107" data-placeholder="{{f0107}}" />
           <span class="label">5.7&quot; n/a for vision</span>
@@ -1731,13 +1943,15 @@
           <span class="token">{{f0109}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">HMI / Language</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">HMI / Language</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0110}}">
           <input type="checkbox" name="f0110" data-placeholder="{{f0110}}" />
           <span class="label">English</span>
@@ -1751,13 +1965,15 @@
           <span class="token">{{f0111}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">HMI / HMI Location</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">HMI / HMI Location</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0112}}">
           <input type="checkbox" name="f0112" data-placeholder="{{f0112}}" />
           <span class="label">Infeed Side</span>
@@ -1785,13 +2001,15 @@
           <span class="token">{{f0115}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">HMI / Licence Management Activation Protocol</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">HMI / Licence Management Activation Protocol</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0116}}">
           <input type="checkbox" name="f0116" data-placeholder="{{f0116}}" />
           <span class="label">Yes</span>
@@ -1805,13 +2023,15 @@
           <span class="token">{{f0117}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Control Panel Post</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Control Panel Post</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0118}}">
           <input type="checkbox" name="f0118" data-placeholder="{{f0118}}" />
           <span class="label">1 Axis</span>
@@ -1839,13 +2059,15 @@
           <span class="token">{{f0121}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Beacon Light Tower</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Beacon Light Tower</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0122}}">
           <input type="checkbox" name="f0122" data-placeholder="{{f0122}}" />
           <span class="label">Red</span>
@@ -1887,13 +2109,15 @@
           <span class="token">{{f0127}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Extra E-Stops</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Extra E-Stops</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0128}}">
           <input type="checkbox" name="f0128" data-placeholder="{{f0128}}" />
           <span class="label">None</span>
@@ -1914,13 +2138,15 @@
       <span class="token">{{f0130}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Batch / Data Report</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Batch / Data Report</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0131}}">
           <input type="checkbox" name="f0131" data-placeholder="{{f0131}}" />
           <span class="label">None</span>
@@ -1934,13 +2160,15 @@
           <span class="token">{{f0132}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Batch / Data Report / Type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Batch / Data Report / Type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0133}}">
           <input type="checkbox" name="f0133" data-placeholder="{{f0133}}" />
           <span class="label">Summary Page only</span>
@@ -1961,13 +2189,15 @@
       <span class="token">{{f0135}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Batch / Data Report</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Batch / Data Report</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0136}}">
           <input type="checkbox" name="f0136" data-placeholder="{{f0136}}" />
           <span class="label">Audit Trail</span>
@@ -2002,13 +2232,15 @@
       <span class="token">{{f0140}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Remote Technical Service - (1 per line) (Secomea)</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Remote Technical Service - (1 per line) (Secomea)</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0141}}">
           <input type="checkbox" name="f0141" data-placeholder="{{f0141}}" />
           <span class="label">Yes</span>
@@ -2029,39 +2261,45 @@
           <span class="token">{{f0143}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Customer Specific Wiring Code (checkbox)</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Customer Specific Wiring Code (checkbox)</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0144}}">
           <input type="checkbox" name="f0144" data-placeholder="{{f0144}}" />
           <span class="label">None</span>
           <span class="token">{{f0144}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Electronic Torque Readout w/10&quot; HMI (checkbox)</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Electronic Torque Readout w/10&quot; HMI (checkbox)</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0145}}">
           <input type="checkbox" name="f0145" data-placeholder="{{f0145}}" />
           <span class="label">None</span>
           <span class="token">{{f0145}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tank/Hopper Level Output Signal</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tank/Hopper Level Output Signal</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0146}}">
           <input type="checkbox" name="f0146" data-placeholder="{{f0146}}" />
           <span class="label">Pneumatic</span>
@@ -2075,13 +2313,15 @@
           <span class="token">{{f0147}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Clear Bottle Sensor</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Clear Bottle Sensor</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0148}}">
           <input type="checkbox" name="f0148" data-placeholder="{{f0148}}" />
           <span class="label">Yes</span>
@@ -2095,13 +2335,15 @@
           <span class="token">{{f0149}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Pharma Type Software Logging</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Pharma Type Software Logging</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0150}}">
           <input type="checkbox" name="f0150" data-placeholder="{{f0150}}" />
           <span class="label">Yes</span>
@@ -2115,19 +2357,22 @@
           <span class="token">{{f0151}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0152}}">
       <span class="label">Comments</span>
       <input type="text" name="f0152" data-placeholder="{{f0152}}" />
       <span class="token">{{f0152}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -2140,9 +2385,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Tube</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tube</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0153}}">
           <input type="checkbox" name="f0153" data-placeholder="{{f0153}}" />
           <span class="label">None</span>
@@ -2205,13 +2451,15 @@
           <span class="token">{{f0161}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Vial / Bottle</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Vial / Bottle</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0162}}">
           <input type="checkbox" name="f0162" data-placeholder="{{f0162}}" />
           <span class="label">None</span>
@@ -2302,13 +2550,15 @@
       <span class="token">{{f0174}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Puck System</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Puck System</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0175}}">
           <input type="checkbox" name="f0175" data-placeholder="{{f0175}}" />
           <span class="label">Puck Sys. None</span>
@@ -2364,13 +2614,15 @@
       <span class="token">{{f0182}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Turn Tables</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Turn Tables</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0183}}">
           <input type="checkbox" name="f0183" data-placeholder="{{f0183}}" />
           <span class="label">Infeed w/o tray</span>
@@ -2440,13 +2692,15 @@
       <span class="token">{{f0192}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Index / Motion</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Index / Motion</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0193}}">
           <input type="checkbox" name="f0193" data-placeholder="{{f0193}}" />
           <span class="label">Single Index</span>
@@ -2523,6 +2777,7 @@
       <span class="token">{{f0203}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -2535,9 +2790,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Reject Method</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Reject Method</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0204}}">
           <input type="checkbox" name="f0204" data-placeholder="{{f0204}}" />
           <span class="label">Chute</span>
@@ -2593,13 +2849,15 @@
           <span class="token">{{f0211}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Reject Reasons</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Reject Reasons</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0212}}">
           <input type="checkbox" name="f0212" data-placeholder="{{f0212}}" />
           <span class="label">Fill WT / Count</span>
@@ -2732,6 +2990,7 @@
       <span class="token">{{f0230}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -2744,9 +3003,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Street Fighter model</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Street Fighter model</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0231}}">
           <input type="checkbox" name="f0231" data-placeholder="{{f0231}}" />
           <span class="label">1</span>
@@ -2767,13 +3027,15 @@
           <span class="token">{{f0233}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">No. Of Funnels</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">No. Of Funnels</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0234}}">
           <input type="checkbox" name="f0234" data-placeholder="{{f0234}}" />
           <span class="label">1</span>
@@ -2801,13 +3063,15 @@
           <span class="token">{{f0237}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Hopper</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Hopper</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0238}}">
           <input type="checkbox" name="f0238" data-placeholder="{{f0238}}" />
           <span class="label">10L</span>
@@ -2828,13 +3092,15 @@
           <span class="token">{{f0240}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Lift Fighter</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Lift Fighter</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0241}}">
           <input type="checkbox" name="f0241" data-placeholder="{{f0241}}" />
           <span class="label">100L</span>
@@ -2883,6 +3149,7 @@
       <span class="token">{{f0247}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -2895,22 +3162,25 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Pump</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Pump</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0248}}">
           <input type="checkbox" name="f0248" data-placeholder="{{f0248}}" />
           <span class="label">Volumetric</span>
           <span class="token">{{f0248}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0249}}">
           <input type="checkbox" name="f0249" data-placeholder="{{f0249}}" />
           <span class="label">Pneumatic</span>
@@ -2959,13 +3229,15 @@
           <span class="token">{{f0255}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Pump Volume</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Pump Volume</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0256}}">
       <span class="label">10cc</span>
       <input type="number" name="f0256" data-placeholder="{{f0256}}" />
@@ -3028,13 +3300,15 @@
           <span class="token">{{f0264}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Valve type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Valve type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0265}}">
           <input type="checkbox" name="f0265" data-placeholder="{{f0265}}" />
           <span class="label">None</span>
@@ -3069,13 +3343,15 @@
           <span class="token">{{f0269}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Nozzle type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Nozzle type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0270}}">
           <input type="checkbox" name="f0270" data-placeholder="{{f0270}}" />
           <span class="label">Straight</span>
@@ -3117,13 +3393,15 @@
       <span class="token">{{f0275}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Nozzle Body Size</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Nozzle Body Size</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0276}}">
           <input type="checkbox" name="f0276" data-placeholder="{{f0276}}" />
           <span class="label">6 mm</span>
@@ -3193,26 +3471,30 @@
           <span class="token">{{f0285}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Nozzle Bar / Stations</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Nozzle Bar / Stations</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0286}}">
           <input type="checkbox" name="f0286" data-placeholder="{{f0286}}" />
           <span class="label">Offset Nozzle bar</span>
           <span class="token">{{f0286}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Centering Device</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Centering Device</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0287}}">
           <input type="checkbox" name="f0287" data-placeholder="{{f0287}}" />
           <span class="label">None</span>
@@ -3240,13 +3522,15 @@
       <span class="token">{{f0290}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tank / Hopper / Infeed Hose</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tank / Hopper / Infeed Hose</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0291}}">
           <input type="checkbox" name="f0291" data-placeholder="{{f0291}}" />
           <span class="label">None</span>
@@ -3337,13 +3621,15 @@
       <span class="token">{{f0303}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Gutter System</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Gutter System</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0304}}">
           <input type="checkbox" name="f0304" data-placeholder="{{f0304}}" />
           <span class="label">None</span>
@@ -3364,13 +3650,15 @@
           <span class="token">{{f0306}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Cleaning</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cleaning</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0307}}">
           <input type="checkbox" name="f0307" data-placeholder="{{f0307}}" />
           <span class="label">None</span>
@@ -3398,13 +3686,15 @@
       <span class="token">{{f0310}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Options</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Options</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0311}}">
       <span class="label">No. of Cells</span>
       <input type="text" name="f0311" data-placeholder="{{f0311}}" />
@@ -3418,6 +3708,7 @@
       <span class="token">{{f0312}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -3430,22 +3721,25 @@
       </div>
       
     <div class="group">
-      
-      <div class="checkbox-grid">
+      <div class="group-block">
         
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0313}}">
           <input type="checkbox" name="f0313" data-placeholder="{{f0313}}" />
           <span class="label">None</span>
           <span class="token">{{f0313}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Type</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Type</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0314}}">
           <input type="checkbox" name="f0314" data-placeholder="{{f0314}}" />
           <span class="label">Nitrogen</span>
@@ -3459,13 +3753,15 @@
           <span class="token">{{f0315}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Location / Type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Location / Type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0316}}">
           <input type="checkbox" name="f0316" data-placeholder="{{f0316}}" />
           <span class="label">Before Fill ST</span>
@@ -3507,6 +3803,7 @@
       <span class="token">{{f0321}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -3519,22 +3816,25 @@
       </div>
       
     <div class="group">
-      
-      <div class="checkbox-grid">
+      <div class="group-block">
         
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0322}}">
           <input type="checkbox" name="f0322" data-placeholder="{{f0322}}" />
           <span class="label">None</span>
           <span class="token">{{f0322}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Type</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Type</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0323}}">
           <input type="checkbox" name="f0323" data-placeholder="{{f0323}}" />
           <span class="label">Roll / Pouch</span>
@@ -3548,13 +3848,15 @@
           <span class="token">{{f0324}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Bulk feeder</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bulk feeder</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0325}}">
           <input type="checkbox" name="f0325" data-placeholder="{{f0325}}" />
           <span class="label">Internal</span>
@@ -3589,6 +3891,7 @@
       <span class="token">{{f0329}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -3601,22 +3904,25 @@
       </div>
       
     <div class="group">
-      
-      <div class="checkbox-grid">
+      <div class="group-block">
         
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0330}}">
           <input type="checkbox" name="f0330" data-placeholder="{{f0330}}" />
           <span class="label">None</span>
           <span class="token">{{f0330}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Sensing</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Sensing</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0331}}">
           <input type="checkbox" name="f0331" data-placeholder="{{f0331}}" />
           <span class="label">Presence</span>
@@ -3630,13 +3936,15 @@
           <span class="token">{{f0332}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Cotton Bin</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cotton Bin</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0333}}">
           <input type="checkbox" name="f0333" data-placeholder="{{f0333}}" />
           <span class="label">Yes</span>
@@ -3657,6 +3965,7 @@
       <span class="token">{{f0335}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -3669,9 +3978,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Plug Placement</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Plug Placement</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0336}}">
           <input type="checkbox" name="f0336" data-placeholder="{{f0336}}" />
           <span class="label">Push Through</span>
@@ -3720,13 +4030,15 @@
       <span class="token">{{f0342}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Plug Sorting</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Plug Sorting</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0343}}">
           <input type="checkbox" name="f0343" data-placeholder="{{f0343}}" />
           <span class="label">None</span>
@@ -3775,13 +4087,15 @@
       <span class="token">{{f0349}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Bulk Feeder</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bulk Feeder</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0350}}">
           <input type="checkbox" name="f0350" data-placeholder="{{f0350}}" />
           <span class="label">None</span>
@@ -3823,6 +4137,7 @@
       <span class="token">{{f0355}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -3835,9 +4150,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Cap Placement</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cap Placement</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0356}}">
           <input type="checkbox" name="f0356" data-placeholder="{{f0356}}" />
           <span class="label">Push Through</span>
@@ -3914,13 +4230,15 @@
       <span class="token">{{f0366}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Torque</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Torque</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0367}}">
           <input type="checkbox" name="f0367" data-placeholder="{{f0367}}" />
           <span class="label">Air motor</span>
@@ -3983,13 +4301,15 @@
       <span class="token">{{f0375}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Cap Sorting</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cap Sorting</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0376}}">
           <input type="checkbox" name="f0376" data-placeholder="{{f0376}}" />
           <span class="label">Centrifugal</span>
@@ -4024,13 +4344,15 @@
           <span class="token">{{f0380}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Centering Device</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Centering Device</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0381}}">
           <input type="checkbox" name="f0381" data-placeholder="{{f0381}}" />
           <span class="label">None</span>
@@ -4065,13 +4387,15 @@
       <span class="token">{{f0385}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tube Aligner</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tube Aligner</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0386}}">
           <input type="checkbox" name="f0386" data-placeholder="{{f0386}}" />
           <span class="label">None</span>
@@ -4099,13 +4423,15 @@
       <span class="token">{{f0389}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Bulk Feeder</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bulk Feeder</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0390}}">
           <input type="checkbox" name="f0390" data-placeholder="{{f0390}}" />
           <span class="label">None</span>
@@ -4140,6 +4466,7 @@
       <span class="token">{{f0394}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -4152,9 +4479,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Cap Placement</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cap Placement</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0395}}">
           <input type="checkbox" name="f0395" data-placeholder="{{f0395}}" />
           <span class="label">None</span>
@@ -4182,13 +4510,15 @@
       <span class="token">{{f0398}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Torque</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Torque</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0399}}">
           <input type="checkbox" name="f0399" data-placeholder="{{f0399}}" />
           <span class="label">Air motor</span>
@@ -4251,13 +4581,15 @@
       <span class="token">{{f0407}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Cap Sorting</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cap Sorting</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0408}}">
           <input type="checkbox" name="f0408" data-placeholder="{{f0408}}" />
           <span class="label">Elevator</span>
@@ -4271,13 +4603,15 @@
           <span class="token">{{f0409}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Motorized Adj.</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Motorized Adj.</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0410}}">
           <input type="checkbox" name="f0410" data-placeholder="{{f0410}}" />
           <span class="label">None</span>
@@ -4298,6 +4632,7 @@
       <span class="token">{{f0412}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -4310,9 +4645,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Label HD model</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Label HD model</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0413}}">
           <input type="checkbox" name="f0413" data-placeholder="{{f0413}}" />
           <span class="label">LS100</span>
@@ -4326,13 +4662,15 @@
           <span class="token">{{f0414}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Support reel DIA.</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Support reel DIA.</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0415}}">
           <input type="checkbox" name="f0415" data-placeholder="{{f0415}}" />
           <span class="label">300 mm</span>
@@ -4346,13 +4684,15 @@
           <span class="token">{{f0416}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Arm type</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Arm type</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0417}}">
           <input type="checkbox" name="f0417" data-placeholder="{{f0417}}" />
           <span class="label">Standard</span>
@@ -4366,13 +4706,15 @@
           <span class="token">{{f0418}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Application SYS</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Application SYS</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0419}}">
           <input type="checkbox" name="f0419" data-placeholder="{{f0419}}" />
           <span class="label">Wrap around</span>
@@ -4442,26 +4784,30 @@
           <span class="token">{{f0428}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Type</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Type</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0429}}">
           <input type="checkbox" name="f0429" data-placeholder="{{f0429}}" />
           <span class="label">Rotary</span>
           <span class="token">{{f0429}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Label Head Orientation</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Label Head Orientation</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0430}}">
           <input type="checkbox" name="f0430" data-placeholder="{{f0430}}" />
           <span class="label">DX</span>
@@ -4475,13 +4821,15 @@
           <span class="token">{{f0431}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Separator Wheel</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Separator Wheel</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0432}}">
           <input type="checkbox" name="f0432" data-placeholder="{{f0432}}" />
           <span class="label">None</span>
@@ -4516,13 +4864,15 @@
       <span class="token">{{f0436}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Top Hold Down</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Top Hold Down</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0437}}">
           <input type="checkbox" name="f0437" data-placeholder="{{f0437}}" />
           <span class="label">Bottle Aligner</span>
@@ -4543,6 +4893,7 @@
       <span class="token">{{f0439}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -4555,22 +4906,25 @@
       </div>
       
     <div class="group">
-      
-      <div class="checkbox-grid">
+      <div class="group-block">
         
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0440}}">
           <input type="checkbox" name="f0440" data-placeholder="{{f0440}}" />
           <span class="label">None</span>
           <span class="token">{{f0440}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Coder</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Coder</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0441}}">
           <input type="checkbox" name="f0441" data-placeholder="{{f0441}}" />
           <span class="label">Hot stamp</span>
@@ -4647,13 +5001,15 @@
       <span class="token">{{f0451}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Videojet</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Videojet</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0452}}">
           <input type="checkbox" name="f0452" data-placeholder="{{f0452}}" />
           <span class="label">8520</span>
@@ -4681,13 +5037,15 @@
       <span class="token">{{f0455}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Laser</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Laser</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0456}}">
           <input type="checkbox" name="f0456" data-placeholder="{{f0456}}" />
           <span class="label">Videojet</span>
@@ -4736,13 +5094,15 @@
       <span class="token">{{f0462}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Vision</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Vision</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0463}}">
           <input type="checkbox" name="f0463" data-placeholder="{{f0463}}" />
           <span class="label">None</span>
@@ -4826,13 +5186,15 @@
           <span class="token">{{f0474}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Print</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Print</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0475}}">
           <input type="checkbox" name="f0475" data-placeholder="{{f0475}}" />
           <span class="label">Lot</span>
@@ -4888,6 +5250,7 @@
       <span class="token">{{f0482}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -4900,9 +5263,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Enercon Model</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Enercon Model</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0483}}">
           <input type="checkbox" name="f0483" data-placeholder="{{f0483}}" />
           <span class="label">500</span>
@@ -4916,26 +5280,30 @@
           <span class="token">{{f0484}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Voltage</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Voltage</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0485}}">
           <input type="checkbox" name="f0485" data-placeholder="{{f0485}}" />
           <span class="label">200 to 240</span>
           <span class="token">{{f0485}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">HZ</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">HZ</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0486}}">
           <input type="checkbox" name="f0486" data-placeholder="{{f0486}}" />
           <span class="label">50</span>
@@ -4949,26 +5317,30 @@
           <span class="token">{{f0487}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Sealing HD c/w IO Cable</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Sealing HD c/w IO Cable</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0488}}">
           <input type="checkbox" name="f0488" data-placeholder="{{f0488}}" />
           <span class="label">Tunnel</span>
           <span class="token">{{f0488}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Stand (Enercon)</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Stand (Enercon)</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0489}}">
           <input type="checkbox" name="f0489" data-placeholder="{{f0489}}" />
           <span class="label">Fixed</span>
@@ -4982,39 +5354,45 @@
           <span class="token">{{f0490}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Status Light</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Status Light</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0491}}">
           <input type="checkbox" name="f0491" data-placeholder="{{f0491}}" />
           <span class="label">Enercon</span>
           <span class="token">{{f0491}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Separator Wheel</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Separator Wheel</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0492}}">
           <input type="checkbox" name="f0492" data-placeholder="{{f0492}}" />
           <span class="label">Capmatic</span>
           <span class="token">{{f0492}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Cap Inspection From Enercon</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Cap Inspection From Enercon</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0493}}">
           <input type="checkbox" name="f0493" data-placeholder="{{f0493}}" />
           <span class="label">None</span>
@@ -5035,13 +5413,15 @@
           <span class="token">{{f0495}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">No Foil</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">No Foil</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0496}}">
           <input type="checkbox" name="f0496" data-placeholder="{{f0496}}" />
           <span class="label">None</span>
@@ -5069,6 +5449,7 @@
       <span class="token">{{f0499}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -5081,28 +5462,32 @@
       </div>
       
     <div class="group">
-      
-      <div class="checkbox-grid">
+      <div class="group-block">
         
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0500}}">
           <input type="checkbox" name="f0500" data-placeholder="{{f0500}}" />
           <span class="label">Beltsar Model</span>
           <span class="token">{{f0500}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Features</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Features</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0501}}">
       <span class="label">Comments</span>
       <input type="text" name="f0501" data-placeholder="{{f0501}}" />
       <span class="token">{{f0501}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -5115,9 +5500,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Sleever Application Area</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Sleever Application Area</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0502}}">
           <input type="checkbox" name="f0502" data-placeholder="{{f0502}}" />
           <span class="label">Neck Appl&#x27;n</span>
@@ -5152,13 +5538,15 @@
           <span class="token">{{f0506}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Sleeve Pres. Sensor</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Sleeve Pres. Sensor</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0507}}">
           <input type="checkbox" name="f0507" data-placeholder="{{f0507}}" />
           <span class="label">None</span>
@@ -5221,13 +5609,15 @@
       <span class="token">{{f0515}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Shrink Tunnel</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Shrink Tunnel</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0516}}">
           <input type="checkbox" name="f0516" data-placeholder="{{f0516}}" />
           <span class="label">From 3rd Party</span>
@@ -5290,6 +5680,7 @@
       <span class="token">{{f0524}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -5302,9 +5693,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Width</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Width</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0525}}">
           <input type="checkbox" name="f0525" data-placeholder="{{f0525}}" />
           <span class="label">3¼&quot;</span>
@@ -5332,13 +5724,15 @@
       <span class="token">{{f0528}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Length O.L</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Length O.L</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0529}}">
       <span class="label">Infeed</span>
       <input type="text" name="f0529" data-placeholder="{{f0529}}" />
@@ -5359,13 +5753,15 @@
       <span class="token">{{f0531}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Height</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Height</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0532}}">
           <input type="checkbox" name="f0532" data-placeholder="{{f0532}}" />
           <span class="label">36&quot;</span>
@@ -5379,13 +5775,15 @@
       <span class="token">{{f0533}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Shape</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Shape</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0534}}">
           <input type="checkbox" name="f0534" data-placeholder="{{f0534}}" />
           <span class="label">Straight</span>
@@ -5406,13 +5804,15 @@
           <span class="token">{{f0536}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Chain Type</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Chain Type</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0537}}">
           <input type="checkbox" name="f0537" data-placeholder="{{f0537}}" />
           <span class="label">STD</span>
@@ -5433,13 +5833,15 @@
           <span class="token">{{f0539}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Bed Type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bed Type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0540}}">
           <input type="checkbox" name="f0540" data-placeholder="{{f0540}}" />
           <span class="label">Standard</span>
@@ -5460,13 +5862,15 @@
       <span class="token">{{f0542}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Tunnel Guard</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Tunnel Guard</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0543}}">
           <input type="checkbox" name="f0543" data-placeholder="{{f0543}}" />
           <span class="label">None</span>
@@ -5487,13 +5891,15 @@
           <span class="token">{{f0545}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Transf. Guide</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Transf. Guide</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0546}}">
           <input type="checkbox" name="f0546" data-placeholder="{{f0546}}" />
           <span class="label">None</span>
@@ -5514,13 +5920,15 @@
           <span class="token">{{f0548}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Wirecovers</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Wirecovers</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0549}}">
           <input type="checkbox" name="f0549" data-placeholder="{{f0549}}" />
           <span class="label">None</span>
@@ -5541,13 +5949,15 @@
           <span class="token">{{f0551}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Bottle Transfer / Conveyor Infeed</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bottle Transfer / Conveyor Infeed</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0552}}">
           <input type="checkbox" name="f0552" data-placeholder="{{f0552}}" />
           <span class="label">End</span>
@@ -5568,13 +5978,15 @@
           <span class="token">{{f0554}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Bottle Transfer / Conveyor Outfeed</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Bottle Transfer / Conveyor Outfeed</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0555}}">
           <input type="checkbox" name="f0555" data-placeholder="{{f0555}}" />
           <span class="label">End</span>
@@ -5602,6 +6014,7 @@
       <span class="token">{{f0558}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -5614,22 +6027,25 @@
       </div>
       
     <div class="group">
-      
-      <div class="checkbox-grid">
+      <div class="group-block">
         
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0559}}">
           <input type="checkbox" name="f0559" data-placeholder="{{f0559}}" />
           <span class="label">None</span>
           <span class="token">{{f0559}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Panel material</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Panel material</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0560}}">
           <input type="checkbox" name="f0560" data-placeholder="{{f0560}}" />
           <span class="label">Lexan</span>
@@ -5643,13 +6059,15 @@
           <span class="token">{{f0561}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Switch type</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Switch type</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0562}}">
           <input type="checkbox" name="f0562" data-placeholder="{{f0562}}" />
           <span class="label">Key switch</span>
@@ -5670,13 +6088,15 @@
           <span class="token">{{f0564}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Reject Cover</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Reject Cover</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0565}}">
           <input type="checkbox" name="f0565" data-placeholder="{{f0565}}" />
           <span class="label">None</span>
@@ -5690,13 +6110,15 @@
           <span class="token">{{f0566}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Top Cover</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Top Cover</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0567}}">
           <input type="checkbox" name="f0567" data-placeholder="{{f0567}}" />
           <span class="label">None</span>
@@ -5710,13 +6132,15 @@
           <span class="token">{{f0568}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Customer Location Dim</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Customer Location Dim</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0569}}">
       <span class="label">Room HT</span>
       <input type="text" name="f0569" data-placeholder="{{f0569}}" />
@@ -5744,6 +6168,7 @@
       <span class="token">{{f0572}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -5756,22 +6181,25 @@
       </div>
       
     <div class="group">
-      <div class="group-title">FAT</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">FAT</div>
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0573}}">
       <span class="label">Formats</span>
       <input type="text" name="f0573" data-placeholder="{{f0573}}" />
       <span class="token">{{f0573}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Sample Return to</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Sample Return to</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0574}}">
           <input type="checkbox" name="f0574" data-placeholder="{{f0574}}" />
           <span class="label">Customer</span>
@@ -5792,6 +6220,7 @@
       <span class="token">{{f0576}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -5804,9 +6233,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Language</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Language</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0577}}">
           <input type="checkbox" name="f0577" data-placeholder="{{f0577}}" />
           <span class="label">English</span>
@@ -5827,13 +6257,15 @@
       <span class="token">{{f0579}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Contact Material Certification</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Contact Material Certification</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0580}}">
           <input type="checkbox" name="f0580" data-placeholder="{{f0580}}" />
           <span class="label">Yes</span>
@@ -5847,13 +6279,15 @@
           <span class="token">{{f0581}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Calibration Certification</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Calibration Certification</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0582}}">
           <input type="checkbox" name="f0582" data-placeholder="{{f0582}}" />
           <span class="label">Yes</span>
@@ -5867,13 +6301,15 @@
           <span class="token">{{f0583}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Preventive Maintenance Program</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Preventive Maintenance Program</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0584}}">
           <input type="checkbox" name="f0584" data-placeholder="{{f0584}}" />
           <span class="label">Yes</span>
@@ -5887,13 +6323,15 @@
           <span class="token">{{f0585}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0586}}">
           <input type="checkbox" name="f0586" data-placeholder="{{f0586}}" />
           <span class="label">Electronic</span>
@@ -5921,6 +6359,7 @@
       <span class="token">{{f0589}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -5933,9 +6372,10 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0590}}">
           <input type="checkbox" name="f0590" data-placeholder="{{f0590}}" />
           <span class="label">FAT</span>
@@ -6005,6 +6445,7 @@
       <span class="token">{{f0599}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -6017,9 +6458,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Transport charges</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Transport charges</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0600}}">
           <input type="checkbox" name="f0600" data-placeholder="{{f0600}}" />
           <span class="label">Capmatic</span>
@@ -6033,13 +6475,15 @@
           <span class="token">{{f0601}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Packaging by:</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Packaging by:</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0602}}">
           <input type="checkbox" name="f0602" data-placeholder="{{f0602}}" />
           <span class="label">Capmatic</span>
@@ -6053,13 +6497,15 @@
           <span class="token">{{f0603}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Packaging type</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Packaging type</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0604}}">
           <input type="checkbox" name="f0604" data-placeholder="{{f0604}}" />
           <span class="label">Skid</span>
@@ -6087,6 +6533,7 @@
       <span class="token">{{f0607}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -6099,9 +6546,10 @@
       </div>
       
     <div class="group">
-      <div class="group-title">Warranty</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Warranty</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0608}}">
           <input type="checkbox" name="f0608" data-placeholder="{{f0608}}" />
           <span class="label">1YR</span>
@@ -6115,13 +6563,15 @@
           <span class="token">{{f0609}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Spares Kit</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Spares Kit</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0610}}">
           <input type="checkbox" name="f0610" data-placeholder="{{f0610}}" />
           <span class="label">None</span>
@@ -6142,13 +6592,15 @@
           <span class="token">{{f0612}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Remote Tech. Service</div>
-      <div class="checkbox-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Remote Tech. Service</div>
+        <div class="checkbox-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0613}}">
           <input type="checkbox" name="f0613" data-placeholder="{{f0613}}" />
           <span class="label">None</span>
@@ -6162,13 +6614,15 @@
           <span class="token">{{f0614}}</span>
         </label>
         
+        </div>
       </div>
     </div>
     
     <div class="group">
-      <div class="group-title">Start-up Commissioning</div>
-      <div class="field-grid">
-        
+      <div class="group-block">
+        <div class="group-title">Start-up Commissioning</div>
+        <div class="field-grid">
+          
         <label class="field checkbox" data-placeholder="{{f0615}}">
           <input type="checkbox" name="f0615" data-placeholder="{{f0615}}" />
           <span class="label">None</span>
@@ -6189,6 +6643,7 @@
       <span class="token">{{f0617}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
@@ -6201,9 +6656,10 @@
       </div>
       
     <div class="group">
-      
-      <div class="field-grid">
+      <div class="group-block">
         
+        <div class="field-grid">
+          
     <label class="field" data-placeholder="{{f0618}}">
       <span class="label">Revision ID</span>
       <input type="text" name="f0618" data-placeholder="{{f0618}}" />
@@ -6231,15 +6687,13 @@
       <span class="token">{{f0621}}</span>
     </label>
     
+        </div>
       </div>
     </div>
     
     </section>
     
-
-    
-
-    
+<!-- GOA_FORM_BODY_END -->
     </div>
     </div>
     </div>
@@ -6256,14 +6710,18 @@
         "f0014",
       ]);
       const CHECKBOX_TRUE_VALUES = new Set(["YES", "TRUE", "ON", "1", "Y", "CHECKED"]);
+      const GOA_FORM_SOURCE = "GOA_FORM";
+      const GOA_PARENT_SOURCE = "GOA_APP";
       const AUTO_SAVE_KEY = "goa_form_autosave_v1";
       const AUTO_SAVE_DEBOUNCE_MS = 1200;
       let autoSaveTimerId = null;
       let searchDebounceId = null;
       let scrollTicking = false;
+      let heightSyncRafId = null;
 
       document.addEventListener("DOMContentLoaded", function () {
           setupSections();
+          convertTextInputsToTextareas();
           tagRequiredFields();
           initializeEditMode();
           initializeSearch();
@@ -6272,9 +6730,14 @@
           buildToc();
           refreshFormState();
           restoreAutoSavedDraft();
+          initializeMessageBridge();
+          notifyParentReady();
+          scheduleFrameHeightSync();
           updateActiveSectionFromScroll();
 
           window.addEventListener("scroll", handleScroll, { passive: true });
+          window.addEventListener("resize", scheduleFrameHeightSync);
+          window.addEventListener("beforeprint", syncPrintLayout);
           document.addEventListener("visibilitychange", () => {
               if (document.visibilityState === "hidden") {
                   saveDraftToLocalStorage();
@@ -6284,7 +6747,7 @@
 
       function setupSections() {
           const sections = document.querySelectorAll(".section");
-          sections.forEach((section, index) => {
+          sections.forEach((section) => {
               const header = section.querySelector(".section-header");
               if (!header) return;
 
@@ -6307,27 +6770,7 @@
                   header.appendChild(progress);
               }
 
-              if (!header.querySelector(".toggle-icon")) {
-                  const icon = document.createElement("span");
-                  icon.className = "toggle-icon";
-                  icon.textContent = "+";
-                  header.appendChild(icon);
-              }
-
-              if (!header.dataset.toggleBound) {
-                  header.addEventListener("click", (event) => {
-                      if (event.target.closest(".delete-btn")) return;
-                      section.classList.toggle("collapsed");
-                      header.classList.toggle("active");
-                  });
-                  header.dataset.toggleBound = "1";
-              }
-
-              if (index > 0) {
-                  section.classList.add("collapsed");
-              } else {
-                  header.classList.add("active");
-              }
+              header.classList.add("active");
           });
       }
 
@@ -6373,7 +6816,6 @@
               link.appendChild(countEl);
               link.addEventListener("click", (event) => {
                   event.preventDefault();
-                  expandSection(section);
                   section.scrollIntoView({ behavior: "smooth", block: "start" });
                   setActiveTocLink(section.id);
               });
@@ -6411,12 +6853,6 @@
               }
           });
           setActiveTocLink(active.id);
-      }
-
-      function expandSection(section) {
-          section.classList.remove("collapsed");
-          const header = section.querySelector(".section-header");
-          if (header) header.classList.add("active");
       }
 
       function getFieldInput(field) {
@@ -6482,6 +6918,90 @@
           return (input?.value || "").trim();
       }
 
+      function ensurePrintMirror(field) {
+          if (!field || field.classList.contains("checkbox") || field.querySelector(".formatted-list")) {
+              return null;
+          }
+          let mirror = field.querySelector(".field-value-print");
+          if (!mirror) {
+              mirror = document.createElement("div");
+              mirror.className = "field-value-print";
+              const token = field.querySelector(".token");
+              if (token) {
+                  token.before(mirror);
+              } else {
+                  field.appendChild(mirror);
+              }
+          }
+          return mirror;
+      }
+
+      function autoGrowTextarea(textarea) {
+          if (!textarea) return;
+          textarea.style.height = "auto";
+          textarea.style.height = `${Math.max(textarea.scrollHeight, 36)}px`;
+      }
+
+      function convertTextInputsToTextareas() {
+          document.querySelectorAll('.field input[type="text"], .field input[type="number"]').forEach((input) => {
+              const textarea = document.createElement("textarea");
+              Array.from(input.attributes).forEach((attribute) => {
+                  if (attribute.name !== "type" && attribute.name !== "value") {
+                      textarea.setAttribute(attribute.name, attribute.value);
+                  }
+              });
+              textarea.className = input.className;
+              textarea.rows = 1;
+              textarea.value = input.value || "";
+              textarea.textContent = input.value || "";
+              textarea.dataset.originalType = input.type;
+              if (input.type === "number" && !textarea.getAttribute("inputmode")) {
+                  textarea.setAttribute("inputmode", "decimal");
+              }
+              input.replaceWith(textarea);
+          });
+      }
+
+      function syncGroupState(group) {
+          if (!group || !group.querySelector(".group-title")) return;
+          const hasContent = Array.from(group.querySelectorAll("label.field")).some((field) => isFieldFilled(field));
+          group.classList.toggle("has-content", hasContent);
+      }
+
+      function syncFieldPresentation(field, filled) {
+          const checkbox = field.querySelector('input[type="checkbox"]');
+          if (checkbox) {
+              field.classList.toggle("is-checked", checkbox.checked);
+              field.classList.remove("has-value");
+              if (checkbox.checked) {
+                  checkbox.setAttribute("checked", "checked");
+              } else {
+                  checkbox.removeAttribute("checked");
+              }
+              syncGroupState(field.closest(".group"));
+              return;
+          }
+
+          const control = getFieldInput(field);
+          field.classList.toggle("has-value", filled);
+
+          if (control?.tagName === "TEXTAREA") {
+              control.textContent = control.value || "";
+              control.title = filled ? control.value : "";
+              autoGrowTextarea(control);
+          } else if (control) {
+              control.setAttribute("value", control.value || "");
+              control.title = filled ? control.value : "";
+          }
+
+          const mirror = ensurePrintMirror(field);
+          if (mirror) {
+              mirror.textContent = getFieldValueText(field);
+          }
+
+          syncGroupState(field.closest(".group"));
+      }
+
       function updateFieldValidation(field) {
           const filled = isFieldFilled(field);
           const required = isFieldRequired(field);
@@ -6493,6 +7013,7 @@
           } else {
               field.classList.add("state-empty-optional");
           }
+          syncFieldPresentation(field, filled);
       }
 
       function updateProgressIndicators() {
@@ -6522,8 +7043,6 @@
           });
 
           const overallText = `${overallFilled} of ${overallTotal} fields filled`;
-          const overallEl = document.getElementById("overallProgress");
-          if (overallEl) overallEl.textContent = overallText;
           const tocOverallEl = document.getElementById("tocOverallProgress");
           if (tocOverallEl) tocOverallEl.textContent = overallText;
       }
@@ -6565,9 +7084,6 @@
               const tocLink = document.querySelector(`.toc-link[data-section-id="${section.id}"]`);
               if (tocLink) {
                   tocLink.classList.toggle("hidden", !sectionHasVisibleFields);
-              }
-              if (query && sectionHasVisibleFields) {
-                  expandSection(section);
               }
               if (sectionHasVisibleFields) visibleSections += 1;
           });
@@ -6614,25 +7130,30 @@
           updateProgressIndicators();
           const query = document.getElementById("fieldSearchInput")?.value || "";
           applySearchFilter(query);
+          scheduleFrameHeightSync();
       }
 
       function initializeFieldListeners() {
-          document
-              .querySelectorAll("input[name], textarea[name], select[name]")
-              .forEach((field) => {
-                  field.addEventListener("input", () => {
-                      refreshFormState();
-                      queueAutoSave();
-                  });
-                  field.addEventListener("change", () => {
-                      refreshFormState();
-                      queueAutoSave();
-                  });
-              });
+          if (document.body.dataset.fieldListenersBound === "true") return;
+
+          const handleFieldMutation = (event) => {
+              if (!event.target.matches("input[name], textarea[name], select[name]")) return;
+              refreshFormState();
+              queueAutoSave();
+          };
+
+          document.addEventListener("input", handleFieldMutation);
+          document.addEventListener("change", handleFieldMutation);
+          document.body.dataset.fieldListenersBound = "true";
+      }
+
+      function syncPrintLayout() {
+          document.querySelectorAll("label.field").forEach((field) => {
+              updateFieldValidation(field);
+          });
       }
 
       function queueAutoSave() {
-          updateAutosaveStatus("Autosave pending...");
           window.clearTimeout(autoSaveTimerId);
           autoSaveTimerId = window.setTimeout(saveDraftToLocalStorage, AUTO_SAVE_DEBOUNCE_MS);
       }
@@ -6674,11 +7195,7 @@
                   data: collectCurrentData(),
               };
               localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(payload));
-              const stamp = new Date(payload.savedAt).toLocaleTimeString();
-              updateAutosaveStatus(`Autosaved at ${stamp}`);
-          } catch {
-              updateAutosaveStatus("Autosave unavailable");
-          }
+          } catch {}
       }
 
       function applyDataToForm(data) {
@@ -6697,53 +7214,113 @@
       function restoreAutoSavedDraft() {
           try {
               const raw = localStorage.getItem(AUTO_SAVE_KEY);
-              if (!raw) {
-                  updateAutosaveStatus("Autosave ready");
-                  return;
-              }
+              if (!raw) return;
 
               const parsed = JSON.parse(raw);
-              if (!parsed || typeof parsed !== "object" || !parsed.data || typeof parsed.data !== "object") {
-                  updateAutosaveStatus("Autosave ready");
-                  return;
-              }
+              if (!parsed || typeof parsed !== "object" || !parsed.data || typeof parsed.data !== "object") return;
 
               const hasMeaningfulData = Object.values(parsed.data).some((value) => isMeaningfulValue(value));
-              if (!hasMeaningfulData) {
-                  updateAutosaveStatus("Autosave ready");
-                  return;
-              }
+              if (!hasMeaningfulData) return;
 
               const savedAt = parsed.savedAt ? new Date(parsed.savedAt) : null;
               const promptText = savedAt
                   ? `Restore autosaved draft from ${savedAt.toLocaleString()}?`
                   : "Restore autosaved draft?";
-              if (!window.confirm(promptText)) {
-                  updateAutosaveStatus(savedAt ? `Draft available (${savedAt.toLocaleTimeString()})` : "Draft available");
-                  return;
-              }
+              if (!window.confirm(promptText)) return;
 
               applyDataToForm(parsed.data);
               refreshFormState();
-              updateAutosaveStatus(savedAt ? `Restored draft (${savedAt.toLocaleTimeString()})` : "Restored draft");
-          } catch {
-              updateAutosaveStatus("Autosave ready");
-          }
+          } catch {}
       }
 
-      function clearAutoSavedDraft() {
-          try {
-              localStorage.removeItem(AUTO_SAVE_KEY);
-              updateAutosaveStatus("Local draft cleared");
-          } catch {
-              updateAutosaveStatus("Unable to clear local draft");
-          }
+      function postToParent(type, payload = {}) {
+          if (window.parent === window) return;
+          const targetOrigin = window.location.origin && window.location.origin !== "null"
+              ? window.location.origin
+              : "*";
+          window.parent.postMessage(
+              {
+                  source: GOA_FORM_SOURCE,
+                  type,
+                  ...payload,
+              },
+              targetOrigin
+          );
       }
 
-      function updateAutosaveStatus(text) {
-          const statusEl = document.getElementById("autosaveStatus");
-          if (!statusEl) return;
-          statusEl.textContent = text;
+      function scheduleFrameHeightSync() {
+          if (heightSyncRafId !== null) {
+              window.cancelAnimationFrame(heightSyncRafId);
+          }
+          heightSyncRafId = window.requestAnimationFrame(() => {
+              heightSyncRafId = null;
+              const height = Math.max(
+                  document.documentElement?.scrollHeight || 0,
+                  document.body?.scrollHeight || 0
+              );
+              postToParent("GOA_FORM_HEIGHT", { height });
+          });
+      }
+
+      function notifyParentReady() {
+          postToParent("GOA_FORM_READY");
+      }
+
+      function applyConfidenceScores(scores) {
+          document.querySelectorAll("label.field").forEach((field) => {
+              field.classList.remove("confidence-low", "confidence-medium");
+              field.removeAttribute("data-confidence");
+              field.removeAttribute("title");
+          });
+
+          Object.entries(scores || {}).forEach(([key, score]) => {
+              const field = Array.from(document.querySelectorAll("label.field")).find(
+                  (candidate) => getFieldKey(candidate) === key
+              );
+              if (!field || typeof score !== "number" || Number.isNaN(score)) return;
+
+              field.dataset.confidence = score.toFixed(2);
+              field.title = `Confidence: ${Math.round(score * 100)}%`;
+              if (score < 0.6) {
+                  field.classList.add("confidence-low");
+              } else if (score < 0.8) {
+                  field.classList.add("confidence-medium");
+              }
+          });
+      }
+
+      function initializeMessageBridge() {
+          if (document.body.dataset.messageBridgeBound === "true") return;
+          window.addEventListener("message", (event) => {
+              if (
+                  window.location.origin &&
+                  window.location.origin !== "null" &&
+                  event.origin !== window.location.origin &&
+                  event.origin !== "null"
+              ) {
+                  return;
+              }
+
+              const payload = event.data || {};
+              if (payload.source !== GOA_PARENT_SOURCE || !payload.type) return;
+
+              if (payload.type === "FILL_DATA") {
+                  applyDataToForm(payload.data || {});
+                  refreshFormState();
+                  return;
+              }
+
+              if (payload.type === "GET_DATA") {
+                  syncPrintLayout();
+                  postToParent("GOA_FORM_DATA", { data: collectCurrentData() });
+                  return;
+              }
+
+              if (payload.type === "APPLY_CONFIDENCE") {
+                  applyConfidenceScores(payload.scores || {});
+              }
+          });
+          document.body.dataset.messageBridgeBound = "true";
       }
 
       function bindEditableChangeHandlers() {
@@ -6798,7 +7375,6 @@
       function toggleEditMode() {
           const body = document.body;
           const editBtn = document.getElementById("editModeBtn");
-          const downloadBtn = document.getElementById("downloadBtn");
 
           body.classList.toggle("edit-mode");
           const isEditMode = body.classList.contains("edit-mode");
@@ -6806,12 +7382,10 @@
           if (isEditMode) {
               editBtn.textContent = "Disable Edit Mode";
               editBtn.classList.add("is-active");
-              downloadBtn.style.display = "inline-block";
               enableEditing();
           } else {
               editBtn.textContent = "Enable Edit Mode";
               editBtn.classList.remove("is-active");
-              downloadBtn.style.display = "none";
               disableEditing();
           }
       }
@@ -6859,39 +7433,24 @@
       }
 
       function stripTransientClasses(root) {
-          root.querySelectorAll(".field-hidden-by-search, .group-hidden-by-search, .section-hidden-by-search, .field-match")
+          root.querySelectorAll(".field-hidden-by-search, .group-hidden-by-search, .section-hidden-by-search, .field-match, .confidence-low, .confidence-medium")
               .forEach((el) => {
-                  el.classList.remove("field-hidden-by-search", "group-hidden-by-search", "section-hidden-by-search", "field-match");
+                  el.classList.remove(
+                      "field-hidden-by-search",
+                      "group-hidden-by-search",
+                      "section-hidden-by-search",
+                      "field-match",
+                      "confidence-low",
+                      "confidence-medium"
+                  );
               });
           root.querySelectorAll(".toc-link.active").forEach((el) => el.classList.remove("active"));
-      }
-
-      function downloadModifiedHTML() {
-          const clone = document.documentElement.cloneNode(true);
-          const cloneBody = clone.querySelector("body");
-          cloneBody.classList.remove("edit-mode");
-          clone.querySelectorAll('[contenteditable="true"]').forEach((el) => {
-              el.removeAttribute("contenteditable");
-              el.removeAttribute("title");
-          });
-          clone.querySelectorAll(".delete-btn").forEach((button) => button.remove());
-          stripTransientClasses(clone);
-
-          const htmlString = "<!DOCTYPE html>\n" + clone.outerHTML;
-          const blob = new Blob([htmlString], { type: "text/html" });
-          const url = URL.createObjectURL(blob);
-          const anchor = document.createElement("a");
-          anchor.href = url;
-          anchor.download = "goa_form_modified.html";
-          document.body.appendChild(anchor);
-          anchor.click();
-          document.body.removeChild(anchor);
-          URL.revokeObjectURL(url);
-          alert("Modified form downloaded.");
+          root.querySelectorAll("[data-confidence]").forEach((el) => el.removeAttribute("data-confidence"));
       }
 
       function saveFilledFormHTML() {
           saveDraftToLocalStorage();
+          syncPrintLayout();
           const clone = document.documentElement.cloneNode(true);
           const cloneBody = clone.querySelector("body");
           cloneBody.classList.remove("edit-mode");
@@ -6937,68 +7496,6 @@
           document.body.removeChild(anchor);
           URL.revokeObjectURL(url);
           alert("Filled form saved as HTML.");
-      }
-
-      function generatePDF() {
-          const wasInEditMode = document.body.classList.contains("edit-mode");
-          if (wasInEditMode) {
-              document.body.classList.remove("edit-mode");
-          }
-
-          const searchInput = document.getElementById("fieldSearchInput");
-          const previousQuery = searchInput ? searchInput.value : "";
-          if (searchInput && previousQuery.trim()) {
-              searchInput.value = "";
-              applySearchFilter("");
-          }
-
-          const sections = document.querySelectorAll(".section");
-          const collapsedSections = [];
-          sections.forEach((section, index) => {
-              if (section.classList.contains("collapsed")) {
-                  collapsedSections.push(index);
-                  section.classList.remove("collapsed");
-                  const header = section.querySelector(".section-header");
-                  if (header) header.classList.add("active");
-              }
-          });
-
-          setTimeout(() => {
-              window.print();
-              setTimeout(() => {
-                  collapsedSections.forEach((index) => {
-                      sections[index].classList.add("collapsed");
-                      const header = sections[index].querySelector(".section-header");
-                      if (header) header.classList.remove("active");
-                  });
-
-                  if (searchInput && previousQuery.trim()) {
-                      searchInput.value = previousQuery;
-                      applySearchFilter(previousQuery);
-                  }
-
-                  if (wasInEditMode) {
-                      document.body.classList.add("edit-mode");
-                  }
-                 updateActiveSectionFromScroll();
-              }, 100);
-          }, 300);
-      }
-
-      function expandAllSections() {
-          document.querySelectorAll(".section:not(.section-hidden-by-search)").forEach((section) => {
-              section.classList.remove("collapsed");
-              const header = section.querySelector(".section-header");
-              if (header) header.classList.add("active");
-          });
-      }
-
-      function collapseAllSections() {
-          document.querySelectorAll(".section:not(.section-hidden-by-search)").forEach((section) => {
-              section.classList.add("collapsed");
-              const header = section.querySelector(".section-header");
-              if (header) header.classList.remove("active");
-          });
       }
 </script>
   </body>
